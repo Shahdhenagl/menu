@@ -20,7 +20,7 @@ interface AdminDashboardProps {
   language: 'ar' | 'en';
 }
 
-type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'settings';
+type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'settings';
 
 export default function AdminDashboard({
   onClose,
@@ -89,6 +89,10 @@ export default function AdminDashboard({
   const [manualTableNum, setManualTableNum] = useState('');
   const [manualStatus, setManualStatus] = useState<'pending' | 'completed' | 'cancelled'>('pending');
   const [manualItems, setManualItems] = useState<Record<string, number>>({}); // productId -> quantity
+
+  // Customers tab active profile view state
+  const [selectedCustPhone, setSelectedCustPhone] = useState<string | null>(null);
+  const [custSearch, setCustSearch] = useState('');
 
   // Sync settings when they change
   useEffect(() => {
@@ -451,6 +455,54 @@ export default function AdminDashboard({
 
   const customerReport = Object.values(customerMap).sort((a, b) => b.totalSpent - a.totalSpent);
 
+  // Unique Customers CRM Mapping
+  const uniqueCustomersMap: Record<string, { 
+    name: string; 
+    phone: string; 
+    orderCount: number; 
+    totalSpent: number; 
+    firstOrderDate: string; 
+    lastOrderDate: string;
+    preferredTable: string;
+    allOrders: Order[];
+  }> = {};
+
+  orders.forEach(order => {
+    const phone = order.customer_phone.trim();
+    if (!uniqueCustomersMap[phone]) {
+      uniqueCustomersMap[phone] = {
+        name: order.customer_name,
+        phone: phone,
+        orderCount: 0,
+        totalSpent: 0,
+        firstOrderDate: order.created_at,
+        lastOrderDate: order.created_at,
+        preferredTable: order.table_number,
+        allOrders: []
+      };
+    }
+    
+    uniqueCustomersMap[phone].orderCount += 1;
+    uniqueCustomersMap[phone].totalSpent += order.total_price;
+    uniqueCustomersMap[phone].allOrders.push(order);
+    
+    // Sort orders for this customer by date desc
+    uniqueCustomersMap[phone].allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    
+    // Update dates
+    if (new Date(order.created_at) < new Date(uniqueCustomersMap[phone].firstOrderDate)) {
+      uniqueCustomersMap[phone].firstOrderDate = order.created_at;
+    }
+    if (new Date(order.created_at) > new Date(uniqueCustomersMap[phone].lastOrderDate)) {
+      uniqueCustomersMap[phone].lastOrderDate = order.created_at;
+      // Prefer the latest entered name and table
+      uniqueCustomersMap[phone].name = order.customer_name;
+      uniqueCustomersMap[phone].preferredTable = order.table_number;
+    }
+  });
+
+  const customersList = Object.values(uniqueCustomersMap).sort((a, b) => b.totalSpent - a.totalSpent);
+
   // Time-based Revenue Chart Data (e.g. daily sales log)
   const dailySalesMap: Record<string, number> = {};
   orders.forEach(order => {
@@ -478,7 +530,8 @@ export default function AdminDashboard({
       overviewTab: "نظرة عامة والتحليلات 📊",
       categoriesTab: "إدارة التصنيفات 📁",
       productsTab: "إدارة المنتجات 🍔",
-      ordersTab: "الطلبات والعملاء 📋",
+      ordersTab: "إدارة الطلبات 📋",
+      customersTab: "إدارة العملاء 👥",
       settingsTab: "إدارة النظام والروابط ⚙️",
       exitBtn: "خروج من الإدارة",
       
@@ -535,7 +588,8 @@ export default function AdminDashboard({
       overviewTab: "Overview & Analytics 📊",
       categoriesTab: "Categories 📁",
       productsTab: "Products CRUD 🍔",
-      ordersTab: "Orders & Customers 📋",
+      ordersTab: "Orders Panel 📋",
+      customersTab: "Customers CRM 👥",
       settingsTab: "System Customizer ⚙️",
       exitBtn: "Exit Admin",
       
@@ -670,8 +724,16 @@ export default function AdminDashboard({
             className={`admin-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
             onClick={() => setActiveTab('orders')}
           >
-            <Users size={18} />
+            <Calendar size={18} />
             <span>{t.ordersTab}</span>
+          </button>
+
+          <button 
+            className={`admin-nav-item ${activeTab === 'customers' ? 'active' : ''}`}
+            onClick={() => setActiveTab('customers')}
+          >
+            <Users size={18} />
+            <span>{t.customersTab}</span>
           </button>
 
           <button 
@@ -1096,6 +1158,126 @@ export default function AdminDashboard({
           </div>
         )}
 
+        {/* TAB: CUSTOMERS CRM MODULE */}
+        {activeTab === 'customers' && (
+          <div>
+            <div className="table-panel">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div>
+                  <h1 className="text-gradient-gold" style={{ fontSize: '1.5rem', margin: 0 }}>{t.customersTab} 👥</h1>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-gray)', marginTop: '0.2rem' }}>
+                    {language === 'ar' ? 'شاشة عرض وتتبع حركة ونشاط العملاء المسجلين وسجل طلباتهم' : 'CRM Screen to track registered customers activity, info & transaction logs'}
+                  </p>
+                </div>
+                
+                {/* Search Customer Input */}
+                <div style={{ position: 'relative', width: '300px' }}>
+                  <input 
+                    type="text" 
+                    placeholder={language === 'ar' ? 'بحث باسم العميل أو رقم الهاتف...' : 'Search by name or phone...'} 
+                    value={custSearch} 
+                    onChange={(e) => setCustSearch(e.target.value)} 
+                    className="input-gold" 
+                    style={{ padding: '0.5rem 1rem', borderRadius: '12px', fontSize: '0.85rem', width: '100%' }}
+                  />
+                  {custSearch && (
+                    <button 
+                      onClick={() => setCustSearch('')} 
+                      style={{ position: 'absolute', right: language === 'ar' ? 'auto' : '10px', left: language === 'ar' ? '10px' : 'auto', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="table-wrapper">
+                <table className="luxury-table">
+                  <thead>
+                    <tr>
+                      <th>{language === 'ar' ? 'العميل' : 'Customer'}</th>
+                      <th>{language === 'ar' ? 'رقم الهاتف' : 'Phone Number'}</th>
+                      <th>{language === 'ar' ? 'عدد الطلبات' : 'Orders Count'}</th>
+                      <th>{language === 'ar' ? 'إجمالي الإنفاق' : 'Total Spent'}</th>
+                      <th>{language === 'ar' ? 'الطاولة المفضلة' : 'Preferred Table'}</th>
+                      <th>{language === 'ar' ? 'آخر نشاط' : 'Last Active'}</th>
+                      <th>{language === 'ar' ? 'الملف الشخصي والسجل' : 'Profile & Logs'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customersList
+                      .filter(cust => {
+                        const term = custSearch.toLowerCase().trim();
+                        if (!term) return true;
+                        return cust.name.toLowerCase().includes(term) || cust.phone.includes(term);
+                      })
+                      .map((cust) => (
+                        <tr key={cust.phone}>
+                          <td style={{ fontWeight: '700' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--gold-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                {cust.name.trim().charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div>{cust.name}</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>
+                                  {language === 'ar' ? 'أول طلب: ' : 'First order: '}
+                                  {new Date(cust.firstOrderDate).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="font-en">
+                            <a 
+                              href={`https://wa.me/${cust.phone.startsWith('+') ? cust.phone : '+2' + cust.phone}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              style={{ color: '#25D366', display: 'flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none', fontWeight: 'bold' }}
+                            >
+                              <span>{cust.phone}</span>
+                              <span style={{ fontSize: '0.8rem' }}>💬</span>
+                            </a>
+                          </td>
+                          <td className="font-en" style={{ fontWeight: 'bold' }}>
+                            <span style={{ background: 'rgba(212, 175, 55, 0.1)', color: 'var(--gold-secondary)', padding: '0.2rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(212,175,55,0.2)' }}>
+                              {cust.orderCount} {language === 'ar' ? 'طلبات' : 'orders'}
+                            </span>
+                          </td>
+                          <td className="font-en" style={{ color: 'var(--gold-primary)', fontWeight: '800' }}>
+                            {cust.totalSpent.toFixed(2)} EGP
+                          </td>
+                          <td className="font-en" style={{ fontWeight: 'bold' }}>
+                            {language === 'ar' ? 'طاولة ' : 'Table '} {cust.preferredTable}
+                          </td>
+                          <td className="font-en" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {new Date(cust.lastOrderDate).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}
+                          </td>
+                          <td>
+                            <button 
+                              className="btn-outline-gold" 
+                              style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} 
+                              onClick={() => setSelectedCustPhone(cust.phone)}
+                            >
+                              <Sparkles size={12} />
+                              <span>{language === 'ar' ? 'عرض السجل 🔍' : 'View History 🔍'}</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    {customersList.length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem' }}>
+                          {language === 'ar' ? 'لا يوجد عملاء مسجلين حالياً' : 'No registered customers found yet'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB 5: SYSTEM SETTINGS CUSTOMIZER */}
         {activeTab === 'settings' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -1424,6 +1606,137 @@ export default function AdminDashboard({
           </div>
         </div>
       )}
+      {/* --- CUSTOMER PROFILE & TIMELINE MODAL --- */}
+      {selectedCustPhone && (() => {
+        const cust = uniqueCustomersMap[selectedCustPhone];
+        if (!cust) return null;
+
+        return (
+          <div className="admin-modal-overlay" onClick={() => setSelectedCustPhone(null)}>
+            <div className="admin-modal" style={{ maxWidth: '800px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+              <div className="admin-modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                  <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'rgba(212, 175, 55, 0.15)', border: '2px solid var(--gold-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '1.2rem' }}>
+                    {cust.name.trim().charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '1.3rem' }}>{cust.name}</h2>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>{language === 'ar' ? 'سجل العميل التفاعلي 📑' : 'Interactive Customer Profile 📑'}</p>
+                  </div>
+                </div>
+                <button className="btn-close" onClick={() => setSelectedCustPhone(null)}><X size={20} /></button>
+              </div>
+
+              <div className="admin-modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', maxHeight: '70vh', overflowY: 'auto' }}>
+                
+                {/* Summary Info Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '1rem' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-gray)', marginBottom: '0.3rem' }}>{language === 'ar' ? 'رقم الهاتف' : 'Phone Number'}</div>
+                    <div className="font-en" style={{ fontSize: '0.95rem', fontWeight: 'bold', color: 'var(--gold-secondary)' }}>{cust.phone}</div>
+                  </div>
+                  
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-gray)', marginBottom: '0.3rem' }}>{language === 'ar' ? 'إجمالي الإنفاق' : 'Total Spent'}</div>
+                    <div className="font-en" style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--gold-primary)' }}>{cust.totalSpent.toFixed(2)} EGP</div>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-gray)', marginBottom: '0.3rem' }}>{language === 'ar' ? 'عدد الطلبات' : 'Orders Placed'}</div>
+                    <div className="font-en" style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--gold-secondary)' }}>{cust.orderCount}</div>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-gray)', marginBottom: '0.3rem' }}>{language === 'ar' ? 'الطاولة المفضلة' : 'Preferred Table'}</div>
+                    <div className="font-en" style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--gold-secondary)' }}>#{cust.preferredTable}</div>
+                  </div>
+                </div>
+
+                {/* Timeline title */}
+                <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginTop: '0.5rem' }}>
+                  <h3 style={{ margin: 0, color: 'var(--gold-secondary)', fontSize: '1.1rem' }}>
+                    {language === 'ar' ? 'سجل الطلبات والتعاملات 🕒' : 'Transaction & Orders Timeline 🕒'}
+                  </h3>
+                </div>
+
+                {/* Vertical Timeline container */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingLeft: language === 'ar' ? '0' : '1rem', paddingRight: language === 'ar' ? '1rem' : '0', borderLeft: language === 'ar' ? 'none' : '2px solid var(--border-color)', borderRight: language === 'ar' ? '2px solid var(--border-color)' : 'none' }}>
+                  {cust.allOrders.map((order) => (
+                    <div key={order.id} style={{ position: 'relative', paddingBottom: '0.5rem' }}>
+                      {/* Timeline dot */}
+                      <div style={{ 
+                        position: 'absolute', 
+                        left: language === 'ar' ? 'auto' : '-23px', 
+                        right: language === 'ar' ? '-23px' : 'auto', 
+                        top: '4px', 
+                        width: '12px', 
+                        height: '12px', 
+                        borderRadius: '50%', 
+                        background: order.status === 'completed' ? 'var(--success)' : order.status === 'cancelled' ? 'var(--danger)' : 'var(--warning)',
+                        border: '2px solid #111113',
+                        boxShadow: '0 0 8px currentColor'
+                      }} />
+                      
+                      {/* Timeline Card */}
+                      <div style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.8rem' }}>
+                          <span className="font-en" style={{ fontSize: '0.85rem', color: 'var(--gold-primary)', fontWeight: 'bold' }}>#{order.id.slice(0, 8)}</span>
+                          
+                          <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+                            <span className="font-en" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                              {new Date(order.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}
+                            </span>
+                            <span style={{ 
+                              fontSize: '0.75rem', 
+                              padding: '0.15rem 0.5rem', 
+                              borderRadius: '6px', 
+                              background: order.status === 'completed' ? 'rgba(16,185,129,0.1)' : order.status === 'cancelled' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)',
+                              color: order.status === 'completed' ? 'var(--success)' : order.status === 'cancelled' ? 'var(--danger)' : 'var(--warning)',
+                              fontWeight: 'bold'
+                            }}>
+                              {order.status.toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Order info details */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem', alignItems: 'center' }}>
+                          {/* Items */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                            {order.items.map((item, idx) => (
+                              <div key={idx} style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>
+                                • {item.quantity}x {language === 'ar' ? item.name_ar : item.name_en} 
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.4rem', marginRight: '0.4rem' }}>
+                                  ({item.price} EGP)
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          
+                          {/* Price & table */}
+                          <div style={{ textAlign: language === 'ar' ? 'left' : 'right' }}>
+                            <div className="font-en" style={{ fontSize: '1rem', color: 'var(--gold-primary)', fontWeight: '800' }}>
+                              {order.total_price.toFixed(2)} EGP
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                              {language === 'ar' ? `طاولة رقم ${order.table_number}` : `Table #${order.table_number}`}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="admin-modal-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                <button type="button" className="btn-gold" style={{ padding: '0.5rem 1.5rem', borderRadius: '10px' }} onClick={() => setSelectedCustPhone(null)}>
+                  {language === 'ar' ? 'إغلاق نافذة العميل' : 'Close Profile'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
