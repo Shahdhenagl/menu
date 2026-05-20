@@ -37,7 +37,7 @@ export interface Order {
   promo_code?: string | null;
   items: OrderItem[];
   total_price: number;
-  status: 'pending' | 'completed' | 'cancelled';
+  status: 'pending' | 'preparing' | 'delivered' | 'completed' | 'cancelled';
   created_at: string;
 }
 

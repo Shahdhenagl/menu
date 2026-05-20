@@ -87,12 +87,18 @@ export default function AdminDashboard({
   const [manualCustName, setManualCustName] = useState('');
   const [manualCustPhone, setManualCustPhone] = useState('');
   const [manualTableNum, setManualTableNum] = useState('');
-  const [manualStatus, setManualStatus] = useState<'pending' | 'completed' | 'cancelled'>('pending');
+  const [manualStatus, setManualStatus] = useState<'pending' | 'preparing' | 'delivered' | 'completed' | 'cancelled'>('preparing');
   const [manualItems, setManualItems] = useState<Record<string, number>>({}); // productId -> quantity
 
   // Customers tab active profile view state
   const [selectedCustPhone, setSelectedCustPhone] = useState<string | null>(null);
   const [custSearch, setCustSearch] = useState('');
+
+  // Payment collection, category filter, and customer autocomplete states
+  const [paymentCollectOrder, setPaymentCollectOrder] = useState<Order | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'cash' | 'visa' | 'instapay' | 'wallet'>('cash');
+  const [showCustDropdown, setShowCustDropdown] = useState(false);
+  const [selectedManualCat, setSelectedManualCat] = useState<string>('all');
 
   // Sync settings when they change
   useEffect(() => {
@@ -268,6 +274,21 @@ export default function AdminDashboard({
     }
   };
 
+  const handleCollectPayment = async (orderId: string, method: string) => {
+    setLoading(true);
+    try {
+      await db.updateOrderStatus(orderId, `completed_${method}` as any);
+      await refreshData();
+      alert(language === 'ar' ? 'تم تحصيل الحساب وإكمال الطلب بنجاح! 🎉' : 'Payment collected and order completed successfully! 🎉');
+      setPaymentCollectOrder(null);
+    } catch (err) {
+      console.error(err);
+      alert(language === 'ar' ? 'حدث خطأ أثناء تحصيل الحساب.' : 'An error occurred during payment collection.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSaveManualOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualCustName.trim() || !manualCustPhone.trim() || !manualTableNum.trim()) {
@@ -315,7 +336,7 @@ export default function AdminDashboard({
       setManualCustName('');
       setManualCustPhone('');
       setManualTableNum('');
-      setManualStatus('pending');
+      setManualStatus('preparing');
       setManualItems({});
       alert(language === 'ar' ? 'تم إضافة الطلب يدويًا بنجاح!' : 'Order added manually successfully!');
     } catch (err) {
@@ -398,7 +419,7 @@ export default function AdminDashboard({
 
   // --- ANALYTICS CALCULATIONS ---
   // Stats Counters
-  const completedOrders = orders.filter(o => o.status === 'completed');
+  const completedOrders = orders.filter(o => o.status.startsWith('completed'));
   const totalRevenue = completedOrders.reduce((sum, o) => sum + o.total_price, 0);
   const totalOrdersCount = orders.length;
   const avgOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0;
@@ -503,10 +524,18 @@ export default function AdminDashboard({
 
   const customersList = Object.values(uniqueCustomersMap).sort((a, b) => b.totalSpent - a.totalSpent);
 
+  // Autocomplete suggestions based on manual inputs
+  const matchingCustomers = (manualCustName.trim() || manualCustPhone.trim())
+    ? customersList.filter(c => 
+        (manualCustName && c.name.toLowerCase().includes(manualCustName.toLowerCase())) ||
+        (manualCustPhone && c.phone.includes(manualCustPhone))
+      )
+    : [];
+
   // Time-based Revenue Chart Data (e.g. daily sales log)
   const dailySalesMap: Record<string, number> = {};
   orders.forEach(order => {
-    if (order.status === 'completed') {
+    if (order.status.startsWith('completed')) {
       const date = order.created_at.split('T')[0]; // YYYY-MM-DD
       dailySalesMap[date] = (dailySalesMap[date] || 0) + order.total_price;
     }
@@ -1124,23 +1153,64 @@ export default function AdminDashboard({
                         </td>
                         <td>
                           <select 
-                            value={order.status}
+                            value={order.status.startsWith('completed') ? 'completed' : order.status}
                             onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as Order['status'])}
                             className="input-gold"
                             style={{ 
                               padding: '0.25rem 0.5rem', 
                               borderRadius: '8px', 
                               fontSize: '0.8rem',
-                              background: order.status === 'completed' ? 'rgba(16,185,129,0.1)' : order.status === 'cancelled' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)',
-                              color: order.status === 'completed' ? 'var(--success)' : order.status === 'cancelled' ? 'var(--danger)' : 'var(--warning)',
+                              background: order.status.startsWith('completed') ? 'rgba(16,185,129,0.1)' : order.status === 'cancelled' ? 'rgba(239,68,68,0.1)' : order.status === 'delivered' ? 'rgba(59,130,246,0.1)' : 'rgba(245,158,11,0.1)',
+                              color: order.status.startsWith('completed') ? 'var(--success)' : order.status === 'cancelled' ? 'var(--danger)' : order.status === 'delivered' ? '#3b82f6' : 'var(--warning)',
                               borderColor: 'var(--border-color)',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              width: '100%'
                             }}
                           >
-                            <option value="pending" style={{ background: '#121212', color: 'var(--warning)' }}>Pending</option>
-                            <option value="completed" style={{ background: '#121212', color: 'var(--success)' }}>Completed</option>
-                            <option value="cancelled" style={{ background: '#121212', color: 'var(--danger)' }}>Cancelled</option>
+                            <option value="pending" style={{ background: '#121212', color: 'var(--warning)' }}>🍳 قيد التحضير</option>
+                            <option value="preparing" style={{ background: '#121212', color: 'var(--warning)' }}>🍳 قيد التحضير</option>
+                            <option value="delivered" style={{ background: '#121212', color: '#3b82f6' }}>🛵 تم التسليم للعميل</option>
+                            <option value="completed" style={{ background: '#121212', color: 'var(--success)' }}>💳 تم التحصيل / مكتمل</option>
+                            <option value="cancelled" style={{ background: '#121212', color: 'var(--danger)' }}>❌ ملغي</option>
                           </select>
+
+                          {/* Collect Payment Button */}
+                          {!order.status.startsWith('completed') && order.status !== 'cancelled' && (
+                            <button 
+                              type="button" 
+                              className="btn-gold" 
+                              style={{ 
+                                padding: '0.25rem 0.5rem', 
+                                borderRadius: '8px', 
+                                fontSize: '0.75rem', 
+                                marginTop: '0.3rem', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '0.2rem',
+                                justifyContent: 'center',
+                                width: '100%',
+                                boxShadow: '0 0 8px rgba(212,175,55,0.2)',
+                                cursor: 'pointer'
+                              }}
+                              onClick={() => setPaymentCollectOrder(order)}
+                            >
+                              💰 {language === 'ar' ? 'تحصيل الحساب' : 'Collect Payment'}
+                            </button>
+                          )}
+                          
+                          {/* Payment method tag display */}
+                          {order.status.startsWith('completed') && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--gold-secondary)', marginTop: '0.3rem', textAlign: 'center', fontWeight: 'bold' }}>
+                              {(() => {
+                                const method = order.status.split('_')[1] || '';
+                                if (method === 'cash') return language === 'ar' ? '💵 كاش' : '💵 Cash';
+                                if (method === 'visa') return language === 'ar' ? '💳 فيزا / بطاقة' : '💳 Visa / Card';
+                                if (method === 'instapay') return language === 'ar' ? '📱 انستا باي' : '📱 InstaPay';
+                                if (method === 'wallet') return language === 'ar' ? '💼 محفظة إلكترونية' : '💼 E-Wallet';
+                                return language === 'ar' ? '✅ تم الدفع' : '✅ Paid';
+                              })()}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1517,88 +1587,292 @@ export default function AdminDashboard({
       {/* --- MANUAL ORDER MANAGE MODAL --- */}
       {orderModalOpen && (
         <div className="admin-modal-overlay" onClick={() => setOrderModalOpen(false)}>
-          <div className="admin-modal" style={{ maxWidth: '600px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="admin-modal-header">
+          <div className="admin-modal" style={{ maxWidth: '850px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.8rem' }}>
               <h2>{language === 'ar' ? 'إضافة طلب يدوي جديد 🍽️' : 'Add New Manual Order 🍽️'}</h2>
               <button className="btn-close" onClick={() => setOrderModalOpen(false)}><X size={20} /></button>
             </div>
             <form onSubmit={handleSaveManualOrder}>
-              <div className="admin-modal-body">
-                {/* Basic client info */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
+              <div className="admin-modal-body" style={{ maxHeight: '72vh', overflowY: 'auto', padding: '1rem 0.5rem' }}>
+                
+                {/* 1. Basic client info and Statuses */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem', position: 'relative' }}>
+                  
+                  <div className="form-group" style={{ position: 'relative' }}>
                     <label>{language === 'ar' ? 'اسم العميل *' : 'Customer Name *'}</label>
-                    <input type="text" className="input-gold" value={manualCustName} onChange={(e) => setManualCustName(e.target.value)} required />
+                    <input 
+                      type="text" 
+                      className="input-gold" 
+                      value={manualCustName} 
+                      onChange={(e) => {
+                        setManualCustName(e.target.value);
+                        setShowCustDropdown(true);
+                      }}
+                      onFocus={() => setShowCustDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowCustDropdown(false), 200)}
+                      required 
+                    />
                   </div>
-                  <div className="form-group">
-                    <label>{language === 'ar' ? 'رقم الهاتف *' : 'Phone Number *'}</label>
-                    <input type="text" className="input-gold" value={manualCustPhone} onChange={(e) => setManualCustPhone(e.target.value)} required />
-                  </div>
-                </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
+                  <div className="form-group" style={{ position: 'relative' }}>
+                    <label>{language === 'ar' ? 'رقم الهاتف *' : 'Phone Number *'}</label>
+                    <input 
+                      type="text" 
+                      className="input-gold" 
+                      value={manualCustPhone} 
+                      onChange={(e) => {
+                        setManualCustPhone(e.target.value);
+                        setShowCustDropdown(true);
+                      }}
+                      onFocus={() => setShowCustDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowCustDropdown(false), 200)}
+                      required 
+                    />
+                  </div>
+
                   <div className="form-group">
                     <label>{language === 'ar' ? 'رقم الطاولة / الطرابيزة *' : 'Table / Seat Number *'}</label>
                     <input type="text" className="input-gold" value={manualTableNum} onChange={(e) => setManualTableNum(e.target.value)} required />
                   </div>
+
                   <div className="form-group">
-                    <label>{language === 'ar' ? 'حالة الطلب *' : 'Order Status *'}</label>
+                    <label>{language === 'ar' ? 'حالة الطلب الإبتدائية *' : 'Initial Status *'}</label>
                     <select className="input-gold" value={manualStatus} onChange={(e) => setManualStatus(e.target.value as any)}>
-                      <option value="pending" style={{ background: '#121212', color: 'var(--warning)' }}>Pending / قيد الانتظار</option>
-                      <option value="completed" style={{ background: '#121212', color: 'var(--success)' }}>Completed / مكتمل</option>
-                      <option value="cancelled" style={{ background: '#121212', color: 'var(--danger)' }}>Cancelled / ملغي</option>
+                      <option value="pending" style={{ background: '#121212', color: 'var(--warning)' }}>🍳 قيد التحضير</option>
+                      <option value="preparing" style={{ background: '#121212', color: 'var(--warning)' }}>🍳 قيد التحضير</option>
+                      <option value="delivered" style={{ background: '#121212', color: '#3b82f6' }}>🛵 تم التسليم للعميل</option>
+                      <option value="completed" style={{ background: '#121212', color: 'var(--success)' }}>💳 تم التحصيل / مكتمل</option>
+                      <option value="cancelled" style={{ background: '#121212', color: 'var(--danger)' }}>❌ ملغي</option>
                     </select>
+                  </div>
+
+                  {/* Customer Dropdown Suggestions */}
+                  {showCustDropdown && matchingCustomers.length > 0 && (
+                    <div style={{ 
+                      position: 'absolute', 
+                      top: '100%', 
+                      left: 0, 
+                      right: 0, 
+                      background: '#18181b', 
+                      border: '1px solid var(--gold-primary)', 
+                      borderRadius: '12px', 
+                      zIndex: 100, 
+                      maxHeight: '180px', 
+                      overflowY: 'auto',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
+                      marginTop: '0.2rem',
+                      padding: '0.4rem 0'
+                    }}>
+                      <div style={{ padding: '0.3rem 0.8rem', fontSize: '0.75rem', color: 'var(--text-gray)', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '0.3rem' }}>
+                        {language === 'ar' ? '💡 هل تقصد عميلاً سابقاً؟ (انقر للاختيار التلقائي)' : '💡 Did you mean an existing customer? (Click to auto-fill)'}
+                      </div>
+                      {matchingCustomers.map(cust => (
+                        <div 
+                          key={cust.phone} 
+                          onClick={() => {
+                            setManualCustName(cust.name);
+                            setManualCustPhone(cust.phone);
+                            setManualTableNum(cust.preferredTable);
+                            setShowCustDropdown(false);
+                          }}
+                          style={{ 
+                            padding: '0.5rem 0.8rem', 
+                            cursor: 'pointer', 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center',
+                            fontSize: '0.85rem',
+                            borderBottom: '1px solid rgba(255,255,255,0.02)',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(212, 175, 55, 0.08)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <div style={{ fontWeight: 'bold', color: 'var(--text-white)' }}>{cust.name}</div>
+                          <div style={{ display: 'flex', gap: '0.8rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            <span className="font-en" style={{ color: 'var(--gold-secondary)' }}>{cust.phone}</span>
+                            <span>طاولة: #{cust.preferredTable}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Grid for Category Product List & Order Summary */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
+                  
+                  {/* LEFT COLUMN: PRODUCT SELECTION */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.95rem', color: 'var(--gold-primary)', fontWeight: 'bold' }}>
+                        {language === 'ar' ? 'اختر الأصناف والمنتجات 🍔' : 'Choose Products 🍔'}
+                      </label>
+                    </div>
+
+                    {/* Category Scroll Filter Bar */}
+                    <div style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '0.4rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedManualCat('all')}
+                        style={{ 
+                          padding: '0.3rem 0.8rem', 
+                          borderRadius: '20px', 
+                          fontSize: '0.75rem', 
+                          border: '1px solid', 
+                          borderColor: selectedManualCat === 'all' ? 'var(--gold-primary)' : 'rgba(255,255,255,0.1)',
+                          background: selectedManualCat === 'all' ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
+                          color: selectedManualCat === 'all' ? 'var(--gold-primary)' : 'var(--text-gray)',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {language === 'ar' ? 'الكل 🍽️' : 'All 🍽️'}
+                      </button>
+                      {categories.map(cat => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSelectedManualCat(cat.id)}
+                          style={{ 
+                            padding: '0.3rem 0.8rem', 
+                            borderRadius: '20px', 
+                            fontSize: '0.75rem', 
+                            border: '1px solid', 
+                            borderColor: selectedManualCat === cat.id ? 'var(--gold-primary)' : 'rgba(255,255,255,0.1)',
+                            background: selectedManualCat === cat.id ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
+                            color: selectedManualCat === cat.id ? 'var(--gold-primary)' : 'var(--text-gray)',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {language === 'ar' ? cat.name_ar : cat.name_en}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Scrollable Products list container */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '320px', overflowY: 'auto', paddingRight: '0.4rem' }}>
+                      {products
+                        .filter(prod => {
+                          if (!prod.is_available) return false;
+                          if (selectedManualCat === 'all') return true;
+                          return prod.category_id === selectedManualCat;
+                        })
+                        .map(prod => {
+                          const qty = manualItems[prod.id] || 0;
+                          return (
+                            <div key={prod.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '0.5rem 0.8rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                              <div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{language === 'ar' ? prod.name_ar : prod.name_en}</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--gold-primary)' }}>{prod.price} EGP</div>
+                              </div>
+                              
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <button 
+                                  type="button" 
+                                  className="btn-outline-gold" 
+                                  style={{ padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
+                                  onClick={() => setManualItems(prev => ({
+                                    ...prev,
+                                    [prod.id]: Math.max(0, qty - 1)
+                                  }))}
+                                >
+                                  -
+                                </button>
+                                <span style={{ fontWeight: 'bold', width: '16px', textAlign: 'center', fontSize: '0.85rem' }}>{qty}</span>
+                                <button 
+                                  type="button" 
+                                  className="btn-outline-gold" 
+                                  style={{ padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer' }}
+                                  onClick={() => setManualItems(prev => ({
+                                    ...prev,
+                                    [prod.id]: qty + 1
+                                  }))}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      {products.filter(prod => {
+                        if (!prod.is_available) return false;
+                        if (selectedManualCat === 'all') return true;
+                        return prod.category_id === selectedManualCat;
+                      }).length === 0 && (
+                        <div style={{ textAlign: 'center', color: 'var(--text-gray)', fontSize: '0.8rem', padding: '2rem' }}>
+                          {language === 'ar' ? 'لا توجد منتجات متاحة في هذا التصنيف حالياً' : 'No available products in this category'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* RIGHT COLUMN: DYNAMIC BILL SUMMARY & CHECKOUT */}
+                  <div style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '15px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+                      <h3 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--gold-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>🛒</span>
+                        <span>{language === 'ar' ? 'ملخص وتجميع الفاتورة' : 'Bill Summary & Aggregation'}</span>
+                      </h3>
+                    </div>
+
+                    {/* Scrollable list of added items */}
+                    <div style={{ flex: 1, maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {(() => {
+                        const selectedList = Object.entries(manualItems).filter(([_, q]) => q > 0);
+                        if (selectedList.length === 0) {
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '120px', color: 'var(--text-gray)', fontSize: '0.8rem' }}>
+                              <span>📋</span>
+                              <span>{language === 'ar' ? 'السلة فارغة. أضف منتجات من اليسار.' : 'Cart is empty. Add products.'}</span>
+                            </div>
+                          );
+                        }
+
+                        return selectedList.map(([prodId, qty]) => {
+                          const prod = products.find(p => p.id === prodId);
+                          if (!prod) return null;
+                          return (
+                            <div key={prodId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', borderBottom: '1px solid rgba(255,255,255,0.02)', paddingBottom: '0.3rem' }}>
+                              <div>
+                                <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{qty}x </span>
+                                <span>{language === 'ar' ? prod.name_ar : prod.name_en}</span>
+                              </div>
+                              <div className="font-en" style={{ color: 'var(--text-gray)' }}>
+                                {(prod.price * qty).toFixed(2)} EGP
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {/* Totals computation */}
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                        <span style={{ color: 'var(--text-gray)' }}>{language === 'ar' ? 'إجمالي الأصناف:' : 'Subtotal Items:'}</span>
+                        <span className="font-en">
+                          {Object.entries(manualItems).reduce((sum, [_, q]) => sum + q, 0)} {language === 'ar' ? 'قطع' : 'pcs'}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
+                        <span style={{ color: 'var(--text-white)', fontWeight: 'bold', fontSize: '0.95rem' }}>{language === 'ar' ? 'الحساب الإجمالي:' : 'Grand Total:'}</span>
+                        <span className="font-en" style={{ fontSize: '1.25rem', color: 'var(--gold-primary)', fontWeight: '900', textShadow: '0 0 10px rgba(212,175,55,0.3)' }}>
+                          {Object.entries(manualItems).reduce((sum, [prodId, qty]) => {
+                            const prod = products.find(p => p.id === prodId);
+                            return sum + (prod ? prod.price * qty : 0);
+                          }, 0).toFixed(2)} EGP
+                        </span>
+                      </div>
+                    </div>
+
                   </div>
                 </div>
 
-                {/* Items addition with count */}
-                <div className="form-group" style={{ marginTop: '1.5rem' }}>
-                  <label style={{ fontSize: '1rem', color: 'var(--gold-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'block', marginBottom: '1rem' }}>
-                    {language === 'ar' ? 'حدد المنتجات المطلوبة والكمية:' : 'Select ordered products & quantities:'}
-                  </label>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', maxHeight: '250px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                    {products.map(prod => {
-                      const qty = manualItems[prod.id] || 0;
-                      return (
-                        <div key={prod.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '0.5rem 0.8rem', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
-                          <div>
-                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{language === 'ar' ? prod.name_ar : prod.name_en}</div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--gold-primary)' }}>{prod.price} EGP</div>
-                          </div>
-                          
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                            <button 
-                              type="button" 
-                              className="btn-outline-gold" 
-                              style={{ padding: '0.1rem 0.5rem', borderRadius: '5px', fontSize: '0.8rem', cursor: 'pointer' }}
-                              onClick={() => setManualItems(prev => ({
-                                ...prev,
-                                [prod.id]: Math.max(0, qty - 1)
-                              }))}
-                            >
-                              -
-                            </button>
-                            <span style={{ fontWeight: 'bold', width: '20px', textAlign: 'center' }}>{qty}</span>
-                            <button 
-                              type="button" 
-                              className="btn-outline-gold" 
-                              style={{ padding: '0.1rem 0.5rem', borderRadius: '5px', fontSize: '0.8rem', cursor: 'pointer' }}
-                              onClick={() => setManualItems(prev => ({
-                                ...prev,
-                                [prod.id]: qty + 1
-                              }))}
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
-              <div className="admin-modal-footer">
+              <div className="admin-modal-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
                 <button type="button" className="btn-outline-gold" onClick={() => setOrderModalOpen(false)}>{t.close}</button>
                 <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
               </div>
@@ -1606,6 +1880,166 @@ export default function AdminDashboard({
           </div>
         </div>
       )}
+      {/* --- PAYMENT METHOD SELECTOR MODAL --- */}
+      {paymentCollectOrder && (
+        <div className="admin-modal-overlay" style={{ zIndex: 1100 }} onClick={() => setPaymentCollectOrder(null)}>
+          <div className="admin-modal" style={{ maxWidth: '450px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.8rem' }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, fontSize: '1.2rem' }}>
+                <span>💰</span>
+                <span>{language === 'ar' ? 'تحصيل الطلب ودفع الفاتورة' : 'Collect Bill & Close Order'}</span>
+              </h2>
+              <button className="btn-close" onClick={() => setPaymentCollectOrder(null)}><X size={20} /></button>
+            </div>
+            <div className="admin-modal-body" style={{ padding: '1.5rem 1rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              
+              {/* Order Info Summary */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', padding: '1rem', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-gray)' }}>
+                  <span>{language === 'ar' ? 'العميل:' : 'Customer:'}</span>
+                  <span style={{ color: '#fff', fontWeight: 'bold' }}>{paymentCollectOrder.customer_name}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-gray)' }}>
+                  <span>{language === 'ar' ? 'رقم الهاتف:' : 'Phone Number:'}</span>
+                  <span className="font-en" style={{ color: '#fff' }}>{paymentCollectOrder.customer_phone}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-gray)' }}>
+                  <span>{language === 'ar' ? 'رقم الطاولة / الطرابيزة:' : 'Table:'}</span>
+                  <span className="font-en" style={{ color: 'var(--gold-secondary)', fontWeight: 'bold' }}>#{paymentCollectOrder.table_number}</span>
+                </div>
+                
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: '0.5rem', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{language === 'ar' ? 'المبلغ المستحق الدفع:' : 'Amount Due:'}</span>
+                  <span className="font-en" style={{ fontSize: '1.3rem', color: 'var(--gold-primary)', fontWeight: '900', textShadow: '0 0 10px rgba(212,175,55,0.4)' }}>
+                    {paymentCollectOrder.total_price.toFixed(2)} EGP
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment Methods Grid */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <label style={{ fontSize: '0.9rem', color: 'var(--gold-primary)', fontWeight: 'bold' }}>
+                  {language === 'ar' ? 'اختر طريقة تحصيل الدفع للطلب:' : 'Select Payment Method:'}
+                </label>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+                  
+                  {/* Cash Option */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentMethod('cash')}
+                    style={{
+                      background: selectedPaymentMethod === 'cash' ? 'rgba(212, 175, 55, 0.1)' : 'rgba(255,255,255,0.02)',
+                      border: selectedPaymentMethod === 'cash' ? '2px solid var(--gold-primary)' : '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: '12px',
+                      padding: '1rem 0.5rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: selectedPaymentMethod === 'cash' ? '0 0 10px rgba(212,175,55,0.2)' : 'none'
+                    }}
+                  >
+                    <span style={{ fontSize: '1.5rem' }}>💵</span>
+                    <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: selectedPaymentMethod === 'cash' ? 'var(--gold-primary)' : 'var(--text-white)' }}>
+                      {language === 'ar' ? 'كاش / نقدي' : 'Cash'}
+                    </span>
+                  </button>
+
+                  {/* Visa Option */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentMethod('visa')}
+                    style={{
+                      background: selectedPaymentMethod === 'visa' ? 'rgba(212, 175, 55, 0.1)' : 'rgba(255,255,255,0.02)',
+                      border: selectedPaymentMethod === 'visa' ? '2px solid var(--gold-primary)' : '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: '12px',
+                      padding: '1rem 0.5rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: selectedPaymentMethod === 'visa' ? '0 0 10px rgba(212,175,55,0.2)' : 'none'
+                    }}
+                  >
+                    <span style={{ fontSize: '1.5rem' }}>💳</span>
+                    <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: selectedPaymentMethod === 'visa' ? 'var(--gold-primary)' : 'var(--text-white)' }}>
+                      {language === 'ar' ? 'فيزا / بطاقة' : 'Visa / Card'}
+                    </span>
+                  </button>
+
+                  {/* InstaPay Option */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentMethod('instapay')}
+                    style={{
+                      background: selectedPaymentMethod === 'instapay' ? 'rgba(212, 175, 55, 0.1)' : 'rgba(255,255,255,0.02)',
+                      border: selectedPaymentMethod === 'instapay' ? '2px solid var(--gold-primary)' : '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: '12px',
+                      padding: '1rem 0.5rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: selectedPaymentMethod === 'instapay' ? '0 0 10px rgba(212,175,55,0.2)' : 'none'
+                    }}
+                  >
+                    <span style={{ fontSize: '1.5rem' }}>📱</span>
+                    <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: selectedPaymentMethod === 'instapay' ? 'var(--gold-primary)' : 'var(--text-white)' }}>
+                      {language === 'ar' ? 'انستا باي' : 'InstaPay'}
+                    </span>
+                  </button>
+
+                  {/* E-Wallet Option */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentMethod('wallet')}
+                    style={{
+                      background: selectedPaymentMethod === 'wallet' ? 'rgba(212, 175, 55, 0.1)' : 'rgba(255,255,255,0.02)',
+                      border: selectedPaymentMethod === 'wallet' ? '2px solid var(--gold-primary)' : '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: '12px',
+                      padding: '1rem 0.5rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: selectedPaymentMethod === 'wallet' ? '0 0 10px rgba(212,175,55,0.2)' : 'none'
+                    }}
+                  >
+                    <span style={{ fontSize: '1.5rem' }}>💼</span>
+                    <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: selectedPaymentMethod === 'wallet' ? 'var(--gold-primary)' : 'var(--text-white)' }}>
+                      {language === 'ar' ? 'محفظة إلكترونية' : 'E-Wallet'}
+                    </span>
+                  </button>
+
+                </div>
+              </div>
+
+            </div>
+            <div className="admin-modal-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+              <button type="button" className="btn-outline-gold" onClick={() => setPaymentCollectOrder(null)}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
+              <button 
+                type="button" 
+                className="btn-gold" 
+                disabled={loading} 
+                onClick={() => handleCollectPayment(paymentCollectOrder.id, selectedPaymentMethod)}
+                style={{ padding: '0.5rem 1.5rem', borderRadius: '10px' }}
+              >
+                {language === 'ar' ? 'تأكيد التحصيل وإتمام الفاتورة 🎉' : 'Confirm Collection & Paid 🎉'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- CUSTOMER PROFILE & TIMELINE MODAL --- */}
       {selectedCustPhone && (() => {
         const cust = uniqueCustomersMap[selectedCustPhone];
