@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Category, Product, Order, RestaurantSettings } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem } from '../types';
 import { db } from '../lib/supabase';
 import { 
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
@@ -76,6 +76,19 @@ export default function AdminDashboard({
   const [offers, setOffers] = useState<string[]>(settings.offers || []);
 
   const [loading, setLoading] = useState(false);
+
+  // Manual orders states & filtering
+  const [orderFilterType, setOrderFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
+  const [selectedFilterDay, setSelectedFilterDay] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [selectedFilterMonth, setSelectedFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [selectedFilterYear, setSelectedFilterYear] = useState<number>(() => new Date().getFullYear());
+
+  const [orderModalOpen, setOrderModalOpen] = useState(false);
+  const [manualCustName, setManualCustName] = useState('');
+  const [manualCustPhone, setManualCustPhone] = useState('');
+  const [manualTableNum, setManualTableNum] = useState('');
+  const [manualStatus, setManualStatus] = useState<'pending' | 'completed' | 'cancelled'>('pending');
+  const [manualItems, setManualItems] = useState<Record<string, number>>({}); // productId -> quantity
 
   // Sync settings when they change
   useEffect(() => {
@@ -250,6 +263,81 @@ export default function AdminDashboard({
       console.error(err);
     }
   };
+
+  const handleSaveManualOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualCustName.trim() || !manualCustPhone.trim() || !manualTableNum.trim()) {
+      alert(language === 'ar' ? 'يرجى ملء كافة البيانات الأساسية!' : 'Please fill all basic info!');
+      return;
+    }
+
+    const itemsList: OrderItem[] = [];
+    let totalPrice = 0;
+    
+    Object.entries(manualItems).forEach(([prodId, qty]) => {
+      if (qty > 0) {
+        const prod = products.find(p => p.id === prodId);
+        if (prod) {
+          itemsList.push({
+            id: prod.id,
+            name_ar: prod.name_ar,
+            name_en: prod.name_en,
+            price: prod.price,
+            quantity: qty
+          });
+          totalPrice += prod.price * qty;
+        }
+      }
+    });
+
+    if (itemsList.length === 0) {
+      alert(language === 'ar' ? 'يرجى إضافة صنف واحد على الأقل للطلب!' : 'Please add at least one item!');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await db.addOrder({
+        customer_name: manualCustName.trim(),
+        customer_phone: manualCustPhone.trim(),
+        table_number: manualTableNum.trim(),
+        items: itemsList,
+        total_price: totalPrice,
+        status: manualStatus
+      });
+      await refreshData();
+      setOrderModalOpen(false);
+      // Clean up manual states
+      setManualCustName('');
+      setManualCustPhone('');
+      setManualTableNum('');
+      setManualStatus('pending');
+      setManualItems({});
+      alert(language === 'ar' ? 'تم إضافة الطلب يدويًا بنجاح!' : 'Order added manually successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء حفظ الطلب.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredOrders = orders.filter(order => {
+    if (!order.created_at) return true;
+    const orderDate = new Date(order.created_at);
+    if (orderFilterType === 'day') {
+      const dayStr = orderDate.toISOString().split('T')[0];
+      return dayStr === selectedFilterDay;
+    }
+    if (orderFilterType === 'month') {
+      const monthStr = orderDate.toISOString().slice(0, 7);
+      return monthStr === selectedFilterMonth;
+    }
+    if (orderFilterType === 'year') {
+      return orderDate.getFullYear() === selectedFilterYear;
+    }
+    return true;
+  });
 
   // --- SETTINGS ACTIONS ---
   const handleAddPromo = () => {
@@ -867,24 +955,95 @@ export default function AdminDashboard({
         {activeTab === 'orders' && (
           <div>
             <div className="table-panel">
-              <h1 className="text-gradient-gold" style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>{t.ordersTab}</h1>
-              
-              <div className="table-wrapper">
-                <table className="luxury-table">
-                  <thead>
-                    <tr>
-                      <th>{t.orderRef}</th>
-                      <th>{t.custName}</th>
-                      <th>{t.custPhone}</th>
-                      <th>{t.orderTable}</th>
-                      <th>{t.orderItems}</th>
-                      <th>{t.orderTotal}</th>
-                      <th>{t.orderDate}</th>
-                      <th>{t.thStatus}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orders.map((order) => (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <h1 className="text-gradient-gold" style={{ fontSize: '1.5rem', margin: 0 }}>{t.ordersTab}</h1>
+                  
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* Filter type selector */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'فلترة حسب:' : 'Filter by:'}</label>
+                      <select 
+                        value={orderFilterType} 
+                        onChange={(e) => setOrderFilterType(e.target.value as any)} 
+                        className="input-gold"
+                        style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}
+                      >
+                        <option value="all">{language === 'ar' ? 'الكل 📁' : 'All 📁'}</option>
+                        <option value="day">{language === 'ar' ? 'باليوم 📅' : 'By Day 📅'}</option>
+                        <option value="month">{language === 'ar' ? 'بالشهر 🗓️' : 'By Month 🗓️'}</option>
+                        <option value="year">{language === 'ar' ? 'بالسنة ⏳' : 'By Year ⏳'}</option>
+                      </select>
+                    </div>
+
+                    {/* Filter inputs based on type */}
+                    {orderFilterType === 'day' && (
+                      <input 
+                        type="date" 
+                        className="input-gold" 
+                        value={selectedFilterDay} 
+                        onChange={(e) => setSelectedFilterDay(e.target.value)} 
+                        style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }} 
+                      />
+                    )}
+
+                    {orderFilterType === 'month' && (
+                      <input 
+                        type="month" 
+                        className="input-gold" 
+                        value={selectedFilterMonth} 
+                        onChange={(e) => setSelectedFilterMonth(e.target.value)} 
+                        style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }} 
+                      />
+                    )}
+
+                    {orderFilterType === 'year' && (
+                      <select 
+                        className="input-gold" 
+                        value={selectedFilterYear} 
+                        onChange={(e) => setSelectedFilterYear(Number(e.target.value))} 
+                        style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}
+                      >
+                        {[2024, 2025, 2026, 2027, 2028].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    )}
+
+                    {/* Add Manual Order Button */}
+                    <button 
+                      onClick={() => {
+                        setManualCustName('');
+                        setManualCustPhone('');
+                        setManualTableNum('');
+                        setManualStatus('pending');
+                        setManualItems({});
+                        setOrderModalOpen(true);
+                      }} 
+                      className="btn-gold" 
+                      style={{ padding: '0.5rem 1.2rem', borderRadius: '12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                      <Plus size={16} />
+                      <span>{language === 'ar' ? 'إضافة طلب يدوي' : 'Add Manual Order'}</span>
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="table-wrapper">
+                  <table className="luxury-table">
+                    <thead>
+                      <tr>
+                        <th>{t.orderRef}</th>
+                        <th>{t.custName}</th>
+                        <th>{t.custPhone}</th>
+                        <th>{t.orderTable}</th>
+                        <th>{t.orderItems}</th>
+                        <th>{t.orderTotal}</th>
+                        <th>{t.orderDate}</th>
+                        <th>{t.thStatus}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredOrders.map((order) => (
                       <tr key={order.id}>
                         <td className="font-en" style={{ fontSize: '0.75rem', color: 'var(--gold-primary)', fontWeight: 'bold' }}>#{order.id.slice(0, 8)}</td>
                         <td style={{ fontWeight: '700' }}>{order.customer_name}</td>
@@ -923,10 +1082,10 @@ export default function AdminDashboard({
                         </td>
                       </tr>
                     ))}
-                    {orders.length === 0 && (
+                    {filteredOrders.length === 0 && (
                       <tr>
-                        <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
-                          No orders registered yet
+                        <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem' }}>
+                          {language === 'ar' ? 'لا توجد طلبات مسجلة تطابق فلترة البحث!' : 'No orders found matching the filter!'}
                         </td>
                       </tr>
                     )}
@@ -1166,6 +1325,99 @@ export default function AdminDashboard({
               </div>
               <div className="admin-modal-footer">
                 <button type="button" className="btn-outline-gold" onClick={() => setProdModalOpen(false)}>{t.close}</button>
+                <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MANUAL ORDER MANAGE MODAL --- */}
+      {orderModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setOrderModalOpen(false)}>
+          <div className="admin-modal" style={{ maxWidth: '600px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'إضافة طلب يدوي جديد 🍽️' : 'Add New Manual Order 🍽️'}</h2>
+              <button className="btn-close" onClick={() => setOrderModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveManualOrder}>
+              <div className="admin-modal-body">
+                {/* Basic client info */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'اسم العميل *' : 'Customer Name *'}</label>
+                    <input type="text" className="input-gold" value={manualCustName} onChange={(e) => setManualCustName(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'رقم الهاتف *' : 'Phone Number *'}</label>
+                    <input type="text" className="input-gold" value={manualCustPhone} onChange={(e) => setManualCustPhone(e.target.value)} required />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'رقم الطاولة / الطرابيزة *' : 'Table / Seat Number *'}</label>
+                    <input type="text" className="input-gold" value={manualTableNum} onChange={(e) => setManualTableNum(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'حالة الطلب *' : 'Order Status *'}</label>
+                    <select className="input-gold" value={manualStatus} onChange={(e) => setManualStatus(e.target.value as any)}>
+                      <option value="pending" style={{ background: '#121212', color: 'var(--warning)' }}>Pending / قيد الانتظار</option>
+                      <option value="completed" style={{ background: '#121212', color: 'var(--success)' }}>Completed / مكتمل</option>
+                      <option value="cancelled" style={{ background: '#121212', color: 'var(--danger)' }}>Cancelled / ملغي</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Items addition with count */}
+                <div className="form-group" style={{ marginTop: '1.5rem' }}>
+                  <label style={{ fontSize: '1rem', color: 'var(--gold-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'block', marginBottom: '1rem' }}>
+                    {language === 'ar' ? 'حدد المنتجات المطلوبة والكمية:' : 'Select ordered products & quantities:'}
+                  </label>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', maxHeight: '250px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                    {products.map(prod => {
+                      const qty = manualItems[prod.id] || 0;
+                      return (
+                        <div key={prod.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '0.5rem 0.8rem', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
+                          <div>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{language === 'ar' ? prod.name_ar : prod.name_en}</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--gold-primary)' }}>{prod.price} EGP</div>
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                            <button 
+                              type="button" 
+                              className="btn-outline-gold" 
+                              style={{ padding: '0.1rem 0.5rem', borderRadius: '5px', fontSize: '0.8rem', cursor: 'pointer' }}
+                              onClick={() => setManualItems(prev => ({
+                                ...prev,
+                                [prod.id]: Math.max(0, qty - 1)
+                              }))}
+                            >
+                              -
+                            </button>
+                            <span style={{ fontWeight: 'bold', width: '20px', textAlign: 'center' }}>{qty}</span>
+                            <button 
+                              type="button" 
+                              className="btn-outline-gold" 
+                              style={{ padding: '0.1rem 0.5rem', borderRadius: '5px', fontSize: '0.8rem', cursor: 'pointer' }}
+                              onClick={() => setManualItems(prev => ({
+                                ...prev,
+                                [prod.id]: qty + 1
+                              }))}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-outline-gold" onClick={() => setOrderModalOpen(false)}>{t.close}</button>
                 <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
               </div>
             </form>
