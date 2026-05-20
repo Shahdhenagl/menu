@@ -163,7 +163,8 @@ const initialSettings: RestaurantSettings = {
   facebook_url: 'https://facebook.com/meridien',
   instagram_url: 'https://instagram.com/meridien',
   tiktok_url: 'https://tiktok.com/@meridien',
-  snapchat_url: 'https://snapchat.com/add/meridien'
+  snapchat_url: 'https://snapchat.com/add/meridien',
+  talabat_url: 'https://www.talabat.com/egypt'
 };
 
 const initialOrders: Order[] = [

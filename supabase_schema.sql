@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS restaurant_settings (
   instagram_url TEXT DEFAULT '',
   tiktok_url TEXT DEFAULT '',
   snapchat_url TEXT DEFAULT '',
+  talabat_url TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -108,9 +109,9 @@ INSERT INTO products (category_id, name_ar, name_en, price, description_ar, desc
   ('c5555555-5555-5555-5555-555555555555', 'موهيتو نعناع بارد', 'Mint Mojito', 65, 'مشروب موهيتو فوار ومنعش بالليمون والنعناع الطازج ونكهة الصودا', 'Sparkling and refreshing mojito drink with fresh lemon, mint and soda', 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=400&q=80');
 
 -- Insert Initial Restaurant Settings Row
-INSERT INTO restaurant_settings (id, restaurant_name_ar, restaurant_name_en, whatsapp_number, promo_codes, offers, facebook_url, instagram_url, tiktok_url, snapchat_url) VALUES
+INSERT INTO restaurant_settings (id, restaurant_name_ar, restaurant_name_en, whatsapp_number, promo_codes, offers, facebook_url, instagram_url, tiktok_url, snapchat_url, talabat_url) VALUES
   ('a1111111-1111-1111-1111-111111111111', 'مريديان', 'Meridien', '01000307171', 
    '{"MERIDIEN10": 10, "WELCOME": 15}'::jsonb, 
    '["خصم 10% على جميع وجبات المشويات بمناسبة الصيف!", "العرض الذهبي: اطلب طبقين رئيسيين واحصل على الحلوى مجاناً!"]'::jsonb,
-   'https://facebook.com', 'https://instagram.com', 'https://tiktok.com', 'https://snapchat.com')
+   'https://facebook.com', 'https://instagram.com', 'https://tiktok.com', 'https://snapchat.com', 'https://www.talabat.com/egypt')
 ON CONFLICT (id) DO NOTHING;

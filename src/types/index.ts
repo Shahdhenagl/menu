@@ -53,4 +53,5 @@ export interface RestaurantSettings {
   instagram_url: string;
   tiktok_url: string;
   snapchat_url: string;
+  talabat_url: string;
 }

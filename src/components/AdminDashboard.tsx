@@ -66,6 +66,7 @@ export default function AdminDashboard({
   const [setInstagram, setSetInstagram] = useState(settings.instagram_url);
   const [setTiktok, setSetTiktok] = useState(settings.tiktok_url);
   const [setSnapchat, setSetSnapchat] = useState(settings.snapchat_url);
+  const [setTalabat, setSetTalabat] = useState(settings.talabat_url || '');
   
   // Custom promos / offers management
   const [newPromoCode, setNewPromoCode] = useState('');
@@ -86,6 +87,7 @@ export default function AdminDashboard({
     setSetInstagram(settings.instagram_url);
     setSetTiktok(settings.tiktok_url);
     setSetSnapchat(settings.snapchat_url);
+    setSetTalabat(settings.talabat_url || '');
     setPromos(settings.promo_codes || {});
     setOffers(settings.offers || []);
   }, [settings]);
@@ -289,7 +291,8 @@ export default function AdminDashboard({
         facebook_url: setFacebook,
         instagram_url: setInstagram,
         tiktok_url: setTiktok,
-        snapchat_url: setSnapchat
+        snapchat_url: setSnapchat,
+        talabat_url: setTalabat
       });
       await refreshData();
       alert(language === 'ar' ? 'تم حفظ إعدادات النظام بنجاح!' : 'System settings saved successfully!');
@@ -987,6 +990,10 @@ export default function AdminDashboard({
                 <div className="form-group">
                   <label>Snapchat URL</label>
                   <input type="text" className="input-gold" value={setSnapchat} onChange={(e) => setSetSnapchat(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>رابط طلبات (Talabat URL)</label>
+                  <input type="text" className="input-gold" value={setTalabat} onChange={(e) => setSetTalabat(e.target.value)} placeholder="https://www.talabat.com/..." />
                 </div>
               </div>
 
