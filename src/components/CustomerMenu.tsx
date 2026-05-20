@@ -32,32 +32,7 @@ export default function CustomerMenu({
   const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Custom tilt values per card for realistic 3D hovering
-  const [tiltStates, setTiltStates] = useState<Record<string, { rx: number; ry: number }>>({});
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>, id: string) => {
-    const card = e.currentTarget;
-    const rect = card.getBoundingClientRect();
-    const x = e.clientX - rect.left; //x position within the element.
-    const y = e.clientY - rect.top;  //y position within the element.
-    
-    // Calculate rotation angles based on cursor position relative to center of card
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const rotateY = ((x - centerX) / centerX) * 12; // Max 12 degrees
-    const rotateX = -((y - centerY) / centerY) * 12;
-
-    setTiltStates(prev => ({
-      ...prev,
-      [id]: { rx: rotateX, ry: rotateY }
-    }));
-  };
-
-  const handleMouseLeave = (id: string) => {
-    setTiltStates(prev => ({
-      ...prev,
-      [id]: { rx: 0, ry: 0 }
-    }));
-  };
 
   // Filter products by category and search query
   const filteredProducts = products.filter(p => {
@@ -221,26 +196,14 @@ export default function CustomerMenu({
           ))}
         </div>
 
-        {/* 3D Products Perspective Deck */}
-        <div className="perspective-container">
+        {/* Premium Products Grid */}
+        <div className="products-grid">
           {filteredProducts.map((product) => {
             const inCartItem = cart.find(item => item.id === product.id);
-            const tilt = tiltStates[product.id] || { rx: 0, ry: 0 };
             
             return (
-              <div 
-                key={product.id} 
-                className="card-3d-wrapper"
-                onMouseMove={(e) => handleMouseMove(e, product.id)}
-                onMouseLeave={() => handleMouseLeave(product.id)}
-              >
-                <div 
-                  className="card-3d"
-                  style={{
-                    transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg) translateZ(10px)`,
-                    opacity: product.is_available ? 1 : 0.6
-                  }}
-                >
+              <div key={product.id} className="premium-card-wrapper">
+                <div className={`premium-card ${product.is_available ? 'available' : 'unavailable'}`}>
                   {/* Product Image */}
                   <div className="card-image-box">
                     {product.image_url ? (
@@ -288,7 +251,7 @@ export default function CustomerMenu({
 
                       {product.is_available ? (
                         inCartItem ? (
-                          <div className="card-item-controls" style={{ transform: 'translateZ(10px)' }}>
+                          <div className="card-item-controls">
                             <button className="btn-count" onClick={() => updateQuantity(product.id, inCartItem.quantity - 1)}>-</button>
                             <span className="item-quantity">{inCartItem.quantity}</span>
                             <button className="btn-count" onClick={() => updateQuantity(product.id, inCartItem.quantity + 1)}>+</button>

@@ -3,37 +3,37 @@
 
 /* Reset and CSS Variables */
 :root {
-  --bg-dark: #070707;
-  --bg-darker: #020202;
-  --bg-card: #121212;
-  --bg-card-hover: #1a1a1a;
+  --bg-dark: #09090a;
+  --bg-darker: #040404;
+  --bg-card: #141416;
+  --bg-card-hover: #1e1e22;
   
   --gold-primary: #d4af37;
-  --gold-secondary: #f3e5ab;
-  --gold-dark: #aa8410;
-  --gold-glow: rgba(212, 175, 55, 0.35);
-  --gold-gradient: linear-gradient(135deg, #aa8410 0%, #d4af37 50%, #f3e5ab 100%);
-  --gold-gradient-text: linear-gradient(90deg, #f3e5ab 0%, #d4af37 50%, #aa8410 100%);
+  --gold-secondary: #f6e6b4;
+  --gold-dark: #b89014;
+  --gold-glow: rgba(212, 175, 55, 0.25);
+  --gold-gradient: linear-gradient(135deg, #b89014 0%, #d4af37 50%, #f6e6b4 100%);
+  --gold-gradient-text: linear-gradient(90deg, #f6e6b4 0%, #d4af37 50%, #b89014 100%);
   
   --text-white: #ffffff;
-  --text-gray: #a3a3a3;
-  --text-muted: #6b7280;
+  --text-gray: #c5c5c9;
+  --text-muted: #84858f;
   
   --success: #10b981;
   --danger: #ef4444;
   --warning: #f59e0b;
   
-  --border-color: rgba(212, 175, 55, 0.15);
-  --border-glow: rgba(212, 175, 55, 0.3);
-  --glass-bg: rgba(18, 18, 18, 0.85);
-  --glass-border: rgba(255, 255, 255, 0.05);
+  --border-color: rgba(212, 175, 55, 0.25);
+  --border-glow: rgba(212, 175, 55, 0.4);
+  --glass-bg: #121214;
+  --glass-border: rgba(212, 175, 55, 0.15);
   
   --font-ar: 'Cairo', sans-serif;
   --font-en: 'Outfit', sans-serif;
   
-  --transition-fast: 0.2s ease;
-  --transition-normal: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  --transition-slow: 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * {
@@ -296,49 +296,75 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
 }
 
-/* 3D PERSPECTIVE & CARDS STYLING */
-.perspective-container {
-  perspective: 1500px;
-  width: 100%;
+/* CRISP PREMIUM PRODUCTS GRID & CARDS STYLING */
+.products-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fill, minmax(295px, 1fr));
+  gap: 2.25rem;
+  width: 100%;
 }
 
-.card-3d-wrapper {
-  perspective: 1000px;
-  transform-style: preserve-3d;
+.premium-card-wrapper {
+  position: relative;
+  border-radius: 24px;
+  padding: 1.5px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(212, 175, 55, 0.08) 100%);
+  transition: background var(--transition-normal), transform var(--transition-normal);
   cursor: pointer;
 }
 
-.card-3d {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
+.premium-card-wrapper::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 24px;
+  padding: 1.5px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.4) 0%, transparent 40%, rgba(212, 175, 55, 0.15) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.3;
+  transition: opacity var(--transition-normal);
+}
+
+.premium-card-wrapper:hover {
+  transform: translateY(-8px);
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.15) 0%, rgba(212, 175, 55, 0.03) 100%);
+}
+
+.premium-card-wrapper:hover::after {
+  opacity: 1;
+}
+
+.premium-card {
+  background: #111113;
+  border-radius: 22.5px;
   overflow: hidden;
   height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
-  transition: transform var(--transition-slow), border-color var(--transition-normal), box-shadow var(--transition-normal);
-  transform-style: preserve-3d;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  transition: box-shadow var(--transition-normal);
+  border: 1px solid rgba(255, 255, 255, 0.03);
 }
 
-/* 3D Tilt on Hover */
-.card-3d-wrapper:hover .card-3d {
-  transform: rotateX(8deg) rotateY(-8deg) translateZ(15px);
-  border-color: var(--gold-primary);
-  box-shadow: 0 20px 40px rgba(0,0,0,0.7), 0 0 25px rgba(212, 175, 55, 0.15);
+.premium-card-wrapper:hover .premium-card {
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 25px rgba(212, 175, 55, 0.15);
+  border-color: rgba(212, 175, 55, 0.15);
 }
 
 .card-image-box {
   width: 100%;
-  height: 200px;
+  height: 220px;
   overflow: hidden;
   position: relative;
-  border-bottom: 1px solid var(--border-color);
-  transform: translateZ(20px); /* 3D layer lift */
+  border-bottom: 1.5px solid rgba(212, 175, 55, 0.12);
+  background: #0d0d0d;
 }
 
 .card-image {
@@ -348,8 +374,8 @@ h1, h2, h3, h4, h5, h6 {
   transition: transform var(--transition-slow);
 }
 
-.card-3d-wrapper:hover .card-image {
-  transform: scale(1.1);
+.premium-card-wrapper:hover .card-image {
+  transform: scale(1.06);
 }
 
 .card-content {
@@ -357,25 +383,27 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex-direction: column;
   flex: 1;
-  transform: translateZ(25px); /* Higher 3D lift */
+  background: #111113;
 }
 
 .card-title {
-  font-size: 1.2rem;
-  margin-bottom: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-bottom: 0.6rem;
   color: var(--text-white);
-  transition: var(--transition-fast);
+  transition: color var(--transition-fast);
+  line-height: 1.4;
 }
 
-.card-3d-wrapper:hover .card-title {
+.premium-card-wrapper:hover .card-title {
   color: var(--gold-secondary);
 }
 
 .card-desc {
-  font-size: 0.85rem;
-  color: var(--text-gray);
-  margin-bottom: 1.25rem;
-  line-height: 1.5;
+  font-size: 0.9rem;
+  color: #c5c5c9;
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
   flex: 1;
 }
 
@@ -384,21 +412,22 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: space-between;
   align-items: center;
   margin-top: auto;
-  transform: translateZ(30px); /* Highest lift */
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 1rem;
 }
 
 .card-price {
-  font-size: 1.3rem;
+  font-size: 1.4rem;
   font-weight: 800;
   color: var(--gold-primary);
   display: flex;
   align-items: baseline;
-  gap: 0.2rem;
+  gap: 0.25rem;
   font-family: var(--font-en);
 }
 
 .card-price span {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-family: var(--font-ar);
   font-weight: 600;
 }
