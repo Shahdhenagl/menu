@@ -7,7 +7,24 @@ import AdminDashboard from './components/AdminDashboard';
 import { Sparkles } from 'lucide-react';
 
 function App() {
-  const [currentView, setCurrentView] = useState<'menu' | 'admin'>('menu');
+  const [currentView, setCurrentView] = useState<'menu' | 'admin'>(() => {
+    const path = window.location.pathname;
+    return path.endsWith('/admin') || path.endsWith('/admin/') ? 'admin' : 'menu';
+  });
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const path = window.location.pathname;
+      if (path.endsWith('/admin') || path.endsWith('/admin/')) {
+        setCurrentView('admin');
+      } else {
+        setCurrentView('menu');
+      }
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
+
   const [language, setLanguage] = useState<'ar' | 'en'>(() => {
     return (localStorage.getItem('meridien_lang') as 'ar' | 'en') || 'ar';
   });
@@ -168,7 +185,6 @@ function App() {
             addToCart={addToCart}
             updateQuantity={updateQuantity}
             onOpenCart={() => setIsCartOpen(true)}
-            onOpenAdmin={() => setCurrentView('admin')}
             settings={settings}
             categories={categories}
             products={products}
@@ -189,7 +205,10 @@ function App() {
         </>
       ) : (
         <AdminDashboard 
-          onClose={() => setCurrentView('menu')}
+          onClose={() => {
+            window.history.pushState({}, '', '/');
+            setCurrentView('menu');
+          }}
           categories={categories}
           products={products}
           orders={orders}

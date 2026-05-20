@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Product, Category, RestaurantSettings, OrderItem } from '../types';
 import { 
   Search, ShoppingBag, Info, ShieldAlert, Sparkles, 
-  Settings, Globe
+  Globe
 } from 'lucide-react';
 
 interface CustomerMenuProps {
@@ -10,7 +10,6 @@ interface CustomerMenuProps {
   addToCart: (product: Product) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   onOpenCart: () => void;
-  onOpenAdmin: () => void;
   settings: RestaurantSettings;
   categories: Category[];
   products: Product[];
@@ -23,7 +22,6 @@ export default function CustomerMenu({
   addToCart,
   updateQuantity,
   onOpenCart,
-  onOpenAdmin,
   settings,
   categories,
   products,
@@ -162,17 +160,6 @@ export default function CustomerMenu({
           >
             <Globe size={15} />
             {language === 'ar' ? 'English' : 'العربية'}
-          </button>
-
-          {/* Admin Gear */}
-          <button 
-            className="btn-outline-gold" 
-            onClick={onOpenAdmin}
-            style={{ padding: '0.4rem 0.8rem', borderRadius: '15px' }}
-            title="لوحة تحكم المدير"
-          >
-            <Settings size={15} />
-            <span>{t.adminBtn}</span>
           </button>
         </div>
       </header>
