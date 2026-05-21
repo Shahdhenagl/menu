@@ -37,6 +37,8 @@
   
   --panel-bg: linear-gradient(135deg, rgba(20, 20, 22, 0.65) 0%, rgba(10, 10, 12, 0.85) 100%);
   --table-hover: rgba(255, 255, 255, 0.02);
+  --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --card-shadow-hover: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 25px rgba(212, 175, 55, 0.15);
 }
 
 /* Light Theme Variable Overrides */
@@ -59,6 +61,8 @@
   --table-hover: rgba(0, 0, 0, 0.025);
   
   --gold-secondary: #8a6d10; /* Dark luxury gold for clear readability in light mode */
+  --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --card-shadow-hover: 0 16px 36px rgba(0, 0, 0, 0.12), 0 0 25px rgba(212, 175, 55, 0.15);
 }
 
 /* Custom background adjustments for light theme */
@@ -383,20 +387,20 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .premium-card {
-  background: #111113;
+  background: var(--bg-card);
   border-radius: 22.5px;
   overflow: hidden;
   height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--card-shadow);
   transition: box-shadow var(--transition-normal);
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
 }
 
 .premium-card-wrapper:hover .premium-card {
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 25px rgba(212, 175, 55, 0.15);
+  box-shadow: var(--card-shadow-hover);
   border-color: rgba(212, 175, 55, 0.15);
 }
 
@@ -406,7 +410,7 @@ h1, h2, h3, h4, h5, h6 {
   overflow: hidden;
   position: relative;
   border-bottom: 1.5px solid rgba(212, 175, 55, 0.12);
-  background: #0d0d0d;
+  background: var(--bg-darker);
 }
 
 .card-image {
@@ -425,7 +429,7 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex-direction: column;
   flex: 1;
-  background: #111113;
+  background: var(--bg-card);
 }
 
 .card-title {
@@ -443,7 +447,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .card-desc {
   font-size: 0.9rem;
-  color: #c5c5c9;
+  color: var(--text-gray);
   margin-bottom: 1.5rem;
   line-height: 1.6;
   flex: 1;
@@ -454,7 +458,7 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: space-between;
   align-items: center;
   margin-top: auto;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--glass-border);
   padding-top: 1rem;
 }
 
