@@ -115,3 +115,7 @@ INSERT INTO restaurant_settings (id, restaurant_name_ar, restaurant_name_en, wha
    '["خصم 10% على جميع وجبات المشويات بمناسبة الصيف!", "العرض الذهبي: اطلب طبقين رئيسيين واحصل على الحلوى مجاناً!"]'::jsonb,
    'https://facebook.com', 'https://instagram.com', 'https://tiktok.com', 'https://snapchat.com', 'https://www.talabat.com/egypt')
 ON CONFLICT (id) DO NOTHING;
+
+-- 5. Add Tax and Service columns to settings table
+ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS tax_percent NUMERIC DEFAULT 0;
+ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS service_percent NUMERIC DEFAULT 0;

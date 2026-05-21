@@ -60,6 +60,8 @@ export interface RestaurantSettings {
   tiktok_url: string;
   snapchat_url: string;
   talabat_url: string;
+  tax_percent?: number;
+  service_percent?: number;
 }
 
 export interface Expense {

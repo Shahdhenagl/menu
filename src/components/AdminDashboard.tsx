@@ -72,6 +72,8 @@ export default function AdminDashboard({
   const [setTiktok, setSetTiktok] = useState(settings.tiktok_url);
   const [setSnapchat, setSetSnapchat] = useState(settings.snapchat_url);
   const [setTalabat, setSetTalabat] = useState(settings.talabat_url || '');
+  const [taxPercent, setTaxPercent] = useState<number>(settings.tax_percent || 0);
+  const [servicePercent, setServicePercent] = useState<number>(settings.service_percent || 0);
   
   // Custom promos / offers management
   const [newPromoCode, setNewPromoCode] = useState('');
@@ -190,6 +192,8 @@ export default function AdminDashboard({
     setSetTiktok(settings.tiktok_url);
     setSetSnapchat(settings.snapchat_url);
     setSetTalabat(settings.talabat_url || '');
+    setTaxPercent(settings.tax_percent || 0);
+    setServicePercent(settings.service_percent || 0);
     setPromos(settings.promo_codes || {});
     setOffers(settings.offers || []);
   }, [settings]);
@@ -376,7 +380,7 @@ export default function AdminDashboard({
     }
 
     const itemsList: OrderItem[] = [];
-    let totalPrice = 0;
+    let subtotal = 0;
     
     Object.entries(manualItems).forEach(([prodId, qty]) => {
       if (qty > 0) {
@@ -389,7 +393,7 @@ export default function AdminDashboard({
             price: prod.price,
             quantity: qty
           });
-          totalPrice += prod.price * qty;
+          subtotal += prod.price * qty;
         }
       }
     });
@@ -398,6 +402,12 @@ export default function AdminDashboard({
       alert(language === 'ar' ? 'يرجى إضافة صنف واحد على الأقل للطلب!' : 'Please add at least one item!');
       return;
     }
+
+    const servicePercent = settings.service_percent || 0;
+    const serviceAmount = subtotal * (servicePercent / 100);
+    const taxPercent = settings.tax_percent || 0;
+    const taxAmount = (subtotal + serviceAmount) * (taxPercent / 100);
+    const totalPrice = subtotal + serviceAmount + taxAmount;
 
     setLoading(true);
     try {
@@ -509,7 +519,9 @@ export default function AdminDashboard({
         instagram_url: setInstagram,
         tiktok_url: setTiktok,
         snapchat_url: setSnapchat,
-        talabat_url: setTalabat
+        talabat_url: setTalabat,
+        tax_percent: taxPercent,
+        service_percent: servicePercent
       });
       await refreshData();
       alert(language === 'ar' ? 'تم حفظ إعدادات النظام بنجاح!' : 'System settings saved successfully!');
@@ -2128,6 +2140,52 @@ export default function AdminDashboard({
                 </div>
               </div>
 
+              {/* Tax & Service Settings */}
+              <h3 style={{ color: 'var(--gold-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span>💰</span>
+                <span>{language === 'ar' ? 'إعدادات الضرائب والخدمة (الفواتير)' : 'Tax & Service Charge Settings'}</span>
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'نسبة الضريبة (%)' : 'Tax Percentage (%)'}</label>
+                  <input 
+                    type="number" 
+                    className="input-gold" 
+                    min="0" 
+                    max="100" 
+                    step="0.01"
+                    placeholder="0"
+                    value={taxPercent} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTaxPercent(val === '' ? 0 : Number(val));
+                    }} 
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {language === 'ar' ? 'القيمة الافتراضية 0% (تُحسب على المجموع الفرعي الصافي + الخدمة)' : 'Default is 0% (calculated on net subtotal + service charge)'}
+                  </span>
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'نسبة الخدمة (خدمة صالة) (%)' : 'Service Charge Percentage (%)'}</label>
+                  <input 
+                    type="number" 
+                    className="input-gold" 
+                    min="0" 
+                    max="100" 
+                    step="0.01"
+                    placeholder="0"
+                    value={servicePercent} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setServicePercent(val === '' ? 0 : Number(val));
+                    }} 
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {language === 'ar' ? 'القيمة الافتراضية 0% (تُحسب على المجموع الفرعي الصافي)' : 'Default is 0% (calculated on net subtotal)'}
+                  </span>
+                </div>
+              </div>
+
               {/* Promo code custom additions */}
               <h3 style={{ color: 'var(--gold-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
                 {t.setPromos}
@@ -2846,24 +2904,50 @@ export default function AdminDashboard({
                     </div>
 
                     {/* Totals computation */}
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
-                        <span style={{ color: 'var(--text-gray)' }}>{language === 'ar' ? 'إجمالي الأصناف:' : 'Subtotal Items:'}</span>
-                        <span className="font-en">
-                          {Object.entries(manualItems).reduce((sum, [_, q]) => sum + q, 0)} {language === 'ar' ? 'قطع' : 'pcs'}
-                        </span>
-                      </div>
+                    {(() => {
+                      const orderSubtotal = Object.entries(manualItems).reduce((sum, [prodId, qty]) => {
+                        const prod = products.find(p => p.id === prodId);
+                        return sum + (prod ? prod.price * qty : 0);
+                      }, 0);
                       
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
-                        <span style={{ color: 'var(--text-white)', fontWeight: 'bold', fontSize: '0.95rem' }}>{language === 'ar' ? 'الحساب الإجمالي:' : 'Grand Total:'}</span>
-                        <span className="font-en" style={{ fontSize: '1.25rem', color: 'var(--gold-primary)', fontWeight: '900', textShadow: '0 0 10px rgba(212,175,55,0.3)' }}>
-                          {Object.entries(manualItems).reduce((sum, [prodId, qty]) => {
-                            const prod = products.find(p => p.id === prodId);
-                            return sum + (prod ? prod.price * qty : 0);
-                          }, 0).toFixed(2)} EGP
-                        </span>
-                      </div>
-                    </div>
+                      const orderServicePercent = settings.service_percent || 0;
+                      const orderServiceAmount = orderSubtotal * (orderServicePercent / 100);
+                      
+                      const orderTaxPercent = settings.tax_percent || 0;
+                      const orderTaxAmount = (orderSubtotal + orderServiceAmount) * (orderTaxPercent / 100);
+                      
+                      const orderGrandTotal = orderSubtotal + orderServiceAmount + orderTaxAmount;
+
+                      return (
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                            <span style={{ color: 'var(--text-gray)' }}>{language === 'ar' ? 'المجموع الفرعي:' : 'Subtotal:'}</span>
+                            <span className="font-en">{orderSubtotal.toFixed(2)} EGP</span>
+                          </div>
+
+                          {orderServiceAmount > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                              <span style={{ color: 'var(--text-gray)' }}>{language === 'ar' ? `الخدمة (${orderServicePercent}%):` : `Service (${orderServicePercent}%):`}</span>
+                              <span className="font-en">+{orderServiceAmount.toFixed(2)} EGP</span>
+                            </div>
+                          )}
+
+                          {orderTaxAmount > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                              <span style={{ color: 'var(--text-gray)' }}>{language === 'ar' ? `الضريبة (${orderTaxPercent}%):` : `Tax (${orderTaxPercent}%):`}</span>
+                              <span className="font-en">+{orderTaxAmount.toFixed(2)} EGP</span>
+                            </div>
+                          )}
+                          
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem', borderTop: '1px dotted rgba(255,255,255,0.08)', paddingTop: '0.4rem' }}>
+                            <span style={{ color: 'var(--text-white)', fontWeight: 'bold', fontSize: '0.95rem' }}>{language === 'ar' ? 'الحساب الإجمالي:' : 'Grand Total:'}</span>
+                            <span className="font-en" style={{ fontSize: '1.25rem', color: 'var(--gold-primary)', fontWeight: '900', textShadow: '0 0 10px rgba(212,175,55,0.3)' }}>
+                              {orderGrandTotal.toFixed(2)} EGP
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                   </div>
                 </div>

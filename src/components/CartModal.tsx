@@ -39,7 +39,15 @@ export default function CartModal({
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const discountPercent = appliedPromo ? appliedPromo.percent : 0;
   const discountAmount = subtotal * (discountPercent / 100);
-  const finalTotal = subtotal - discountAmount;
+  
+  const netSubtotal = subtotal - discountAmount;
+  const servicePercent = settings.service_percent || 0;
+  const serviceAmount = netSubtotal * (servicePercent / 100);
+  
+  const taxPercent = settings.tax_percent || 0;
+  const taxAmount = (netSubtotal + serviceAmount) * (taxPercent / 100);
+  
+  const finalTotal = netSubtotal + serviceAmount + taxAmount;
 
   // Translations
   const t = {
@@ -274,7 +282,13 @@ export default function CartModal({
     message += `${divider}\n`;
     message += `💰 *المجموع الفرعي:* EGP ${subtotal.toFixed(2)}\n`;
     if (discountAmount > 0) {
-      message += `🎁 *قيمة الخصم:* -EGP ${discountAmount.toFixed(2)}\n`;
+      message += `🎁 *قيمة الخصم:* -EGP ${discountAmount.toFixed(2)} (${discountPercent}%)\n`;
+    }
+    if (serviceAmount > 0) {
+      message += `⚡ *قيمة الخدمة:* +EGP ${serviceAmount.toFixed(2)} (${servicePercent}%)\n`;
+    }
+    if (taxAmount > 0) {
+      message += `📝 *قيمة الضريبة:* +EGP ${taxAmount.toFixed(2)} (${taxPercent}%)\n`;
     }
     message += `✨ *إجمالي الحساب:* *EGP ${finalTotal.toFixed(2)}*\n`;
     message += `${divider}\n`;
@@ -445,6 +459,18 @@ export default function CartModal({
                   <div className="price-row discount">
                     <span>{t.discount}</span>
                     <span>-{discountAmount.toFixed(2)} {t.currency} ({discountPercent}%)</span>
+                  </div>
+                )}
+                {serviceAmount > 0 && (
+                  <div className="price-row service" style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>
+                    <span>{language === 'ar' ? 'الخدمة:' : 'Service Charge:'}</span>
+                    <span className="font-en">+{serviceAmount.toFixed(2)} {t.currency} ({servicePercent}%)</span>
+                  </div>
+                )}
+                {taxAmount > 0 && (
+                  <div className="price-row tax" style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>
+                    <span>{language === 'ar' ? 'الضريبة:' : 'Tax (VAT):'}</span>
+                    <span className="font-en">+{taxAmount.toFixed(2)} {t.currency} ({taxPercent}%)</span>
                   </div>
                 )}
                 <div className="price-row total">
