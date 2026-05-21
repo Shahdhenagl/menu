@@ -251,7 +251,7 @@ export default function CustomerMenu({
 
                       {product.is_available ? (
                         inCartItem ? (
-                          <div className="card-item-controls">
+                          <div className="cart-item-controls">
                             <button className="btn-count" onClick={() => updateQuantity(product.id, inCartItem.quantity - 1)}>-</button>
                             <span className="item-quantity">{inCartItem.quantity}</span>
                             <button className="btn-count" onClick={() => updateQuantity(product.id, inCartItem.quantity + 1)}>+</button>
@@ -316,7 +316,7 @@ export default function CustomerMenu({
           </p>
 
           {/* Social Platforms Links */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginBottom: '1.5rem', alignItems: 'center' }}>
             {settings.facebook_url && (
               <a href={settings.facebook_url} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-primary)', transition: 'var(--transition-fast)' }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
@@ -347,16 +347,6 @@ export default function CustomerMenu({
                 </svg>
               </a>
             )}
-            {settings.talabat_url && (
-              <a href={settings.talabat_url} target="_blank" rel="noreferrer" title="Talabat" style={{ color: '#ff6900', transition: 'var(--transition-fast)', display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255, 105, 0, 0.1)', padding: '0.4rem 0.8rem', borderRadius: '15px', border: '1px solid rgba(255, 105, 0, 0.25)', textDecoration: 'none' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <path d="M16 10a4 4 0 0 1-8 0" />
-                </svg>
-                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', fontFamily: 'var(--font-ar)', color: '#ff6900' }}>اطلب من طلبات</span>
-              </a>
-            )}
             {settings.whatsapp_number && (
               <a href={`https://wa.me/${settings.whatsapp_number}`} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-primary)', transition: 'var(--transition-fast)' }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
@@ -365,6 +355,42 @@ export default function CustomerMenu({
               </a>
             )}
           </div>
+
+          {/* Dedicated Talabat Button below the row */}
+          {settings.talabat_url && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2rem' }}>
+              <a 
+                href={settings.talabat_url} 
+                target="_blank" 
+                rel="noreferrer" 
+                title="Talabat" 
+                style={{ 
+                  color: '#ff6900', 
+                  transition: 'var(--transition-fast)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  gap: '8px', 
+                  background: 'rgba(255, 105, 0, 0.08)', 
+                  padding: '0.6rem 1.8rem', 
+                  borderRadius: '25px', 
+                  border: '1px solid rgba(255, 105, 0, 0.3)', 
+                  textDecoration: 'none',
+                  boxShadow: '0 4px 15px rgba(255, 105, 0, 0.1)',
+                  fontWeight: 'bold',
+                  fontSize: '0.9rem',
+                  fontFamily: 'var(--font-ar)'
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <path d="M16 10a4 4 0 0 1-8 0" />
+                </svg>
+                <span>{language === 'ar' ? 'اطلب من طلبات' : 'Order from Talabat'}</span>
+              </a>
+            </div>
+          )}
 
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1.5rem' }}>
             <p>© {new Date().getFullYear()} {t.footerCopyright}.</p>
