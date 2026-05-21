@@ -469,7 +469,9 @@ export default function AdminDashboard({
       };
     }
     customerMap[key].orderCount += 1;
-    customerMap[key].totalSpent += order.total_price;
+    if (order.status.startsWith('completed')) {
+      customerMap[key].totalSpent += order.total_price;
+    }
     if (new Date(order.created_at) > new Date(customerMap[key].lastOrder)) {
       customerMap[key].lastOrder = order.created_at;
     }
@@ -505,7 +507,9 @@ export default function AdminDashboard({
     }
     
     uniqueCustomersMap[phone].orderCount += 1;
-    uniqueCustomersMap[phone].totalSpent += order.total_price;
+    if (order.status.startsWith('completed')) {
+      uniqueCustomersMap[phone].totalSpent += order.total_price;
+    }
     uniqueCustomersMap[phone].allOrders.push(order);
     
     // Sort orders for this customer by date desc
@@ -1155,7 +1159,15 @@ export default function AdminDashboard({
                         <td>
                           <select 
                             value={order.status.startsWith('completed') ? 'completed' : order.status}
-                            onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as Order['status'])}
+                            onChange={(e) => {
+                              const newStatus = e.target.value;
+                              if (newStatus === 'completed') {
+                                // Block immediate change to completed; open payment collection modal instead
+                                setPaymentCollectOrder(order);
+                              } else {
+                                handleUpdateOrderStatus(order.id, newStatus as Order['status']);
+                              }
+                            }}
                             className="input-gold"
                             style={{ 
                               padding: '0.25rem 0.5rem', 
