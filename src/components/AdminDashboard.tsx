@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails } from '../types';
 import { db } from '../lib/supabase';
 import { 
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
@@ -76,8 +76,10 @@ export default function AdminDashboard({
   // Custom promos / offers management
   const [newPromoCode, setNewPromoCode] = useState('');
   const [newPromoDiscount, setNewPromoDiscount] = useState(10);
+  const [newPromoExpiryDate, setNewPromoExpiryDate] = useState('');
+  const [newPromoUsageLimit, setNewPromoUsageLimit] = useState<string>('');
   const [newOfferText, setNewOfferText] = useState('');
-  const [promos, setPromos] = useState<Record<string, number>>(settings.promo_codes || {});
+  const [promos, setPromos] = useState<Record<string, number | PromoCodeDetails>>(settings.promo_codes || {});
   const [offers, setOffers] = useState<string[]>(settings.offers || []);
 
   const [loading, setLoading] = useState(false);
@@ -466,9 +468,15 @@ export default function AdminDashboard({
     const code = newPromoCode.toUpperCase().trim();
     setPromos(prev => ({
       ...prev,
-      [code]: Number(newPromoDiscount)
+      [code]: {
+        discount: Number(newPromoDiscount),
+        expiryDate: newPromoExpiryDate || null,
+        usageLimit: newPromoUsageLimit ? Number(newPromoUsageLimit) : null
+      }
     }));
     setNewPromoCode('');
+    setNewPromoExpiryDate('');
+    setNewPromoUsageLimit('');
   };
 
   const handleRemovePromo = (code: string) => {
@@ -2124,32 +2132,66 @@ export default function AdminDashboard({
               <h3 style={{ color: 'var(--gold-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
                 {t.setPromos}
               </h3>
-              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-end' }}>
-                <div className="form-group" style={{ flex: 1 }}>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div className="form-group">
                   <label>الكود (كود كوبون الخصم)</label>
                   <input type="text" className="input-gold" placeholder={t.addPromoPlaceholder} value={newPromoCode} onChange={(e) => setNewPromoCode(e.target.value)} />
                 </div>
-                <div className="form-group" style={{ width: '120px' }}>
+                <div className="form-group">
                   <label>نسبة الخصم (%)</label>
                   <input type="number" className="input-gold" min="1" max="100" value={newPromoDiscount} onChange={(e) => setNewPromoDiscount(Number(e.target.value))} />
                 </div>
-                <button type="button" className="btn-gold" style={{ height: '42px', borderRadius: '12px' }} onClick={handleAddPromo}>
+                <div className="form-group">
+                  <label>تاريخ انتهاء الصلاحية (اختياري)</label>
+                  <input type="date" className="input-gold" value={newPromoExpiryDate} onChange={(e) => setNewPromoExpiryDate(e.target.value)} style={{ padding: '0.4rem 0.6rem' }} />
+                </div>
+                <div className="form-group">
+                  <label>حد الاستخدام لكل مستخدم (اختياري)</label>
+                  <input type="number" className="input-gold" min="1" placeholder="مثال: 1 (بلا حد إذا ترك فارغاً)" value={newPromoUsageLimit} onChange={(e) => setNewPromoUsageLimit(e.target.value)} />
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
+                <button type="button" className="btn-gold" style={{ height: '42px', borderRadius: '12px', padding: '0 2rem' }} onClick={handleAddPromo}>
                   <Plus size={16} />
                   <span>إضافة الكود</span>
                 </button>
               </div>
 
               {/* Promos tags display */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '2rem' }}>
-                {Object.entries(promos).map(([code, percent]) => (
-                  <div key={code} style={{ background: '#1c1c1c', border: '1px solid var(--border-color)', padding: '0.4rem 0.8rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontWeight: '700', color: 'var(--gold-primary)' }}>{code}</span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>({percent}% خصم)</span>
-                    <button type="button" style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => handleRemovePromo(code)}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '2.5rem' }}>
+                {Object.entries(promos).map(([code, val]) => {
+                  const isObj = typeof val === 'object' && val !== null;
+                  const percent = isObj ? (val as any).discount : Number(val);
+                  const expiry = isObj ? (val as any).expiryDate : null;
+                  const limit = isObj ? (val as any).usageLimit : null;
+                  return (
+                    <div key={code} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '0.6rem 1rem', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '0.4rem', minWidth: '180px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: '700', color: 'var(--gold-primary)', fontSize: '1.1rem' }}>{code}</span>
+                        <button type="button" style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => handleRemovePromo(code)}>
+                          <X size={16} />
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', fontSize: '0.75rem', marginTop: '0.2rem' }}>
+                        <span style={{ background: 'rgba(212, 175, 55, 0.1)', color: 'var(--gold-secondary)', padding: '0.15rem 0.4rem', borderRadius: '6px', fontWeight: '600' }}>
+                          {percent}% خصم
+                        </span>
+                        {expiry && (
+                          <span style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '0.15rem 0.4rem', borderRadius: '6px', fontWeight: '600' }}>
+                            📅 {expiry}
+                          </span>
+                        )}
+                        {limit && (
+                          <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', padding: '0.15rem 0.4rem', borderRadius: '6px', fontWeight: '600' }}>
+                            👤 حد: {limit}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Offers banner configuration */}
@@ -2170,7 +2212,7 @@ export default function AdminDashboard({
               {/* Offers tags display */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '2rem' }}>
                 {offers.map((offer, idx) => (
-                  <div key={idx} style={{ background: '#1c1c1c', border: '1px solid var(--glass-border)', padding: '0.6rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div key={idx} style={{ background: 'var(--bg-card)', border: '1px solid var(--glass-border)', padding: '0.6rem 1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.9rem', color: 'var(--text-white)' }}>{offer}</span>
                     <button type="button" style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer' }} onClick={() => handleRemoveOffer(idx)}>
                       <Trash2 size={15} />

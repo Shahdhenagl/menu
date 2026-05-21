@@ -91,38 +91,133 @@ export default function CartModal({
     }
   }[language];
 
+  // Helper to validate the promo code (expiry and usage limits per user)
+  const validatePromoCode = async (codeStr: string, phoneStr: string): Promise<{ valid: boolean; percent: number; error: string }> => {
+    const code = codeStr.toUpperCase().trim();
+    if (!code) return { valid: false, percent: 0, error: '' };
+    
+    const value = settings.promo_codes[code];
+    if (value === undefined) {
+      return { valid: false, percent: 0, error: t.promoInvalid };
+    }
+    
+    // Parse structural values (support legacy numbers and structural details)
+    const isObj = typeof value === 'object' && value !== null;
+    const discount = isObj ? (value as any).discount : Number(value);
+    const expiryDate = isObj ? (value as any).expiryDate : null;
+    const usageLimit = isObj ? (value as any).usageLimit : null;
+    
+    // 1. Check expiration date
+    if (expiryDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const expiry = new Date(expiryDate);
+      expiry.setHours(23, 59, 59, 999);
+      if (today > expiry) {
+        return { 
+          valid: false, 
+          percent: 0, 
+          error: language === 'ar' ? 'كوبون الخصم منتهي الصلاحية!' : 'This promo code has expired!' 
+        };
+      }
+    }
+    
+    // 2. Check usage limit per user
+    if (usageLimit && usageLimit > 0) {
+      if (!phoneStr.trim()) {
+        return { 
+          valid: false, 
+          percent: 0, 
+          error: language === 'ar' 
+            ? 'يرجى إدخال رقم الهاتف أولاً للتحقق من صلاحية الكوبون!' 
+            : 'Please enter your phone number first to validate the coupon!' 
+        };
+      }
+      
+      try {
+        const orders = await db.getOrders();
+        const cleanPhone = phoneStr.trim().replace(/\D/g, '');
+        const usageCount = orders.filter(o => {
+          const orderCleanPhone = o.customer_phone.trim().replace(/\D/g, '');
+          return orderCleanPhone === cleanPhone && o.promo_code?.toUpperCase() === code;
+        }).length;
+        
+        if (usageCount >= usageLimit) {
+          return {
+            valid: false,
+            percent: 0,
+            error: language === 'ar' 
+              ? `لقد استخدمت هذا الكوبون ${usageCount} مرة. الحد الأقصى للاستخدام هو ${usageLimit}!` 
+              : `You have used this coupon ${usageCount} times. Max limit is ${usageLimit}!`
+          };
+        }
+      } catch (err) {
+        console.error("Error checking orders for promo usage count: ", err);
+      }
+    }
+    
+    return { valid: true, percent: discount, error: '' };
+  };
+
   // Verify promo codes
-  const handleApplyPromo = () => {
+  const handleApplyPromo = async () => {
     setPromoError('');
     if (!promoInput.trim()) return;
 
     const code = promoInput.toUpperCase().trim();
-    const discount = settings.promo_codes[code];
+    const res = await validatePromoCode(code, customerPhone);
 
-    if (discount !== undefined) {
-      setAppliedPromo({ code, percent: discount });
+    if (res.valid) {
+      setAppliedPromo({ code, percent: res.percent });
       setPromoError('');
     } else {
       setAppliedPromo(null);
-      setPromoError(t.promoInvalid);
+      setPromoError(res.error);
     }
   };
 
   // Submit checkout
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName.trim() || !customerPhone.trim() || !tableNumber.trim()) {
+    
+    const name = customerName.trim();
+    const phone = customerPhone.trim();
+    const table = tableNumber.trim();
+
+    if (!name || !phone || !table) {
       alert(t.validationAlert);
       return;
     }
 
+    // Egyptian phone format validation
+    const cleanPhone = phone.replace(/\D/g, '');
+    const isEgyptianMobile = cleanPhone.startsWith('01') && cleanPhone.length === 11;
+    if (!isEgyptianMobile) {
+      alert(language === 'ar'
+        ? 'يرجى إدخال رقم هاتف محمول مصري صحيح مكون من 11 رقماً ويبدأ بـ 01!'
+        : 'Please enter a valid 11-digit Egyptian mobile number starting with 01!');
+      return;
+    }
+
     setIsSubmitting(true);
+    
+    // Double-check coupon validity during finalized submission
+    if (appliedPromo) {
+      const res = await validatePromoCode(appliedPromo.code, phone);
+      if (!res.valid) {
+        alert(res.error);
+        setAppliedPromo(null);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
     try {
       // 1. Save order to Supabase/Mock Database
       const orderData = {
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        table_number: tableNumber,
+        customer_name: name,
+        customer_phone: phone,
+        table_number: table,
         promo_code: appliedPromo?.code || null,
         items: cart,
         total_price: finalTotal,

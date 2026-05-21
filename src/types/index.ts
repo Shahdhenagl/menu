@@ -41,13 +41,19 @@ export interface Order {
   created_at: string;
 }
 
+export interface PromoCodeDetails {
+  discount: number;
+  expiryDate?: string | null; // Format YYYY-MM-DD
+  usageLimit?: number | null; // Max usage per unique phone number
+}
+
 export interface RestaurantSettings {
   id: string;
   restaurant_name_ar: string;
   restaurant_name_en: string;
   logo_url: string;
   whatsapp_number: string;
-  promo_codes: Record<string, number>; // code -> discount percentage
+  promo_codes: Record<string, number | PromoCodeDetails>; // Supports legacy number or advanced PromoCodeDetails
   offers: string[];
   facebook_url: string;
   instagram_url: string;
