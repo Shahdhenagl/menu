@@ -7,7 +7,8 @@ import {
 } from 'recharts';
 import { 
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
-  LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles
+  LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
+  Upload
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -1355,10 +1356,64 @@ export default function AdminDashboard({
               <h2 className="text-gradient-gold" style={{ fontSize: '1.4rem', marginBottom: '1.5rem' }}>⚙️ {t.settingsTab}</h2>
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-                {/* Logo URL */}
+                {/* Logo URL & Upload */}
                 <div className="form-group">
                   <label>{t.setLogo}</label>
-                  <input type="text" className="input-gold" value={setLogoUrl} onChange={(e) => setSetLogoUrl(e.target.value)} placeholder="https://..." />
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input 
+                      type="text" 
+                      className="input-gold" 
+                      value={setLogoUrl} 
+                      onChange={(e) => setSetLogoUrl(e.target.value)} 
+                      placeholder="https://..." 
+                      style={{ flex: 1 }}
+                    />
+                    <label className="btn-gold" style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.25rem', 
+                      cursor: 'pointer', 
+                      padding: '0.6rem 1rem', 
+                      fontSize: '0.85rem',
+                      borderRadius: '8px',
+                      whiteSpace: 'nowrap',
+                      margin: 0,
+                      height: '42px',
+                      boxSizing: 'border-box',
+                      justifyContent: 'center'
+                    }}>
+                      <Upload size={16} />
+                      <span>{language === 'ar' ? 'رفع لوجو' : 'Upload'}</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setSetLogoUrl(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }} 
+                        style={{ display: 'none' }} 
+                      />
+                    </label>
+                  </div>
+                  {setLogoUrl && (
+                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <img src={setLogoUrl} alt="Logo Preview" style={{ width: '45px', height: '45px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--gold-primary)', padding: '2px', background: '#fff' }} />
+                      <button 
+                        type="button" 
+                        className="btn-outline-gold" 
+                        onClick={() => setSetLogoUrl('')}
+                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', height: '26px', display: 'flex', alignItems: 'center', borderRadius: '6px' }}
+                      >
+                        {language === 'ar' ? 'حذف' : 'Remove'}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 
                 {/* WhatsApp Number */}
@@ -1551,10 +1606,64 @@ export default function AdminDashboard({
                   <input type="number" className="input-gold" value={prodPrice} onChange={(e) => setProdPrice(Number(e.target.value))} required />
                 </div>
 
-                {/* Image URL */}
+                {/* Image URL & Upload */}
                 <div className="form-group">
-                  <label>رابط الصورة المباشر (Image URL)</label>
-                  <input type="text" className="input-gold" value={prodImageUrl} onChange={(e) => setProdImageUrl(e.target.value)} placeholder="https://images.unsplash.com/..." />
+                  <label>رابط الصورة أو رفع ملف (Image URL / Upload)</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input 
+                      type="text" 
+                      className="input-gold" 
+                      value={prodImageUrl} 
+                      onChange={(e) => setProdImageUrl(e.target.value)} 
+                      placeholder="رابط الصورة أو اختر ملفاً للرفع..." 
+                      style={{ flex: 1 }}
+                    />
+                    <label className="btn-gold" style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.25rem', 
+                      cursor: 'pointer', 
+                      padding: '0.6rem 1rem', 
+                      fontSize: '0.85rem',
+                      borderRadius: '8px',
+                      whiteSpace: 'nowrap',
+                      margin: 0,
+                      height: '42px',
+                      boxSizing: 'border-box',
+                      justifyContent: 'center'
+                    }}>
+                      <Upload size={16} />
+                      <span>{language === 'ar' ? 'رفع صورة' : 'Upload'}</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setProdImageUrl(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }} 
+                        style={{ display: 'none' }} 
+                      />
+                    </label>
+                  </div>
+                  {prodImageUrl && (
+                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <img src={prodImageUrl} alt="Preview" style={{ width: '45px', height: '45px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--gold-primary)' }} />
+                      <button 
+                        type="button" 
+                        className="btn-outline-gold" 
+                        onClick={() => setProdImageUrl('')}
+                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', height: '26px', display: 'flex', alignItems: 'center', borderRadius: '6px' }}
+                      >
+                        {language === 'ar' ? 'حذف' : 'Remove'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Ingredients AR */}
