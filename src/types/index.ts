@@ -55,3 +55,14 @@ export interface RestaurantSettings {
   snapchat_url: string;
   talabat_url: string;
 }
+
+export interface Expense {
+  id: string;
+  name: string;
+  type: string; // classification e.g. 'بضائع', 'مرتبات', etc.
+  amount: number;
+  payment_method: 'cash' | 'visa' | 'wallet' | 'instapay';
+  expense_date: string;
+  created_at?: string;
+}
+

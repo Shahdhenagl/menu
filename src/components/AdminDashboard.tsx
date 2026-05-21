@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense } from '../types';
 import { db } from '../lib/supabase';
 import { 
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
@@ -8,7 +8,7 @@ import {
 import { 
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
-  Upload
+  Upload, Printer, Sun, Moon
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -19,9 +19,11 @@ interface AdminDashboardProps {
   settings: RestaurantSettings;
   refreshData: () => Promise<void>;
   language: 'ar' | 'en';
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
 }
 
-type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'settings';
+type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings';
 
 export default function AdminDashboard({
   onClose,
@@ -30,7 +32,9 @@ export default function AdminDashboard({
   orders,
   settings,
   refreshData,
-  language
+  language,
+  theme,
+  toggleTheme
 }: AdminDashboardProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passcode, setPasscode] = useState('');
@@ -100,6 +104,78 @@ export default function AdminDashboard({
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'cash' | 'visa' | 'instapay' | 'wallet'>('cash');
   const [showCustDropdown, setShowCustDropdown] = useState(false);
   const [selectedManualCat, setSelectedManualCat] = useState<string>('all');
+
+  // --- EXPENSES & COSTS MODULE STATES ---
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expModalOpen, setExpModalOpen] = useState(false);
+  const [expName, setExpName] = useState('');
+  const [expType, setExpType] = useState('بضائع وخامات');
+  const [expAmount, setExpAmount] = useState(0);
+  const [expDate, setExpDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [expPaymentMethod, setExpPaymentMethod] = useState<'cash' | 'visa' | 'wallet' | 'instapay'>('cash');
+  
+  // Expenses filtering states
+  const [expFilterType, setExpFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
+  const [expFilterDay, setExpFilterDay] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [expFilterMonth, setExpFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [expFilterYear, setExpFilterYear] = useState<number>(() => new Date().getFullYear());
+
+  const fetchExpenses = async () => {
+    try {
+      const data = await db.getExpenses();
+      setExpenses(data);
+    } catch (err) {
+      console.error("Error loading expenses:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchExpenses();
+  }, []);
+
+  const handleSaveExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!expName.trim() || expAmount <= 0) {
+      alert(language === 'ar' ? 'يرجى إدخال اسم المصروف وقيمة صالحة!' : 'Please enter cost name and a valid amount!');
+      return;
+    }
+    setLoading(true);
+    try {
+      await db.addExpense({
+        name: expName.trim(),
+        type: expType,
+        amount: Number(expAmount),
+        payment_method: expPaymentMethod,
+        expense_date: expDate
+      });
+      await fetchExpenses();
+      setExpModalOpen(false);
+      setExpName('');
+      setExpType('بضائع وخامات');
+      setExpAmount(0);
+      setExpDate(new Date().toISOString().split('T')[0]);
+      setExpPaymentMethod('cash');
+      alert(language === 'ar' ? 'تم تسجيل المصروف بنجاح!' : 'Expense recorded successfully!');
+    } catch (err) {
+      console.error(err);
+      alert("حدث خطأ أثناء حفظ المصروف.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    if (!confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذا المصروف؟' : 'Are you sure you want to delete this expense?')) return;
+    setLoading(true);
+    try {
+      await db.deleteExpense(id);
+      await fetchExpenses();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Sync settings when they change
   useEffect(() => {
@@ -365,6 +441,25 @@ export default function AdminDashboard({
     return true;
   });
 
+  // --- EXPENSE LISTS FILTERING ---
+  const filteredExpenses = expenses.filter(exp => {
+    if (!exp.expense_date) return true;
+    const expDateObj = new Date(exp.expense_date);
+    if (expFilterType === 'day') {
+      return exp.expense_date === expFilterDay;
+    }
+    if (expFilterType === 'month') {
+      const monthStr = exp.expense_date.slice(0, 7);
+      return monthStr === expFilterMonth;
+    }
+    if (expFilterType === 'year') {
+      return expDateObj.getFullYear() === expFilterYear;
+    }
+    return true;
+  });
+
+  const filteredTotalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+
   // --- SETTINGS ACTIONS ---
   const handleAddPromo = () => {
     if (!newPromoCode.trim()) return;
@@ -425,6 +520,395 @@ export default function AdminDashboard({
   const totalOrdersCount = orders.length;
   const avgOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0;
   const activeProductsCount = products.filter(p => p.is_available).length;
+
+  // --- ADDITIONAL FINANCIAL CALCULATIONS ---
+  // Total Expenses (All recorded expenses)
+  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  
+  // Net Profit (Revenue - Total Expenses)
+  const netProfit = totalRevenue - totalExpenses;
+
+  // Bottom 5 Least Sold Products (including those with 0 sales)
+  const allProductsSalesMap: Record<string, { id: string; name_ar: string; name_en: string; quantity: number; revenue: number }> = {};
+  
+  // Initialize map with all products as 0 sales
+  products.forEach(p => {
+    allProductsSalesMap[p.id] = {
+      id: p.id,
+      name_ar: p.name_ar,
+      name_en: p.name_en,
+      quantity: 0,
+      revenue: 0
+    };
+  });
+  
+  // Fill in actual sales for completed orders
+  orders.forEach(order => {
+    if (order.status.startsWith('completed')) {
+      order.items.forEach(item => {
+        if (allProductsSalesMap[item.id]) {
+          allProductsSalesMap[item.id].quantity += item.quantity;
+          allProductsSalesMap[item.id].revenue += item.quantity * item.price;
+        }
+      });
+    }
+  });
+
+  const leastSoldProductsReport = Object.values(allProductsSalesMap)
+    .sort((a, b) => a.quantity - b.quantity) // Ascending order (least sold first)
+    .slice(0, 5);
+
+  // Payment Methods Breakdown (Total Revenue vs Total Expenses)
+  const paymentMethodsStats = {
+    cash: { revenue: 0, expenses: 0, net: 0 },
+    visa: { revenue: 0, expenses: 0, net: 0 },
+    wallet: { revenue: 0, expenses: 0, net: 0 },
+    instapay: { revenue: 0, expenses: 0, net: 0 }
+  };
+
+  orders.forEach(order => {
+    if (order.status.startsWith('completed')) {
+      const parts = order.status.split('_');
+      const method = parts[1] as 'cash' | 'visa' | 'wallet' | 'instapay';
+      if (method && paymentMethodsStats[method]) {
+        paymentMethodsStats[method].revenue += order.total_price;
+      } else {
+        // Fallback to cash if completed status doesn't specify a method
+        paymentMethodsStats.cash.revenue += order.total_price;
+      }
+    }
+  });
+
+  expenses.forEach(exp => {
+    const method = exp.payment_method;
+    if (method && paymentMethodsStats[method]) {
+      paymentMethodsStats[method].expenses += exp.amount;
+    }
+  });
+
+  // Calculate Net balance for each payment method
+  (Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).forEach(method => {
+    paymentMethodsStats[method].net = paymentMethodsStats[method].revenue - paymentMethodsStats[method].expenses;
+  });
+
+  // --- RTL A4 PRINT UTILITY ENGINE ---
+  const handlePrintReport = (module: 'analytics' | 'orders' | 'expenses' | 'customers') => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    let contentHtml = '';
+    let reportTitle = '';
+
+    if (module === 'analytics') {
+      reportTitle = language === 'ar' ? 'تقرير التحليلات المالية والأرباح' : 'Financial Analytics & Profit Report';
+      contentHtml = `
+        <div class="print-header">
+          <h1>${settings.restaurant_name_ar || 'مريديان'}</h1>
+          <h2>${reportTitle}</h2>
+          <p class="date">${new Date().toLocaleString('ar-EG')}</p>
+        </div>
+        
+        <div class="section-title">${language === 'ar' ? 'قائمة ملخص الأرباح والدخل التشغيلي' : 'Income Statement Summary'}</div>
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th>${language === 'ar' ? 'البند المالي' : 'Financial Item'}</th>
+              <th>${language === 'ar' ? 'المبلغ' : 'Amount'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>${language === 'ar' ? 'إجمالي المبيعات والإيرادات' : 'Total Revenue'}</strong></td>
+              <td class="success font-en">+${totalRevenue.toLocaleString()} EGP</td>
+            </tr>
+            <tr>
+              <td><strong>${language === 'ar' ? 'إجمالي المصروفات والتكاليف التشغيلية' : 'Total Expenses'}</strong></td>
+              <td class="danger font-en">-${totalExpenses.toLocaleString()} EGP</td>
+            </tr>
+            <tr style="background: rgba(212,175,55,0.06)">
+              <td><strong>${language === 'ar' ? 'صافي الربح / الخسارة' : 'Net Profit / Loss'}</strong></td>
+              <td class="${netProfit >= 0 ? 'success' : 'danger'} font-en" style="font-size: 1.1rem; font-weight: bold;">
+                ${netProfit >= 0 ? '+' : ''}${netProfit.toLocaleString()} EGP
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="section-title">${language === 'ar' ? 'أرصدة طرق الدفع والتدفقات' : 'Payment Method Balances'}</div>
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th>${language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</th>
+              <th>${language === 'ar' ? 'الإيرادات' : 'Revenue'}</th>
+              <th>${language === 'ar' ? 'المصروفات' : 'Expenses'}</th>
+              <th>${language === 'ar' ? 'الصافي المتبقي' : 'Net Balance'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).map(m => {
+              const stats = paymentMethodsStats[m];
+              const name = m === 'cash' ? '💵 كاش (نقدي)' : m === 'visa' ? '💳 فيزا' : m === 'wallet' ? '📱 محفظة' : '⚡ إنستا باي';
+              return `
+                <tr>
+                  <td><strong>${name}</strong></td>
+                  <td class="success font-en">+${stats.revenue.toLocaleString()} EGP</td>
+                  <td class="danger font-en">-${stats.expenses.toLocaleString()} EGP</td>
+                  <td class="${stats.net >= 0 ? 'success' : 'danger'} font-en" style="font-weight: bold;">
+                    ${stats.net >= 0 ? '+' : ''}${stats.net.toLocaleString()} EGP
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+
+        <div class="section-title">${language === 'ar' ? 'المنتجات الأقل طلباً (الأضعف مبيعاً)' : 'Least Sold Products'}</div>
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th>${language === 'ar' ? 'اسم المنتج' : 'Product Name'}</th>
+              <th>${language === 'ar' ? 'الكمية المباعة' : 'Units Sold'}</th>
+              <th>${language === 'ar' ? 'إجمالي المبيعات' : 'Revenue Generated'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${leastSoldProductsReport.map(prod => `
+              <tr>
+                <td><strong>${prod.name_ar}</strong></td>
+                <td class="font-en">${prod.quantity}</td>
+                <td class="font-en">${prod.revenue.toLocaleString()} EGP</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } else if (module === 'orders') {
+      reportTitle = language === 'ar' ? 'تقرير فواتير المبيعات والطلبات' : 'Sales Orders Report';
+      contentHtml = `
+        <div class="print-header">
+          <h1>${settings.restaurant_name_ar || 'مريديان'}</h1>
+          <h2>${reportTitle}</h2>
+          <p class="date">${new Date().toLocaleString('ar-EG')}</p>
+        </div>
+        
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th>${language === 'ar' ? 'رقم الطلب' : 'Ref'}</th>
+              <th>${language === 'ar' ? 'العميل' : 'Customer'}</th>
+              <th>${language === 'ar' ? 'الطاولة' : 'Table'}</th>
+              <th>${language === 'ar' ? 'الحالة' : 'Status'}</th>
+              <th>${language === 'ar' ? 'التاريخ والوقت' : 'Date'}</th>
+              <th>${language === 'ar' ? 'القيمة الإجمالية' : 'Total'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredOrders.map(o => `
+              <tr>
+                <td class="font-en" style="font-size: 0.8rem;">#${o.id.slice(0, 8)}</td>
+                <td><strong>${o.customer_name}</strong><br/><span style="font-size: 0.75rem; color: #666;">${o.customer_phone}</span></td>
+                <td><strong>${o.table_number}</strong></td>
+                <td>
+                  <span style="padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background: ${o.status.startsWith('completed') ? '#d1fae5; color: #065f46;' : o.status === 'cancelled' ? '#fee2e2; color: #991b1b;' : '#fef3c7; color: #92400e;'}">
+                    ${o.status.toUpperCase()}
+                  </span>
+                </td>
+                <td class="font-en" style="font-size: 0.8rem;">${new Date(o.created_at).toLocaleString('ar-EG')}</td>
+                <td class="font-en" style="font-weight: bold; color: #d4af37;">${o.total_price.toFixed(2)} EGP</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } else if (module === 'expenses') {
+      reportTitle = language === 'ar' ? 'تقرير التكاليف والمصروفات التشغيلية' : 'Operational Expenses Report';
+      contentHtml = `
+        <div class="print-header">
+          <h1>${settings.restaurant_name_ar || 'مريديان'}</h1>
+          <h2>${reportTitle}</h2>
+          <p class="date">${new Date().toLocaleString('ar-EG')}</p>
+        </div>
+
+        <div style="background: #fdfaf2; padding: 1rem; border-radius: 8px; border: 1px solid #e9d9b6; margin-bottom: 1.5rem; text-align: center;">
+          <span style="font-size: 0.9rem; color: #666;">${language === 'ar' ? 'إجمالي مصروفات الفترة المحددة' : 'Total Expenses for Period'}</span>
+          <h2 style="margin: 0.3rem 0 0 0; color: #b91c1c; font-family: 'Cairo', sans-serif;">-${filteredTotalExpenses.toLocaleString()} EGP</h2>
+        </div>
+        
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th>${language === 'ar' ? 'اسم المصروف (التكلفة)' : 'Expense'}</th>
+              <th>${language === 'ar' ? 'التصنيف' : 'Category'}</th>
+              <th>${language === 'ar' ? 'طريقة الدفع' : 'Payment'}</th>
+              <th>${language === 'ar' ? 'التاريخ' : 'Date'}</th>
+              <th>${language === 'ar' ? 'القيمة' : 'Amount'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredExpenses.map(e => {
+              const p = e.payment_method === 'cash' ? '💵 كاش' : e.payment_method === 'visa' ? '💳 فيزا' : e.payment_method === 'wallet' ? '📱 محفظة' : '⚡ إنستا باي';
+              return `
+                <tr>
+                  <td><strong>${e.name}</strong></td>
+                  <td><span style="background: #eee; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem;">${e.type}</span></td>
+                  <td><strong>${p}</strong></td>
+                  <td class="font-en">${new Date(e.expense_date).toLocaleDateString('ar-EG')}</td>
+                  <td class="danger font-en" style="font-weight: bold;">-${e.amount.toLocaleString()} EGP</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    } else if (module === 'customers') {
+      reportTitle = language === 'ar' ? 'تقرير نشاط وإحصائيات العملاء' : 'Customer Activity CRM Report';
+      contentHtml = `
+        <div class="print-header">
+          <h1>${settings.restaurant_name_ar || 'مريديان'}</h1>
+          <h2>${reportTitle}</h2>
+          <p class="date">${new Date().toLocaleString('ar-EG')}</p>
+        </div>
+        
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th>${language === 'ar' ? 'العميل' : 'Customer'}</th>
+              <th>${language === 'ar' ? 'رقم الهاتف' : 'Phone'}</th>
+              <th>${language === 'ar' ? 'عدد الطلبات' : 'Orders'}</th>
+              <th>${language === 'ar' ? 'إجمالي الإنفاق' : 'Total Spent'}</th>
+              <th>${language === 'ar' ? 'تاريخ آخر طلب' : 'Last Order'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${customersList.map(c => `
+              <tr>
+                <td><strong>${c.name}</strong></td>
+                <td class="font-en">${c.phone}</td>
+                <td class="font-en">${c.orderCount}</td>
+                <td class="font-en success" style="font-weight: bold;">${c.totalSpent.toLocaleString()} EGP</td>
+                <td class="font-en" style="font-size: 0.8rem; color: #555;">${new Date(c.lastOrderDate).toLocaleString('ar-EG')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="utf-8">
+        <title>${reportTitle}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800&display=swap" rel="stylesheet">
+        <style>
+          @page {
+            size: A4;
+            margin: 1.5cm;
+          }
+          body {
+            font-family: 'Cairo', sans-serif;
+            color: #333;
+            background: #fff;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+            direction: rtl;
+          }
+          .print-header {
+            text-align: center;
+            border-bottom: 2px solid #d4af37;
+            padding-bottom: 1rem;
+            margin-bottom: 2rem;
+          }
+          .print-header h1 {
+            margin: 0;
+            color: #111;
+            font-size: 2.2rem;
+            font-weight: 800;
+          }
+          .print-header h2 {
+            margin: 0.5rem 0 0 0;
+            color: #d4af37;
+            font-size: 1.3rem;
+            font-weight: 700;
+          }
+          .print-header .date {
+            margin: 0.3rem 0 0 0;
+            font-size: 0.85rem;
+            color: #666;
+            font-family: 'Cairo', sans-serif;
+          }
+          .section-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #111;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 0.4rem;
+            margin: 1.5rem 0 0.8rem 0;
+          }
+          .print-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+            page-break-inside: auto;
+          }
+          .print-table tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+          }
+          .print-table th {
+            background: #f7f7f8;
+            color: #111;
+            font-weight: bold;
+            text-align: right;
+            padding: 0.8rem;
+            border-bottom: 2px solid #eee;
+            font-size: 0.9rem;
+          }
+          .print-table td {
+            padding: 0.8rem;
+            border-bottom: 1px solid #eee;
+            font-size: 0.85rem;
+            vertical-align: top;
+          }
+          .font-en {
+            direction: ltr;
+            text-align: left;
+            unicode-bidi: embed;
+          }
+          .success {
+            color: #047857 !important;
+          }
+          .danger {
+            color: #b91c1c !important;
+          }
+          @media print {
+            body {
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .print-table th {
+              background-color: #f7f7f8 !important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${contentHtml}
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   // Most Sold Products (Leaderboard data)
   const productSalesMap: Record<string, { id: string; name_ar: string; name_en: string; quantity: number; revenue: number }> = {};
@@ -724,9 +1208,29 @@ export default function AdminDashboard({
     <div className="admin-container" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {/* 1. Sidebar */}
       <aside className="admin-sidebar">
-        <div className="admin-logo">
-          <Gear size={22} className="lucide-pulse" style={{ color: 'var(--gold-primary)' }} />
-          <span className="text-gradient-gold">{t.sidebarTitle}</span>
+        <div className="admin-logo" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Gear size={22} className="lucide-pulse" style={{ color: 'var(--gold-primary)' }} />
+            <span className="text-gradient-gold" style={{ fontSize: '1.25rem' }}>{t.sidebarTitle}</span>
+          </div>
+          <button
+            className="btn-outline-gold"
+            onClick={toggleTheme}
+            style={{ 
+              width: '30px', 
+              height: '30px', 
+              padding: 0, 
+              borderRadius: '50%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              cursor: 'pointer',
+              border: '1px solid var(--border-color)'
+            }}
+            title={theme === 'light' ? (language === 'ar' ? 'الوضع الداكن' : 'Dark Mode') : (language === 'ar' ? 'الوضع المضيء' : 'Light Mode')}
+          >
+            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+          </button>
         </div>
 
         <nav className="admin-nav">
@@ -771,6 +1275,14 @@ export default function AdminDashboard({
           </button>
 
           <button 
+            className={`admin-nav-item ${activeTab === 'expenses' ? 'active' : ''}`}
+            onClick={() => setActiveTab('expenses')}
+          >
+            <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>💰</span>
+            <span>{language === 'ar' ? 'التكاليف والمصروفات' : 'Costs & Expenses'}</span>
+          </button>
+
+          <button 
             className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
             onClick={() => setActiveTab('settings')}
           >
@@ -791,6 +1303,49 @@ export default function AdminDashboard({
         {activeTab === 'analytics' && (
           <div>
             <h1 className="text-gradient-gold" style={{ fontSize: '1.8rem', marginBottom: '1.5rem' }}>{t.overviewTab}</h1>
+
+            {/* Financial Income Statement Grid */}
+            <div className="table-panel" style={{ marginBottom: '1.5rem', background: 'linear-gradient(135deg, rgba(20,20,22,0.6) 0%, rgba(10,10,12,0.8) 100%)', border: '1px solid var(--gold-secondary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem', flexWrap: 'wrap', gap: '1rem' }}>
+                <h2 style={{ fontSize: '1.25rem', color: 'var(--gold-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  💰 {language === 'ar' ? 'ملخص قائمة الدخل والأرباح التشغيلية' : 'Income Statement & Operational Profits'}
+                </h2>
+                <button 
+                  onClick={() => handlePrintReport('analytics')}
+                  className="btn-gold" 
+                  style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                >
+                  <Printer size={16} />
+                  {language === 'ar' ? 'تصدير التحليلات A4 PDF' : 'Export Analytics PDF'}
+                </button>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.2rem', borderRadius: '14px', border: '1px solid var(--border-color)', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: '-10px', right: '-10px', fontSize: '4rem', opacity: 0.05, pointerEvents: 'none' }}>💵</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)', marginBottom: '0.5rem' }}>{language === 'ar' ? 'إجمالي الإيرادات (الطلبات المدفوعة)' : 'Total Revenue (Paid Orders)'}</div>
+                  <div className="font-en" style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--success)' }}>
+                    +{totalRevenue.toLocaleString()} <span style={{ fontSize: '0.9rem' }}>EGP</span>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.2rem', borderRadius: '14px', border: '1px solid var(--border-color)', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: '-10px', right: '-10px', fontSize: '4rem', opacity: 0.05, pointerEvents: 'none' }}>💸</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)', marginBottom: '0.5rem' }}>{language === 'ar' ? 'إجمالي التكاليف والمصروفات' : 'Total Operational Costs'}</div>
+                  <div className="font-en" style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--danger)' }}>
+                    -{totalExpenses.toLocaleString()} <span style={{ fontSize: '0.9rem' }}>EGP</span>
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(212,175,55,0.03)', padding: '1.2rem', borderRadius: '14px', border: '1px solid rgba(212,175,55,0.2)', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: '-10px', right: '-10px', fontSize: '4rem', opacity: 0.05, pointerEvents: 'none' }}>🏆</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--gold-secondary)', marginBottom: '0.5rem', fontWeight: 'bold' }}>{language === 'ar' ? 'صافي الربح / الخسارة التشغيلية' : 'Net Operational Profit'}</div>
+                  <div className="font-en" style={{ fontSize: '1.8rem', fontWeight: '800', color: netProfit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                    {netProfit >= 0 ? '+' : ''}{netProfit.toLocaleString()} <span style={{ fontSize: '0.9rem' }}>EGP</span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Stats Summary Grid */}
             <div className="stats-grid">
@@ -842,7 +1397,7 @@ export default function AdminDashboard({
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                         <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={11} />
                         <YAxis stroke="var(--text-muted)" fontSize={11} />
-                        <RechartsTooltip contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', color: '#fff', borderRadius: '12px' }} />
+                        <RechartsTooltip contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-white)', borderRadius: '12px' }} />
                         <Area type="monotone" dataKey="revenue" stroke="var(--gold-primary)" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -864,7 +1419,7 @@ export default function AdminDashboard({
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                         <XAxis type="number" stroke="var(--text-muted)" fontSize={10} />
                         <YAxis dataKey="name" type="category" stroke="var(--text-white)" fontSize={9} width={80} />
-                        <RechartsTooltip contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', color: '#fff', borderRadius: '12px' }} />
+                        <RechartsTooltip contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-white)', borderRadius: '12px' }} />
                         <Bar dataKey="quantity" fill="var(--gold-primary)" radius={[0, 4, 4, 0]}>
                           {mostSoldChartData.map((_, index) => (
                             <Cell key={`cell-${index}`} fill={index === 0 ? 'var(--gold-secondary)' : 'var(--gold-primary)'} />
@@ -924,6 +1479,96 @@ export default function AdminDashboard({
                 </table>
               </div>
             </div>
+
+            {/* Payment Methods Financial Breakdown */}
+            <div className="table-panel" style={{ marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.25rem', color: 'var(--gold-secondary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                💳 {language === 'ar' ? 'توزيع الأرصدة والتدفقات المالية حسب طريقة الدفع' : 'Payment Methods Balance & Flow Breakdown'}
+              </h2>
+              <div className="table-wrapper">
+                <table className="luxury-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th>{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</th>
+                      <th>{language === 'ar' ? 'إجمالي المقبوضات (الإيرادات)' : 'Total Received (Revenue)'}</th>
+                      <th>{language === 'ar' ? 'إجمالي المدفوعات (المصروفات)' : 'Total Paid Out (Expenses)'}</th>
+                      <th>{language === 'ar' ? 'الرصيد الصافي المتبقي' : 'Net Balance'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).map((method) => {
+                      const stats = paymentMethodsStats[method];
+                      const methodNameAr = method === 'cash' ? '💵 كاش (نقدي)' : method === 'visa' ? '💳 فيزا (بطاقة)' : method === 'wallet' ? '📱 محفظة إلكترونية' : '⚡ إنستا باي';
+                      const methodNameEn = method === 'cash' ? 'Cash' : method === 'visa' ? 'Visa / Card' : method === 'wallet' ? 'Mobile Wallet' : 'InstaPay';
+                      return (
+                        <tr key={method}>
+                          <td style={{ fontWeight: 'bold', color: 'var(--text-white)' }}>
+                            {language === 'ar' ? methodNameAr : methodNameEn}
+                          </td>
+                          <td className="font-en" style={{ color: 'var(--success)' }}>+{stats.revenue.toLocaleString()} EGP</td>
+                          <td className="font-en" style={{ color: 'var(--danger)' }}>-{stats.expenses.toLocaleString()} EGP</td>
+                          <td className="font-en" style={{ 
+                            fontWeight: '800', 
+                            color: stats.net >= 0 ? 'var(--success)' : 'var(--danger)' 
+                          }}>
+                            {stats.net >= 0 ? '+' : ''}{stats.net.toLocaleString()} EGP
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Least Sold Products Table */}
+            <div className="table-panel" style={{ marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.25rem', color: 'var(--danger)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                ⚠️ {language === 'ar' ? 'المنتجات الخمسة الأقل طلباً (الأضعف مبيعاً)' : 'Bottom 5 Least Sold Products'}
+              </h2>
+              <div className="table-wrapper">
+                <table className="luxury-table">
+                  <thead>
+                    <tr>
+                      <th>{language === 'ar' ? 'المنتج' : 'Product'}</th>
+                      <th>{language === 'ar' ? 'الكمية المباعة' : 'Units Sold'}</th>
+                      <th>{language === 'ar' ? 'إجمالي قيمة المبيعات' : 'Total Revenue Generated'}</th>
+                      <th>{language === 'ar' ? 'حالة المنتج' : 'Status'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leastSoldProductsReport.map((prod, idx) => {
+                      const productInfo = products.find(p => p.id === prod.id);
+                      const isAvailable = productInfo ? productInfo.is_available : false;
+                      return (
+                        <tr key={idx}>
+                          <td style={{ fontWeight: '700', color: 'var(--text-white)' }}>
+                            {language === 'ar' ? prod.name_ar : prod.name_en}
+                          </td>
+                          <td className="font-en" style={{ fontWeight: 'bold', color: prod.quantity === 0 ? 'var(--text-muted)' : 'var(--gold-secondary)' }}>
+                            {prod.quantity}
+                          </td>
+                          <td className="font-en" style={{ color: 'var(--gold-primary)' }}>{prod.revenue.toLocaleString()} EGP</td>
+                          <td>
+                            <span style={{ 
+                              fontSize: '0.75rem', 
+                              padding: '0.15rem 0.5rem', 
+                              borderRadius: '6px', 
+                              background: isAvailable ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                              color: isAvailable ? 'var(--success)' : 'var(--danger)',
+                              fontWeight: 'bold'
+                            }}>
+                              {isAvailable ? (language === 'ar' ? 'نشط' : 'Active') : (language === 'ar' ? 'غير متوفر' : 'Unavailable')}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -1544,6 +2189,195 @@ export default function AdminDashboard({
             </div>
           </div>
         )}
+
+        {/* TAB 6: OPERATIONAL COSTS & EXPENSES MANAGEMENT */}
+        {activeTab === 'expenses' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            <div className="table-panel">
+              <div className="table-panel-header" style={{ flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
+                <div>
+                  <h1 className="text-gradient-gold" style={{ fontSize: '1.5rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    💰 {language === 'ar' ? 'التكاليف والمصروفات التشغيلية' : 'Operational Costs & Expenses'}
+                  </h1>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-gray)' }}>
+                    {language === 'ar' ? 'إدارة وتسجيل كافة النفقات التشغيلية والمصروفات اليومية للمطعم' : 'Manage and record all operational costs and daily expenses for the restaurant'}
+                  </p>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <button 
+                    className="btn-outline-gold" 
+                    onClick={() => handlePrintReport('expenses')}
+                    style={{ padding: '0.5rem 1rem', borderRadius: '12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                  >
+                    <Printer size={16} />
+                    {language === 'ar' ? 'تصدير التكاليف A4 PDF' : 'Export Expenses PDF'}
+                  </button>
+
+                  <button 
+                    className="btn-gold" 
+                    onClick={() => setExpModalOpen(true)}
+                    style={{ padding: '0.5rem 1rem', borderRadius: '12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                  >
+                    <PlusCircle size={16} />
+                    {language === 'ar' ? 'تسجيل مصروف جديد' : 'Record New Expense'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Periodic Filters Block */}
+              <div style={{ 
+                background: 'rgba(255,255,255,0.01)', 
+                border: '1px solid var(--border-color)', 
+                padding: '1rem', 
+                borderRadius: '16px', 
+                marginBottom: '1.5rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '1rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>
+                      {language === 'ar' ? 'تصفية حسب:' : 'Filter by:'}
+                    </label>
+                    <select 
+                      value={expFilterType} 
+                      onChange={(e) => setExpFilterType(e.target.value as any)} 
+                      className="input-gold"
+                      style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}
+                    >
+                      <option value="all">{language === 'ar' ? 'الكل 📁' : 'All 📁'}</option>
+                      <option value="day">{language === 'ar' ? 'باليوم 📅' : 'By Day 📅'}</option>
+                      <option value="month">{language === 'ar' ? 'بالشهر 🗓️' : 'By Month 🗓️'}</option>
+                      <option value="year">{language === 'ar' ? 'بالسنة ⏳' : 'By Year ⏳'}</option>
+                    </select>
+                  </div>
+
+                  {/* Filter inputs based on type */}
+                  {expFilterType === 'day' && (
+                    <input 
+                      type="date" 
+                      className="input-gold" 
+                      value={expFilterDay} 
+                      onChange={(e) => setExpFilterDay(e.target.value)} 
+                      style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }} 
+                    />
+                  )}
+
+                  {expFilterType === 'month' && (
+                    <input 
+                      type="month" 
+                      className="input-gold" 
+                      value={expFilterMonth} 
+                      onChange={(e) => setExpFilterMonth(e.target.value)} 
+                      style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }} 
+                    />
+                  )}
+
+                  {expFilterType === 'year' && (
+                    <select 
+                      className="input-gold" 
+                      value={expFilterYear} 
+                      onChange={(e) => setExpFilterYear(Number(e.target.value))} 
+                      style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}
+                    >
+                      {[2024, 2025, 2026, 2027, 2028].map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Period Total Expense KPI Badge */}
+                <div style={{ 
+                  background: 'rgba(239, 68, 68, 0.08)', 
+                  border: '1px solid rgba(239, 68, 68, 0.2)', 
+                  padding: '0.5rem 1.2rem', 
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.6rem'
+                }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>
+                    {language === 'ar' ? 'إجمالي تكاليف الفترة المحددة:' : 'Total costs for this period:'}
+                  </span>
+                  <span className="font-en" style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--danger)' }}>
+                    -{filteredTotalExpenses.toLocaleString()} EGP
+                  </span>
+                </div>
+              </div>
+
+              {/* Expenses Table */}
+              <div className="table-wrapper">
+                {filteredExpenses.length === 0 ? (
+                  <div style={{ padding: '3rem', textAlign: 'center', background: 'rgba(255,255,255,0.01)', borderRadius: '15px', border: '1px dashed var(--border-color)' }}>
+                    <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '1rem' }}>💸</span>
+                    <h3 style={{ color: 'var(--text-gray)', margin: '0 0 0.5rem 0' }}>
+                      {language === 'ar' ? 'لا توجد مصروفات مسجلة' : 'No Expenses Recorded'}
+                    </h3>
+                    <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.85rem' }}>
+                      {language === 'ar' ? 'لم يتم تسجيل أي تكاليف تشغيلية لهذه الفترة المحددة.' : 'No operational expenses have been recorded for the selected period.'}
+                    </p>
+                  </div>
+                ) : (
+                  <table className="luxury-table">
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'اسم المصروف' : 'Expense / Cost'}</th>
+                        <th>{language === 'ar' ? 'التصنيف' : 'Category'}</th>
+                        <th>{language === 'ar' ? 'القيمة' : 'Amount'}</th>
+                        <th>{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</th>
+                        <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                        <th style={{ width: '80px' }}>{language === 'ar' ? 'الإجراءات' : 'Actions'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredExpenses.map((exp) => (
+                        <tr key={exp.id}>
+                          <td style={{ fontWeight: '700' }}>{exp.name}</td>
+                          <td>
+                            <span style={{ 
+                              padding: '0.2rem 0.6rem', 
+                              borderRadius: '8px', 
+                              fontSize: '0.75rem',
+                              fontWeight: 'bold',
+                              background: exp.type === 'رواتب' ? 'rgba(59,130,246,0.1)' : exp.type === 'إيجار وفواتير' ? 'rgba(139,92,246,0.1)' : exp.type === 'تسويق ودعاية' ? 'rgba(236,72,153,0.1)' : exp.type === 'بضائع وخامات' ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.05)',
+                              color: exp.type === 'رواتب' ? '#60a5fa' : exp.type === 'إيجار وفواتير' ? '#a78bfa' : exp.type === 'تسويق ودعاية' ? '#f472b6' : exp.type === 'بضائع وخامات' ? '#fbbf24' : 'var(--text-gray)',
+                              border: '1px solid currentColor'
+                            }}>
+                              {exp.type}
+                            </span>
+                          </td>
+                          <td className="font-en" style={{ color: 'var(--danger)', fontWeight: '800' }}>
+                            -{exp.amount.toLocaleString()} EGP
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: '600' }}>
+                              {exp.payment_method === 'cash' ? '💵 كاش' : exp.payment_method === 'visa' ? '💳 فيزا' : exp.payment_method === 'wallet' ? '📱 محفظة' : '⚡ انستا باي'}
+                            </span>
+                          </td>
+                          <td className="font-en" style={{ fontSize: '0.85rem' }}>{exp.expense_date}</td>
+                          <td>
+                            <button 
+                              className="btn-outline-gold" 
+                              style={{ padding: '0.35rem 0.5rem', borderRadius: '8px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)', minWidth: 'auto' }}
+                              onClick={() => handleDeleteExpense(exp.id!)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* --- CRUD DIALOG MODAL FOR CATEGORY --- */}
@@ -2157,6 +2991,210 @@ export default function AdminDashboard({
                 {language === 'ar' ? 'تأكيد التحصيل وإتمام الفاتورة 🎉' : 'Confirm Collection & Paid 🎉'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- ADD EXPENSE MODAL OVERLAY --- */}
+      {expModalOpen && (
+        <div className="admin-modal-overlay" style={{ zIndex: 1100 }} onClick={() => setExpModalOpen(false)}>
+          <div className="admin-modal" style={{ maxWidth: '500px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.8rem' }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, fontSize: '1.2rem' }}>
+                <span>💰</span>
+                <span>{language === 'ar' ? 'إضافة مصروف وتكلفة جديدة' : 'Add New Expense & Cost'}</span>
+              </h2>
+              <button className="btn-close" onClick={() => setExpModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveExpense}>
+              <div className="admin-modal-body" style={{ padding: '1.5rem 1rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                
+                {/* Expense Name */}
+                <div className="form-group">
+                  <label style={{ fontSize: '0.9rem', color: 'var(--gold-primary)', fontWeight: 'bold', display: 'block', marginBottom: '0.4rem' }}>
+                    {language === 'ar' ? 'اسم التكلفة / المصروف *' : 'Expense / Cost Name *'}
+                  </label>
+                  <input 
+                    type="text" 
+                    className="input-gold" 
+                    placeholder={language === 'ar' ? 'مثال: شراء لحوم، فاتورة كهرباء شهر مايو...' : 'e.g. Meat purchase, electricity bill...'} 
+                    value={expName} 
+                    onChange={(e) => setExpName(e.target.value)} 
+                    required 
+                  />
+                </div>
+
+                {/* Expense Type (Category) */}
+                <div className="form-group">
+                  <label style={{ fontSize: '0.9rem', color: 'var(--gold-primary)', fontWeight: 'bold', display: 'block', marginBottom: '0.4rem' }}>
+                    {language === 'ar' ? 'تصنيف التكلفة (النوع) *' : 'Expense Category (Type) *'}
+                  </label>
+                  <select 
+                    className="input-gold" 
+                    value={expType} 
+                    onChange={(e) => setExpType(e.target.value)}
+                    required
+                    style={{ appearance: 'none', background: 'rgba(0,0,0,0.4)', color: '#fff', border: '1px solid var(--gold-secondary)' }}
+                  >
+                    <option value="بضائع وخامات" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'بضائع وخامات' : 'Goods & Raw Materials'}</option>
+                    <option value="مرتبات" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'مرتبات العاملين' : 'Salaries'}</option>
+                    <option value="إيجار" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'إيجار' : 'Rent'}</option>
+                    <option value="خدمات (كهرباء ومياه)" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'خدمات (كهرباء ومياه)' : 'Utilities (Electricity/Water)'}</option>
+                    <option value="صيانة" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'صيانة وإصلاحات' : 'Maintenance'}</option>
+                    <option value="تسويق" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'تسويق وإعلانات' : 'Marketing & Ads'}</option>
+                    <option value="أخرى" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'أخرى' : 'Others'}</option>
+                  </select>
+                </div>
+
+                {/* Expense Amount */}
+                <div className="form-group">
+                  <label style={{ fontSize: '0.9rem', color: 'var(--gold-primary)', fontWeight: 'bold', display: 'block', marginBottom: '0.4rem' }}>
+                    {language === 'ar' ? 'قيمة المصروف (المبلغ بالجنيه) *' : 'Amount (EGP) *'}
+                  </label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    min="0.01"
+                    className="input-gold font-en" 
+                    placeholder="0.00" 
+                    value={expAmount || ''} 
+                    onChange={(e) => setExpAmount(Number(e.target.value))} 
+                    required 
+                  />
+                </div>
+
+                {/* Expense Date */}
+                <div className="form-group">
+                  <label style={{ fontSize: '0.9rem', color: 'var(--gold-primary)', fontWeight: 'bold', display: 'block', marginBottom: '0.4rem' }}>
+                    {language === 'ar' ? 'تاريخ المصروف *' : 'Expense Date *'}
+                  </label>
+                  <input 
+                    type="date" 
+                    className="input-gold font-en" 
+                    value={expDate} 
+                    onChange={(e) => setExpDate(e.target.value)} 
+                    required 
+                  />
+                </div>
+
+                {/* Payment Method Toggle Buttons */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  <label style={{ fontSize: '0.9rem', color: 'var(--gold-primary)', fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'طريقة دفع المصروف:' : 'Payment Method:'}
+                  </label>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+                    
+                    {/* Cash Option */}
+                    <button
+                      type="button"
+                      className={expPaymentMethod === 'cash' ? 'btn-gold' : 'btn-outline-gold'}
+                      onClick={() => setExpPaymentMethod('cash')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        padding: '0.6rem',
+                        borderRadius: '10px',
+                        borderWidth: '1.5px',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                        transition: 'all 0.2s ease',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>💵</span>
+                      <span>{language === 'ar' ? 'نقدي (كاش)' : 'Cash'}</span>
+                    </button>
+
+                    {/* Visa Option */}
+                    <button
+                      type="button"
+                      className={expPaymentMethod === 'visa' ? 'btn-gold' : 'btn-outline-gold'}
+                      onClick={() => setExpPaymentMethod('visa')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        padding: '0.6rem',
+                        borderRadius: '10px',
+                        borderWidth: '1.5px',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                        transition: 'all 0.2s ease',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>💳</span>
+                      <span>{language === 'ar' ? 'فيزا / بطاقة' : 'Visa'}</span>
+                    </button>
+
+                    {/* Wallet Option */}
+                    <button
+                      type="button"
+                      className={expPaymentMethod === 'wallet' ? 'btn-gold' : 'btn-outline-gold'}
+                      onClick={() => setExpPaymentMethod('wallet')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        padding: '0.6rem',
+                        borderRadius: '10px',
+                        borderWidth: '1.5px',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                        transition: 'all 0.2s ease',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>📱</span>
+                      <span>{language === 'ar' ? 'محفظة إلكترونية' : 'E-Wallet'}</span>
+                    </button>
+
+                    {/* Instapay Option */}
+                    <button
+                      type="button"
+                      className={expPaymentMethod === 'instapay' ? 'btn-gold' : 'btn-outline-gold'}
+                      onClick={() => setExpPaymentMethod('instapay')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        padding: '0.6rem',
+                        borderRadius: '10px',
+                        borderWidth: '1.5px',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                        transition: 'all 0.2s ease',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>⚡</span>
+                      <span>{language === 'ar' ? 'إنستا باي' : 'Instapay'}</span>
+                    </button>
+
+                  </div>
+                </div>
+
+              </div>
+              <div className="admin-modal-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                <button type="button" className="btn-outline-gold" onClick={() => setExpModalOpen(false)}>
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn-gold" 
+                  disabled={loading}
+                  style={{ padding: '0.5rem 1.5rem', borderRadius: '10px' }}
+                >
+                  {language === 'ar' ? 'حفظ المصروف 💾' : 'Save Expense 💾'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

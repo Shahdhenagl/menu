@@ -29,6 +29,19 @@ function App() {
     return (localStorage.getItem('meridien_lang') as 'ar' | 'en') || 'ar';
   });
 
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('meridien_theme') as 'light' | 'dark') || 'dark';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('meridien_theme', theme);
+    document.documentElement.classList.toggle('light-theme', theme === 'light');
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
   // State arrays for database entities
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -190,6 +203,8 @@ function App() {
             products={products}
             language={language}
             setLanguage={setLanguage}
+            theme={theme}
+            toggleTheme={toggleTheme}
           />
 
           <CartModal 
@@ -215,6 +230,8 @@ function App() {
           settings={settings}
           refreshData={fetchAllData}
           language={language}
+          theme={theme}
+          toggleTheme={toggleTheme}
         />
       )}
     </>

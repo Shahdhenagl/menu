@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense } from '../types';
 
 // Load credentials from environment
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -505,5 +505,67 @@ export const db = {
     const updated = { ...current, ...settings };
     saveLocalData('meridien_settings', updated);
     return updated;
+  },
+
+  // --- EXPENSES ---
+  async getExpenses(): Promise<Expense[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('expenses')
+          .select('*')
+          .order('expense_date', { ascending: false });
+        if (!error) return data || [];
+        console.warn("Supabase fetch expenses error, falling back to local storage:", error.message);
+      } catch (err) {
+        console.warn("Supabase fetch expenses failed, falling back to local storage.", err);
+      }
+    }
+    return getLocalData('meridien_expenses', [] as Expense[]).sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime());
+  },
+
+  async addExpense(expense: Omit<Expense, 'id'>): Promise<Expense> {
+    const newExpense: Expense = {
+      ...expense,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('expenses')
+          .insert([newExpense])
+          .select()
+          .single();
+        if (!error && data) return data;
+        console.warn("Supabase insert expense error, falling back to local storage:", error?.message);
+      } catch (err) {
+        console.warn("Supabase insert expense failed, falling back to local storage.", err);
+      }
+    }
+    const expenses = getLocalData('meridien_expenses', [] as Expense[]);
+    expenses.unshift(newExpense);
+    saveLocalData('meridien_expenses', expenses);
+    return newExpense;
+  },
+
+  async deleteExpense(id: string): Promise<boolean> {
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('expenses')
+          .delete()
+          .eq('id', id);
+        if (!error) return true;
+        console.warn("Supabase delete expense error, falling back to local storage:", error.message);
+      } catch (err) {
+        console.warn("Supabase delete expense failed, falling back to local storage.", err);
+      }
+    }
+    const expenses = getLocalData('meridien_expenses', [] as Expense[]);
+    const updated = expenses.filter(e => e.id !== id);
+    saveLocalData('meridien_expenses', updated);
+    return true;
   }
 };
+

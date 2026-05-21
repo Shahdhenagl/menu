@@ -34,6 +34,43 @@
   --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  --panel-bg: linear-gradient(135deg, rgba(20, 20, 22, 0.65) 0%, rgba(10, 10, 12, 0.85) 100%);
+  --table-hover: rgba(255, 255, 255, 0.02);
+}
+
+/* Light Theme Variable Overrides */
+.light-theme {
+  --bg-dark: #f5f5f7;
+  --bg-darker: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f0f0f5;
+  
+  --text-white: #1c1c1e;
+  --text-gray: #48484a;
+  --text-muted: #8e8e93;
+  
+  --border-color: rgba(212, 175, 55, 0.35);
+  --border-glow: rgba(212, 175, 55, 0.55);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(212, 175, 55, 0.25);
+  
+  --panel-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(245, 245, 247, 0.95) 100%);
+  --table-hover: rgba(0, 0, 0, 0.025);
+  
+  --gold-secondary: #8a6d10; /* Dark luxury gold for clear readability in light mode */
+}
+
+/* Custom background adjustments for light theme */
+.light-theme .bg-overlay {
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(212, 175, 55, 0.06) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(212, 175, 55, 0.06) 0%, transparent 40%);
+}
+
+.light-theme .btn-outline-gold {
+  background: var(--bg-darker) !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
 
 * {
@@ -791,7 +828,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .stat-card {
-  background: var(--bg-card);
+  background: var(--panel-bg);
   border: 1px solid var(--border-color);
   padding: 1.5rem;
   border-radius: 18px;
@@ -839,7 +876,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .chart-panel {
-  background: var(--bg-card);
+  background: var(--panel-bg);
   border: 1px solid var(--border-color);
   padding: 1.5rem;
   border-radius: 20px;
@@ -856,7 +893,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Tables Styling */
 .table-panel {
-  background: var(--bg-card);
+  background: var(--panel-bg);
   border: 1px solid var(--border-color);
   padding: 1.5rem;
   border-radius: 20px;
@@ -896,7 +933,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .luxury-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--table-hover);
 }
 
 /* Badges for status */
@@ -997,6 +1034,72 @@ h1, h2, h3, h4, h5, h6 {
     padding: 1rem;
   }
   .logo-text h1 {
-    font-size: 1.2rem;
   }
+}
+
+/* Premium Horizontal Quantity Controls Override */
+.card-item-controls {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.8rem !important;
+  background: rgba(18, 18, 20, 0.85) !important;
+  padding: 0.4rem 1rem !important;
+  border-radius: 30px !important;
+  border: 1.5px solid var(--gold-primary) !important;
+  box-shadow: 0 0 15px rgba(212, 175, 55, 0.25), inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  min-width: max-content !important;
+}
+
+.card-item-controls:hover {
+  box-shadow: 0 0 25px rgba(212, 175, 55, 0.45), inset 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+  border-color: #fff !important;
+}
+
+/* Premium Footer Social Buttons */
+.footer-social-links {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 1.2rem !important;
+  margin-top: 1.5rem !important;
+  margin-bottom: 2rem !important;
+}
+
+.social-icon-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 46px !important;
+  height: 46px !important;
+  border-radius: 50% !important;
+  background: rgba(18, 18, 20, 0.8) !important;
+  border: 1px solid rgba(212, 175, 55, 0.3) !important;
+  color: var(--gold-primary) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4) !important;
+  cursor: pointer !important;
+  text-decoration: none !important;
+}
+
+.social-icon-btn:hover {
+  background: var(--gold-gradient) !important;
+  color: #111113 !important;
+  border-color: transparent !important;
+  transform: translateY(-4px) scale(1.1) !important;
+  box-shadow: 0 0 20px var(--gold-glow) !important;
+}
+
+.social-icon-btn svg {
+  width: 20px !important;
+  height: 20px !important;
+  stroke-width: 2.2 !important;
+  transition: transform 0.3s ease !important;
+}
+
+.social-icon-btn:hover svg {
+  transform: rotate(8deg) scale(1.05) !important;
 }
