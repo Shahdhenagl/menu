@@ -128,6 +128,12 @@ export default function AdminDashboard({
   const [expFilterMonth, setExpFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [expFilterYear, setExpFilterYear] = useState<number>(() => new Date().getFullYear());
 
+  // Analytics filtering states
+  const [analyticsFilterType, setAnalyticsFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
+  const [analyticsFilterDay, setAnalyticsFilterDay] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [analyticsFilterMonth, setAnalyticsFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [analyticsFilterYear, setAnalyticsFilterYear] = useState<number>(() => new Date().getFullYear());
+
   const fetchExpenses = async () => {
     try {
       const data = await db.getExpenses();
@@ -538,19 +544,78 @@ export default function AdminDashboard({
   };
 
   // --- ANALYTICS CALCULATIONS ---
+  const analyticsFilteredOrders = orders.filter(o => {
+    if (analyticsFilterType === 'all') return true;
+    if (!o.created_at) return true;
+    const dateObj = new Date(o.created_at);
+    if (analyticsFilterType === 'day') return dateObj.toISOString().split('T')[0] === analyticsFilterDay;
+    if (analyticsFilterType === 'month') return dateObj.toISOString().slice(0, 7) === analyticsFilterMonth;
+    if (analyticsFilterType === 'year') return dateObj.getFullYear() === analyticsFilterYear;
+    return true;
+  });
+
+  const analyticsFilteredExpenses = expenses.filter(exp => {
+    if (analyticsFilterType === 'all') return true;
+    if (!exp.expense_date) return true;
+    const dateObj = new Date(exp.expense_date);
+    if (analyticsFilterType === 'day') return exp.expense_date === analyticsFilterDay;
+    if (analyticsFilterType === 'month') return exp.expense_date.slice(0, 7) === analyticsFilterMonth;
+    if (analyticsFilterType === 'year') return dateObj.getFullYear() === analyticsFilterYear;
+    return true;
+  });
+
   // Stats Counters
-  const completedOrders = orders.filter(o => o.status.startsWith('completed'));
+  const completedOrders = analyticsFilteredOrders.filter(o => o.status.startsWith('completed'));
   const totalRevenue = completedOrders.reduce((sum, o) => sum + o.total_price, 0);
-  const totalOrdersCount = orders.length;
+  const totalOrdersCount = analyticsFilteredOrders.length;
   const avgOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0;
   const activeProductsCount = products.filter(p => p.is_available).length;
 
   // --- ADDITIONAL FINANCIAL CALCULATIONS ---
   // Total Expenses (All recorded expenses)
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalExpenses = analyticsFilteredExpenses.reduce((sum, e) => sum + e.amount, 0);
   
   // Net Profit (Revenue - Total Expenses)
   const netProfit = totalRevenue - totalExpenses;
+
+  // Combined Financial Log
+  const combinedFinancialLog: Array<{
+    id: string;
+    type: 'income' | 'expense';
+    title: string;
+    amount: number;
+    date: Date;
+    method?: string;
+  }> = [];
+
+  completedOrders.forEach(o => {
+    if (o.created_at) {
+      combinedFinancialLog.push({
+        id: o.id,
+        type: 'income',
+        title: language === 'ar' ? `تحصيل طلب #${o.id.slice(0,4)}` : `Order Collection #${o.id.slice(0,4)}`,
+        amount: o.total_price,
+        date: new Date(o.created_at),
+        method: o.status.split('_')[1] || 'cash'
+      });
+    }
+  });
+
+  analyticsFilteredExpenses.forEach(e => {
+    if (e.expense_date) {
+      combinedFinancialLog.push({
+        id: e.id,
+        type: 'expense',
+        title: e.name || (language === 'ar' ? 'مصروف' : 'Expense'),
+        amount: e.amount,
+        date: new Date(e.expense_date),
+        method: e.payment_method || 'cash'
+      });
+    }
+  });
+
+  // Sort by date descending
+  combinedFinancialLog.sort((a, b) => b.date.getTime() - a.date.getTime());
 
   // Bottom 5 Least Sold Products (including those with 0 sales)
   const allProductsSalesMap: Record<string, { id: string; name_ar: string; name_en: string; quantity: number; revenue: number }> = {};
@@ -567,7 +632,7 @@ export default function AdminDashboard({
   });
   
   // Fill in actual sales for completed orders
-  orders.forEach(order => {
+  analyticsFilteredOrders.forEach(order => {
     if (order.status.startsWith('completed')) {
       order.items.forEach(item => {
         if (allProductsSalesMap[item.id]) {
@@ -590,7 +655,7 @@ export default function AdminDashboard({
     instapay: { revenue: 0, expenses: 0, net: 0 }
   };
 
-  orders.forEach(order => {
+  analyticsFilteredOrders.forEach(order => {
     if (order.status.startsWith('completed')) {
       const parts = order.status.split('_');
       const method = parts[1] as 'cash' | 'visa' | 'wallet' | 'instapay';
@@ -603,7 +668,7 @@ export default function AdminDashboard({
     }
   });
 
-  expenses.forEach(exp => {
+  analyticsFilteredExpenses.forEach(exp => {
     const method = exp.payment_method;
     if (method && paymentMethodsStats[method]) {
       paymentMethodsStats[method].expenses += exp.amount;
@@ -1047,7 +1112,7 @@ export default function AdminDashboard({
 
   // Time-based Revenue Chart Data (e.g. daily sales log)
   const dailySalesMap: Record<string, number> = {};
-  orders.forEach(order => {
+  analyticsFilteredOrders.forEach(order => {
     if (order.status.startsWith('completed')) {
       const date = order.created_at.split('T')[0]; // YYYY-MM-DD
       dailySalesMap[date] = (dailySalesMap[date] || 0) + order.total_price;
@@ -1328,6 +1393,40 @@ export default function AdminDashboard({
           <div>
             <h1 className="text-gradient-gold" style={{ fontSize: '1.8rem', marginBottom: '1.5rem' }}>{t.overviewTab}</h1>
 
+            {/* Filter Section for Analytics */}
+            <div className="filter-bar" style={{ marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+              <div className="filter-group">
+                <button className={`btn-filter ${analyticsFilterType === 'all' ? 'active' : ''}`} onClick={() => setAnalyticsFilterType('all')}>
+                  {language === 'ar' ? 'كل الأوقات' : 'All Time'}
+                </button>
+                <button className={`btn-filter ${analyticsFilterType === 'day' ? 'active' : ''}`} onClick={() => setAnalyticsFilterType('day')}>
+                  {language === 'ar' ? 'باليوم' : 'By Day'}
+                </button>
+                <button className={`btn-filter ${analyticsFilterType === 'month' ? 'active' : ''}`} onClick={() => setAnalyticsFilterType('month')}>
+                  {language === 'ar' ? 'بالشهر' : 'By Month'}
+                </button>
+                <button className={`btn-filter ${analyticsFilterType === 'year' ? 'active' : ''}`} onClick={() => setAnalyticsFilterType('year')}>
+                  {language === 'ar' ? 'بالسنة' : 'By Year'}
+                </button>
+              </div>
+
+              {analyticsFilterType === 'day' && (
+                <div className="filter-inputs">
+                  <input type="date" value={analyticsFilterDay} onChange={(e) => setAnalyticsFilterDay(e.target.value)} />
+                </div>
+              )}
+              {analyticsFilterType === 'month' && (
+                <div className="filter-inputs">
+                  <input type="month" value={analyticsFilterMonth} onChange={(e) => setAnalyticsFilterMonth(e.target.value)} />
+                </div>
+              )}
+              {analyticsFilterType === 'year' && (
+                <div className="filter-inputs">
+                  <input type="number" value={analyticsFilterYear} onChange={(e) => setAnalyticsFilterYear(Number(e.target.value))} min="2020" max="2100" />
+                </div>
+              )}
+            </div>
+
             {/* Financial Income Statement Grid */}
             <div className="table-panel" style={{ marginBottom: '1.5rem', background: 'linear-gradient(135deg, rgba(20,20,22,0.6) 0%, rgba(10,10,12,0.8) 100%)', border: '1px solid var(--gold-secondary)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -1588,6 +1687,62 @@ export default function AdminDashboard({
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Combined Financial Log (Transactions & Expenses) */}
+            <div className="table-panel">
+              <h2 style={{ fontSize: '1.25rem', color: 'var(--gold-secondary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                📖 {language === 'ar' ? 'دفتر المعاملات والتحصيلات والمصاريف (اللوج المالي)' : 'Financial Log (Collections & Expenses)'}
+              </h2>
+              <div className="table-wrapper">
+                <table className="luxury-table">
+                  <thead>
+                    <tr>
+                      <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                      <th>{language === 'ar' ? 'البيان' : 'Description'}</th>
+                      <th>{language === 'ar' ? 'النوع' : 'Type'}</th>
+                      <th>{language === 'ar' ? 'القيمة' : 'Amount'}</th>
+                      <th>{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {combinedFinancialLog.map((log, idx) => (
+                      <tr key={idx}>
+                        <td className="font-en" style={{ fontSize: '0.85rem' }}>
+                          {log.date.toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}
+                        </td>
+                        <td style={{ fontWeight: 'bold' }}>{log.title}</td>
+                        <td>
+                          {log.type === 'income' ? (
+                            <span style={{ color: 'var(--success)', background: 'rgba(16,185,129,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>
+                              {language === 'ar' ? 'تحصيل إيراد ⬆️' : 'Income ⬆️'}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>
+                              {language === 'ar' ? 'مصروفات ⬇️' : 'Expense ⬇️'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="font-en" style={{ color: log.type === 'income' ? 'var(--success)' : 'var(--danger)', fontWeight: 'bold' }}>
+                          {log.type === 'income' ? '+' : '-'}{log.amount.toLocaleString()} EGP
+                        </td>
+                        <td>
+                          <span style={{ textTransform: 'uppercase', fontSize: '0.8rem', color: 'var(--text-gray)' }}>
+                            {log.method}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {combinedFinancialLog.length === 0 && (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                          {language === 'ar' ? 'لا يوجد معاملات مسجلة في هذا النطاق الزمني' : 'No transactions recorded in this period'}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
