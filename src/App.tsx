@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Category, Product, Order, RestaurantSettings, OrderItem } from './types';
-import { db } from './lib/supabase';
+import { db, supabase } from './lib/supabase';
 import CustomerMenu from './components/CustomerMenu';
 import CartModal from './components/CartModal';
 import AdminDashboard from './components/AdminDashboard';
@@ -89,6 +89,30 @@ function App() {
 
   useEffect(() => {
     fetchAllData();
+  }, []);
+
+  // Realtime Orders Subscription
+  useEffect(() => {
+    if (!supabase) return;
+
+    const channel = supabase.channel('realtime_orders')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            // Play a notification sound for new orders
+            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+            audio.play().catch(() => {});
+          }
+          db.getOrders().then(ords => setOrders(ords)).catch(console.error);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Cart operations
