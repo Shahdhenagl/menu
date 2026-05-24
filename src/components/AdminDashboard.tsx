@@ -8,7 +8,7 @@ import {
 import { 
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
-  Upload, Printer, Sun, Moon
+  Upload, Printer, Sun, Moon, Search
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -61,6 +61,10 @@ export default function AdminDashboard({
   const [prodDescAr, setProdDescAr] = useState('');
   const [prodDescEn, setProdDescEn] = useState('');
   const [prodAvailable, setProdAvailable] = useState(true);
+
+  // Products filtering
+  const [adminProdSearch, setAdminProdSearch] = useState('');
+  const [adminProdCatFilter, setAdminProdCatFilter] = useState('all');
 
   // Settings inputs
   const [setLogoUrl, setSetLogoUrl] = useState(settings.logo_url);
@@ -1643,8 +1647,34 @@ export default function AdminDashboard({
         {activeTab === 'products' && (
           <div>
             <div className="table-panel">
-              <div className="table-panel-header">
+              <div className="table-panel-header" style={{ flexWrap: 'wrap', gap: '1rem' }}>
                 <h1 className="text-gradient-gold" style={{ fontSize: '1.5rem', margin: 0 }}>{t.productsTab}</h1>
+                
+                <div style={{ display: 'flex', gap: '1rem', flex: 1, minWidth: '300px' }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <Search size={16} style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', right: language === 'ar' ? '10px' : 'auto', left: language === 'en' ? '10px' : 'auto', color: 'var(--text-muted)' }} />
+                    <input 
+                      type="text" 
+                      placeholder={language === 'ar' ? 'بحث باسم المنتج...' : 'Search product name...'}
+                      value={adminProdSearch}
+                      onChange={(e) => setAdminProdSearch(e.target.value)}
+                      className="input-gold"
+                      style={{ width: '100%', paddingRight: language === 'ar' ? '30px' : '10px', paddingLeft: language === 'en' ? '30px' : '10px', paddingTop: '0.4rem', paddingBottom: '0.4rem', borderRadius: '10px', fontSize: '0.9rem' }}
+                    />
+                  </div>
+                  <select 
+                    value={adminProdCatFilter}
+                    onChange={(e) => setAdminProdCatFilter(e.target.value)}
+                    className="input-gold"
+                    style={{ padding: '0.4rem', borderRadius: '10px', minWidth: '150px', fontSize: '0.9rem' }}
+                  >
+                    <option value="all">{language === 'ar' ? 'كل التصنيفات' : 'All Categories'}</option>
+                    {categories.map(c => (
+                      <option key={c.id} value={c.id}>{language === 'ar' ? c.name_ar : c.name_en}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <button className="btn-gold" onClick={() => handleOpenProdModal(null)}>
                   <PlusCircle size={16} />
                   {t.addProd}
@@ -1665,7 +1695,14 @@ export default function AdminDashboard({
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map((prod) => {
+                    {products.filter(p => {
+                      const matchCat = adminProdCatFilter === 'all' || p.category_id === adminProdCatFilter;
+                      const searchLower = adminProdSearch.toLowerCase();
+                      const matchSearch = adminProdSearch.trim() === '' || 
+                        p.name_ar.toLowerCase().includes(searchLower) ||
+                        p.name_en.toLowerCase().includes(searchLower);
+                      return matchCat && matchSearch;
+                    }).map((prod) => {
                       const category = categories.find(c => c.id === prod.category_id);
                       return (
                         <tr key={prod.id} style={{ opacity: prod.is_available ? 1 : 0.65 }}>
