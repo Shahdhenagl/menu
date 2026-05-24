@@ -5,6 +5,15 @@ import type { Category, Product, Order, RestaurantSettings, Expense } from '../t
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("CRITICAL ERROR: Supabase Environment Variables are missing! The app will use the fake offline database.");
+  // Optional: Only alert once per session
+  if (!sessionStorage.getItem('supabase_alert_shown')) {
+    alert("⚠️ تحذير: متغيرات البيئة (Environment Variables) الخاصة بـ Supabase غير موجودة! الداش بورد تعمل الآن على الداتا بيز الوهمية (المحلية) ولن يتم حفظ أي شيء في الداتا بيز الحقيقية. يرجى إضافتها في إعدادات Vercel.");
+    sessionStorage.setItem('supabase_alert_shown', 'true');
+  }
+}
+
 // Initialize real Supabase client only if keys are present
 export const supabase = supabaseUrl && supabaseAnonKey 
   ? createClient(supabaseUrl, supabaseAnonKey) 
