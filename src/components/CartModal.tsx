@@ -388,30 +388,33 @@ export default function CartModal({
                 />
               </div>
 
-              {/* Customer Phone */}
-              <div className="form-group">
-                <label>{t.phoneLabel}</label>
-                <input 
-                  type="tel" 
-                  className="input-gold" 
-                  required 
-                  placeholder={t.phonePlaceholder}
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                />
-              </div>
+              {/* Customer Phone & Table number in a grid row */}
+              <div className="form-row-two-columns">
+                {/* Customer Phone */}
+                <div className="form-group">
+                  <label>{t.phoneLabel}</label>
+                  <input 
+                    type="tel" 
+                    className="input-gold" 
+                    required 
+                    placeholder={t.phonePlaceholder}
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                  />
+                </div>
 
-              {/* Table number */}
-              <div className="form-group">
-                <label>{t.tableLabel}</label>
-                <input 
-                  type="text" 
-                  className="input-gold" 
-                  required 
-                  placeholder={t.tablePlaceholder}
-                  value={tableNumber}
-                  onChange={(e) => setTableNumber(e.target.value)}
-                />
+                {/* Table number */}
+                <div className="form-group">
+                  <label>{t.tableLabel}</label>
+                  <input 
+                    type="text" 
+                    className="input-gold" 
+                    required 
+                    placeholder={t.tablePlaceholder}
+                    value={tableNumber}
+                    onChange={(e) => setTableNumber(e.target.value)}
+                  />
+                </div>
               </div>
 
               {/* Promo code validation */}

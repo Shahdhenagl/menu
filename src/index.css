@@ -1142,3 +1142,112 @@ h1, h2, h3, h4, h5, h6 {
 .social-icon-btn:hover svg {
   transform: rotate(8deg) scale(1.05) !important;
 }
+
+/* --- Cart Drawer Optimization & Two-Column Grid --- */
+.form-row-two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+/* Compact overrides for cart drawer elements to maximize space for products */
+.cart-drawer {
+  padding: 1rem !important; /* Save padding around the whole drawer */
+}
+
+.cart-drawer .drawer-header {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.cart-drawer .cart-items-list {
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+  min-height: 180px; /* Guarantee a decent minimum height for products */
+}
+
+.cart-drawer .cart-item {
+  padding: 0.55rem 0.75rem;
+  gap: 0.75rem;
+}
+
+.cart-drawer .cart-item-name {
+  font-size: 0.9rem;
+  margin-bottom: 0.15rem;
+}
+
+.cart-drawer .cart-item-price {
+  font-size: 0.9rem;
+}
+
+.cart-drawer .checkout-form {
+  padding-top: 0.75rem;
+  gap: 0.5rem;
+}
+
+.cart-drawer .form-group {
+  gap: 0.15rem;
+}
+
+.cart-drawer .form-group label {
+  font-size: 0.8rem;
+}
+
+.cart-drawer .input-gold {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.9rem;
+  border-radius: 10px;
+}
+
+.cart-drawer .promo-container {
+  gap: 0.4rem;
+}
+
+.cart-drawer .promo-container button {
+  padding: 0 0.75rem !important;
+  font-size: 0.85rem;
+  border-radius: 10px !important;
+}
+
+.cart-drawer .price-summary {
+  padding: 0.65rem 0.75rem;
+  margin-top: 0.25rem;
+  border-radius: 12px;
+}
+
+.cart-drawer .price-row {
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.cart-drawer .price-row.total {
+  font-size: 1.05rem;
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+}
+
+.cart-drawer .btn-gold {
+  padding: 0.65rem 1.2rem !important;
+  font-size: 0.95rem;
+  border-radius: 12px !important;
+  margin-top: 0.25rem !important;
+}
+
+/* Scroll fallback for short screens (landscape or old mobiles) */
+@media (max-height: 667px) {
+  .cart-drawer {
+    overflow-y: auto;
+    display: block;
+  }
+  .cart-drawer .drawer-header {
+    position: sticky;
+    top: -1rem;
+    background: var(--bg-dark);
+    z-index: 10;
+  }
+  .cart-drawer .cart-items-list {
+    overflow-y: visible;
+    flex: none;
+  }
+}
+
