@@ -154,8 +154,27 @@ export default function AdminDashboard({
   const [sysPhone, setSysPhone] = useState('');
   const [sysUsername, setSysUsername] = useState('');
   const [sysPasscode, setSysPasscode] = useState('');
-  const [sysRole, setSysRole] = useState('staff');
+  const [sysIsAdmin, setSysIsAdmin] = useState(false);
+  const [sysPermissions, setSysPermissions] = useState<string[]>(['orders']);
 
+  const AVAILABLE_PERMISSIONS = [
+    { id: 'analytics', ar: 'نظرة عامة والتحليلات', en: 'Overview & Analytics' },
+    { id: 'categories', ar: 'إدارة التصنيفات', en: 'Categories' },
+    { id: 'products', ar: 'إدارة المنتجات', en: 'Products' },
+    { id: 'orders', ar: 'إدارة الطلبات', en: 'Orders' },
+    { id: 'customers', ar: 'إدارة العملاء', en: 'Customers' },
+    { id: 'expenses', ar: 'التكاليف والمصروفات', en: 'Costs & Expenses' },
+    { id: 'recipes', ar: 'وصفات الشيف', en: 'Chef Recipes' },
+    { id: 'system_users', ar: 'مستخدمين النظام', en: 'System Users' },
+    { id: 'settings', ar: 'إدارة النظام والروابط', en: 'Settings' }
+  ];
+
+  const hasPermission = (tabId: string) => {
+    if (!loggedInUser) return false;
+    const roles = loggedInUser.role.split(',');
+    if (roles.includes('admin')) return true;
+    return roles.includes(tabId);
+  };
   const fetchSystemUsers = async () => {
     try {
       const data = await db.getSystemUsers();
@@ -211,7 +230,7 @@ export default function AdminDashboard({
         phone: sysPhone,
         username: sysUsername,
         passcode: sysPasscode,
-        role: sysRole
+        role: sysIsAdmin ? 'admin' : sysPermissions.join(',')
       });
       await fetchSystemUsers();
       setSysUserModalOpen(false);
@@ -219,6 +238,8 @@ export default function AdminDashboard({
       setSysPhone('');
       setSysUsername('');
       setSysPasscode('');
+      setSysIsAdmin(false);
+      setSysPermissions(['orders']);
     } catch (err) {
       console.error(err);
     } finally {
@@ -1449,78 +1470,101 @@ export default function AdminDashboard({
           </button>
         </div>
 
+          <div style={{ marginTop: '1.5rem', marginBottom: '1.5rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'مرحباً بك،' : 'Welcome,'}</div>
+            <div style={{ fontSize: '1.1rem', color: 'var(--gold-primary)', fontWeight: 'bold', marginTop: '0.25rem' }}>{loggedInUser?.name}</div>
+          </div>
+
         <nav className="admin-nav">
-          <button 
-            className={`admin-nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
-            onClick={() => setActiveTab('analytics')}
-          >
-            <LayoutDashboard size={18} />
-            <span>{t.overviewTab}</span>
-          </button>
+          {hasPermission('analytics') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
+              onClick={() => setActiveTab('analytics')}
+            >
+              <LayoutDashboard size={18} />
+              <span>{t.overviewTab}</span>
+            </button>
+          )}
           
-          <button 
-            className={`admin-nav-item ${activeTab === 'categories' ? 'active' : ''}`}
-            onClick={() => setActiveTab('categories')}
-          >
-            <FolderOpen size={18} />
-            <span>{t.categoriesTab}</span>
-          </button>
+          {hasPermission('categories') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'categories' ? 'active' : ''}`}
+              onClick={() => setActiveTab('categories')}
+            >
+              <FolderOpen size={18} />
+              <span>{t.categoriesTab}</span>
+            </button>
+          )}
 
-          <button 
-            className={`admin-nav-item ${activeTab === 'products' ? 'active' : ''}`}
-            onClick={() => setActiveTab('products')}
-          >
-            <Coffee size={18} />
-            <span>{t.productsTab}</span>
-          </button>
+          {hasPermission('products') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'products' ? 'active' : ''}`}
+              onClick={() => setActiveTab('products')}
+            >
+              <Coffee size={18} />
+              <span>{t.productsTab}</span>
+            </button>
+          )}
 
-          <button 
-            className={`admin-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
-            onClick={() => setActiveTab('orders')}
-          >
-            <Calendar size={18} />
-            <span>{t.ordersTab}</span>
-          </button>
+          {hasPermission('orders') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
+              onClick={() => setActiveTab('orders')}
+            >
+              <Calendar size={18} />
+              <span>{t.ordersTab}</span>
+            </button>
+          )}
 
-          <button 
-            className={`admin-nav-item ${activeTab === 'customers' ? 'active' : ''}`}
-            onClick={() => setActiveTab('customers')}
-          >
-            <Users size={18} />
-            <span>{t.customersTab}</span>
-          </button>
+          {hasPermission('customers') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'customers' ? 'active' : ''}`}
+              onClick={() => setActiveTab('customers')}
+            >
+              <Users size={18} />
+              <span>{t.customersTab}</span>
+            </button>
+          )}
 
-          <button 
-            className={`admin-nav-item ${activeTab === 'expenses' ? 'active' : ''}`}
-            onClick={() => setActiveTab('expenses')}
-          >
-            <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>💰</span>
-            <span>{language === 'ar' ? 'التكاليف والمصروفات' : 'Costs & Expenses'}</span>
-          </button>
+          {hasPermission('expenses') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'expenses' ? 'active' : ''}`}
+              onClick={() => setActiveTab('expenses')}
+            >
+              <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>💰</span>
+              <span>{language === 'ar' ? 'التكاليف والمصروفات' : 'Costs & Expenses'}</span>
+            </button>
+          )}
 
-          <button 
-            className={`admin-nav-item ${activeTab === 'recipes' ? 'active' : ''}`}
-            onClick={() => setActiveTab('recipes')}
-          >
-            <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>👨‍🍳</span>
-            <span>{language === 'ar' ? 'وصفات الشيف' : 'Chef Recipes'}</span>
-          </button>
+          {hasPermission('recipes') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'recipes' ? 'active' : ''}`}
+              onClick={() => setActiveTab('recipes')}
+            >
+              <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>👨‍🍳</span>
+              <span>{language === 'ar' ? 'وصفات الشيف' : 'Chef Recipes'}</span>
+            </button>
+          )}
 
-          <button 
-            className={`admin-nav-item ${activeTab === 'system_users' ? 'active' : ''}`}
-            onClick={() => setActiveTab('system_users')}
-          >
-            <Users size={18} />
-            <span>{language === 'ar' ? 'مستخدمين النظام' : 'System Users'}</span>
-          </button>
+          {hasPermission('system_users') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'system_users' ? 'active' : ''}`}
+              onClick={() => setActiveTab('system_users')}
+            >
+              <Users size={18} />
+              <span>{language === 'ar' ? 'مستخدمين النظام' : 'System Users'}</span>
+            </button>
+          )}
 
-          <button 
-            className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            <Gear size={18} />
-            <span>{t.settingsTab}</span>
-          </button>
+          {hasPermission('settings') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('settings')}
+            >
+              <Gear size={18} />
+              <span>{t.settingsTab}</span>
+            </button>
+          )}
         </nav>
 
         <button className="btn-outline-gold" onClick={onClose} style={{ marginTop: 'auto', width: '100%' }}>
@@ -2928,7 +2972,7 @@ export default function AdminDashboard({
                             color: user.role === 'admin' ? 'var(--danger)' : 'var(--success)',
                             padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold'
                           }}>
-                            {user.role.toUpperCase()}
+                            {user.role === 'admin' ? (language === 'ar' ? 'مدير نظام' : 'ADMIN') : (language === 'ar' ? 'صلاحيات مخصصة' : 'CUSTOM')}
                           </span>
                         </td>
                         <td>
@@ -3968,14 +4012,33 @@ export default function AdminDashboard({
                   <label>{language === 'ar' ? 'الرمز السري' : 'Passcode'}</label>
                   <input type="password" className="input-gold" value={sysPasscode} onChange={e => setSysPasscode(e.target.value)} required />
                 </div>
-                <div className="form-group">
-                  <label>{language === 'ar' ? 'الدور/الصلاحية' : 'Role'}</label>
-                  <select className="input-gold" value={sysRole} onChange={e => setSysRole(e.target.value)}>
-                    <option value="staff">{language === 'ar' ? 'موظف (Staff)' : 'Staff'}</option>
-                    <option value="chef">{language === 'ar' ? 'شيف (Chef)' : 'Chef'}</option>
-                    <option value="admin">{language === 'ar' ? 'مدير (Admin)' : 'Admin'}</option>
-                  </select>
+                <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={sysIsAdmin} onChange={e => setSysIsAdmin(e.target.checked)} />
+                    <span style={{ fontWeight: 'bold', color: 'var(--danger)' }}>{language === 'ar' ? 'مدير نظام (صلاحيات كاملة)' : 'System Admin (Full Access)'}</span>
+                  </label>
                 </div>
+                
+                {!sysIsAdmin && (
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'تخصيص الصلاحيات (اختر المسموح له)' : 'Custom Permissions (Select Allowed)'}</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                      {AVAILABLE_PERMISSIONS.map(perm => (
+                        <label key={perm.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={sysPermissions.includes(perm.id)} 
+                            onChange={e => {
+                              if (e.target.checked) setSysPermissions(prev => [...prev, perm.id]);
+                              else setSysPermissions(prev => prev.filter(p => p !== perm.id));
+                            }} 
+                          />
+                          <span style={{ fontSize: '0.85rem' }}>{language === 'ar' ? perm.ar : perm.en}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="admin-modal-footer">
                 <button type="button" className="btn-outline-gold" onClick={() => setSysUserModalOpen(false)}>{t.close}</button>
