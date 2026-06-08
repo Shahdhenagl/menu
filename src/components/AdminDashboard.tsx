@@ -414,7 +414,10 @@ export default function AdminDashboard({
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prodNameAr.trim() || !prodNameEn.trim() || prodPrice <= 0 || !prodCatId) return;
+    if (!prodNameAr.trim() || !prodNameEn.trim() || prodPrice <= 0 || !prodCatId) {
+      alert(language === 'ar' ? 'يرجى إدخال اسم المنتج (عربي وإنجليزي)، والتصنيف، وسعر صحيح أكبر من صفر.' : 'Please enter the product name (AR & EN), category, and a valid price greater than zero.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -438,8 +441,9 @@ export default function AdminDashboard({
       }
       await refreshData();
       setProdModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(language === 'ar' ? 'حدث خطأ أثناء حفظ المنتج.' : 'An error occurred while saving the product.');
     } finally {
       setLoading(false);
     }
