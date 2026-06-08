@@ -188,7 +188,8 @@ export default function AdminDashboard({
       const comment = await db.addRecipeComment({
         product_id: productId,
         user_name: loggedInUser.name,
-        comment: text.trim()
+        comment: text.trim(),
+        created_at: new Date().toISOString()
       });
       setAllRecipeComments(prev => ({
         ...prev,
@@ -3934,7 +3935,7 @@ export default function AdminDashboard({
           </div>
         );
       })()}
-    </div>
+
       {/* --- SYSTEM USER MODAL --- */}
       {sysUserModalOpen && (
         <div className="admin-modal-overlay" onClick={() => setSysUserModalOpen(false)}>
