@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment } from '../types';
 import { db } from '../lib/supabase';
 import { 
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
@@ -23,7 +23,7 @@ interface AdminDashboardProps {
   toggleTheme: () => void;
 }
 
-type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings';
+type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings' | 'recipes' | 'system_users';
 
 export default function AdminDashboard({
   onClose,
@@ -37,8 +37,10 @@ export default function AdminDashboard({
   toggleTheme
 }: AdminDashboardProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginUsername, setLoginUsername] = useState('');
   const [passcode, setPasscode] = useState('');
   const [passcodeError, setPasscodeError] = useState('');
+  const [loggedInUser, setLoggedInUser] = useState<SystemUser | null>(null);
   
   const [activeTab, setActiveTab] = useState<TabType>('analytics');
 
@@ -60,6 +62,8 @@ export default function AdminDashboard({
   const [prodImageUrl, setProdImageUrl] = useState('');
   const [prodDescAr, setProdDescAr] = useState('');
   const [prodDescEn, setProdDescEn] = useState('');
+  const [prodRecipeAr, setProdRecipeAr] = useState('');
+  const [prodRecipeEn, setProdRecipeEn] = useState('');
   const [prodAvailable, setProdAvailable] = useState(true);
 
   // Products filtering
@@ -143,8 +147,100 @@ export default function AdminDashboard({
     }
   };
 
+  // --- SYSTEM USERS MODULE STATES ---
+  const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
+  const [sysUserModalOpen, setSysUserModalOpen] = useState(false);
+  const [sysName, setSysName] = useState('');
+  const [sysPhone, setSysPhone] = useState('');
+  const [sysUsername, setSysUsername] = useState('');
+  const [sysPasscode, setSysPasscode] = useState('');
+  const [sysRole, setSysRole] = useState('staff');
+
+  const fetchSystemUsers = async () => {
+    try {
+      const data = await db.getSystemUsers();
+      setSystemUsers(data);
+    } catch (err) {
+      console.error("Error loading system users:", err);
+    }
+  };
+
+  // --- RECIPES COMMENTS STATES ---
+  const [allRecipeComments, setAllRecipeComments] = useState<Record<string, RecipeComment[]>>({}); // productId -> comments[]
+  const [newCommentText, setNewCommentText] = useState<{ [productId: string]: string }>({});
+  const [selectedRecipeProduct, setSelectedRecipeProduct] = useState<Product | null>(null);
+
+  const fetchCommentsForProduct = async (productId: string) => {
+    try {
+      const comments = await db.getRecipeComments(productId);
+      setAllRecipeComments(prev => ({ ...prev, [productId]: comments }));
+    } catch (err) {
+      console.error("Error fetching comments:", err);
+    }
+  };
+
+  const handleAddComment = async (e: React.FormEvent, productId: string) => {
+    e.preventDefault();
+    const text = newCommentText[productId];
+    if (!text || !text.trim() || !loggedInUser) return;
+    
+    try {
+      const comment = await db.addRecipeComment({
+        product_id: productId,
+        user_name: loggedInUser.name,
+        comment: text.trim()
+      });
+      setAllRecipeComments(prev => ({
+        ...prev,
+        [productId]: [...(prev[productId] || []), comment]
+      }));
+      setNewCommentText(prev => ({ ...prev, [productId]: '' }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveSystemUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sysName.trim() || !sysUsername.trim() || !sysPasscode.trim()) return;
+    setLoading(true);
+    try {
+      await db.addSystemUser({
+        name: sysName,
+        phone: sysPhone,
+        username: sysUsername,
+        passcode: sysPasscode,
+        role: sysRole
+      });
+      await fetchSystemUsers();
+      setSysUserModalOpen(false);
+      setSysName('');
+      setSysPhone('');
+      setSysUsername('');
+      setSysPasscode('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSystemUser = async (id: string) => {
+    if (!confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذا المستخدم؟' : 'Are you sure you want to delete this user?')) return;
+    setLoading(true);
+    try {
+      await db.deleteSystemUser(id);
+      await fetchSystemUsers();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchExpenses();
+    fetchSystemUsers();
   }, []);
 
   const handleSaveExpense = async (e: React.FormEvent) => {
@@ -211,11 +307,19 @@ export default function AdminDashboard({
   // Passcode gate validation
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (passcode === '123456' || passcode === '01000307171') {
+    const isMasterAdmin = (loginUsername === 'admin' && passcode === '123456');
+    const matchedUser = systemUsers.find(u => u.username === loginUsername && u.passcode === passcode);
+
+    if (isMasterAdmin || matchedUser) {
       setIsAuthenticated(true);
       setPasscodeError('');
+      if (matchedUser) {
+        setLoggedInUser(matchedUser);
+      } else {
+        setLoggedInUser({ id: 'admin', name: 'Super Admin', phone: '', username: 'admin', passcode: '123456', role: 'admin' });
+      }
     } else {
-      setPasscodeError(language === 'ar' ? 'رمز المرور غير صحيح!' : 'Incorrect passcode!');
+      setPasscodeError(language === 'ar' ? 'اسم المستخدم أو الرمز السري غير صحيح!' : 'Incorrect username or passcode!');
     }
   };
 
@@ -288,6 +392,8 @@ export default function AdminDashboard({
       setProdImageUrl(prod.image_url);
       setProdDescAr(prod.description_ar);
       setProdDescEn(prod.description_en);
+      setProdRecipeAr(prod.recipe_ar || '');
+      setProdRecipeEn(prod.recipe_en || '');
       setProdAvailable(prod.is_available);
     } else {
       setEditingProduct(null);
@@ -298,6 +404,8 @@ export default function AdminDashboard({
       setProdImageUrl('');
       setProdDescAr('');
       setProdDescEn('');
+      setProdRecipeAr('');
+      setProdRecipeEn('');
       setProdAvailable(true);
     }
     setProdModalOpen(true);
@@ -317,6 +425,8 @@ export default function AdminDashboard({
         image_url: prodImageUrl,
         description_ar: prodDescAr,
         description_en: prodDescEn,
+        recipe_ar: prodRecipeAr,
+        recipe_en: prodRecipeEn,
         is_available: prodAvailable
       };
 
@@ -1261,6 +1371,19 @@ export default function AdminDashboard({
           <form onSubmit={handleLogin}>
             <div className="admin-modal-body" style={{ gap: '1rem', padding: '2rem 1.5rem' }}>
               <div className="form-group">
+                <label>{language === 'ar' ? 'اسم المستخدم' : 'Username'}</label>
+                <input 
+                  type="text" 
+                  className="input-gold" 
+                  placeholder={language === 'ar' ? 'اسم الدخول...' : 'Enter username...'}
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  style={{ textAlign: 'center', fontSize: '1.2rem' }}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
                 <label>{t.passcodeLabel}</label>
                 <input 
                   type="password" 
@@ -1270,7 +1393,6 @@ export default function AdminDashboard({
                   onChange={(e) => setPasscode(e.target.value)}
                   style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '4px' }}
                   required
-                  autoFocus
                 />
                 {passcodeError && (
                   <span style={{ color: 'var(--danger)', fontSize: '0.85rem', marginTop: '0.25rem', textAlign: 'center', display: 'block' }}>
@@ -1278,7 +1400,7 @@ export default function AdminDashboard({
                   </span>
                 )}
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '0.5rem' }}>
-                  {language === 'ar' ? 'تلميح: الرمز الافتراضي هو 123456' : 'Hint: Default passcode is 123456'}
+                  {language === 'ar' ? 'لأول مرة: استخدم admin كاسم مستخدم و 123456 كرمز دخول' : 'First time: Use admin / 123456'}
                 </p>
               </div>
             </div>
@@ -1369,6 +1491,22 @@ export default function AdminDashboard({
           >
             <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>💰</span>
             <span>{language === 'ar' ? 'التكاليف والمصروفات' : 'Costs & Expenses'}</span>
+          </button>
+
+          <button 
+            className={`admin-nav-item ${activeTab === 'recipes' ? 'active' : ''}`}
+            onClick={() => setActiveTab('recipes')}
+          >
+            <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>👨‍🍳</span>
+            <span>{language === 'ar' ? 'وصفات الشيف' : 'Chef Recipes'}</span>
+          </button>
+
+          <button 
+            className={`admin-nav-item ${activeTab === 'system_users' ? 'active' : ''}`}
+            onClick={() => setActiveTab('system_users')}
+          >
+            <Users size={18} />
+            <span>{language === 'ar' ? 'مستخدمين النظام' : 'System Users'}</span>
           </button>
 
           <button 
@@ -2670,6 +2808,142 @@ export default function AdminDashboard({
             </div>
           </div>
         )}
+
+        {/* TAB: CHEF RECIPES */}
+        {activeTab === 'recipes' && (
+          <div>
+            <h1 className="text-gradient-gold" style={{ fontSize: '1.8rem', marginBottom: '1.5rem' }}>{language === 'ar' ? 'وصفات الشيف 👨‍🍳' : 'Chef Recipes 👨‍🍳'}</h1>
+            <div className="products-grid">
+              {products.filter(p => p.recipe_ar || p.recipe_en).map(product => (
+                <div key={product.id} className="product-card">
+                  <div className="product-img-container" style={{ height: '180px' }}>
+                    <img src={product.image_url || '/placeholder.jpg'} alt={product.name_ar} />
+                  </div>
+                  <div style={{ padding: '1rem' }}>
+                    <h3 style={{ fontSize: '1.1rem', color: 'var(--gold-primary)', marginBottom: '0.5rem' }}>
+                      {language === 'ar' ? product.name_ar : product.name_en}
+                    </h3>
+                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '0.8rem', borderRadius: '8px', marginBottom: '1rem', border: '1px solid var(--border-color)', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                      <strong style={{ color: 'var(--gold-secondary)' }}>{language === 'ar' ? 'طريقة الطهي:' : 'Cooking Instructions:'}</strong><br/>
+                      <span style={{ whiteSpace: 'pre-wrap' }}>{language === 'ar' ? (product.recipe_ar || product.recipe_en) : (product.recipe_en || product.recipe_ar)}</span>
+                    </div>
+
+                    <button 
+                      className="btn-outline-gold" 
+                      onClick={() => {
+                        setSelectedRecipeProduct(product);
+                        if (!allRecipeComments[product.id]) {
+                          fetchCommentsForProduct(product.id);
+                        }
+                      }}
+                      style={{ width: '100%', fontSize: '0.85rem' }}
+                    >
+                      {language === 'ar' ? 'عرض التعليقات والتفاعل' : 'View Comments & Interact'}
+                    </button>
+
+                    {selectedRecipeProduct?.id === product.id && (
+                      <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                        <h4 style={{ fontSize: '0.9rem', color: 'var(--text-gray)', marginBottom: '0.8rem' }}>{language === 'ar' ? 'التعليقات' : 'Comments'}</h4>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem', maxHeight: '150px', overflowY: 'auto' }}>
+                          {(allRecipeComments[product.id] || []).length === 0 ? (
+                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{language === 'ar' ? 'لا توجد تعليقات بعد. كن أول من يعلق!' : 'No comments yet. Be the first!'}</p>
+                          ) : (
+                            (allRecipeComments[product.id] || []).map(comment => (
+                              <div key={comment.id} style={{ background: 'rgba(0,0,0,0.2)', padding: '0.5rem', borderRadius: '6px' }}>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--gold-secondary)', marginBottom: '0.2rem', fontWeight: 'bold' }}>{comment.user_name}</div>
+                                <div style={{ fontSize: '0.85rem' }}>{comment.comment}</div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <form onSubmit={(e) => handleAddComment(e, product.id)} style={{ display: 'flex', gap: '0.5rem' }}>
+                          <input 
+                            type="text" 
+                            className="input-gold" 
+                            placeholder={language === 'ar' ? 'أضف تعليقك...' : 'Add comment...'}
+                            value={newCommentText[product.id] || ''}
+                            onChange={(e) => setNewCommentText(prev => ({ ...prev, [product.id]: e.target.value }))}
+                            style={{ flex: 1, padding: '0.4rem', fontSize: '0.85rem' }}
+                            required
+                          />
+                          <button type="submit" className="btn-gold" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
+                            {language === 'ar' ? 'إرسال' : 'Send'}
+                          </button>
+                        </form>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {products.filter(p => p.recipe_ar || p.recipe_en).length === 0 && (
+                <div style={{ color: 'var(--text-muted)', textAlign: 'center', gridColumn: '1 / -1', padding: '2rem' }}>
+                  {language === 'ar' ? 'لم يتم إضافة وصفات لأي منتج بعد. قم بإضافة وصفة عند تعديل المنتج.' : 'No recipes added to any product yet. Add a recipe when editing a product.'}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: SYSTEM USERS */}
+        {activeTab === 'system_users' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h1 className="text-gradient-gold" style={{ fontSize: '1.8rem', margin: 0 }}>{language === 'ar' ? 'مستخدمين النظام 👥' : 'System Users 👥'}</h1>
+              <button className="btn-gold" onClick={() => setSysUserModalOpen(true)}>
+                <Plus size={18} />
+                <span>{language === 'ar' ? 'إضافة مستخدم' : 'Add User'}</span>
+              </button>
+            </div>
+            
+            <div className="table-panel">
+              <div className="table-wrapper">
+                <table className="luxury-table">
+                  <thead>
+                    <tr>
+                      <th>{language === 'ar' ? 'الاسم' : 'Name'}</th>
+                      <th>{language === 'ar' ? 'الهاتف' : 'Phone'}</th>
+                      <th>{language === 'ar' ? 'اسم المستخدم' : 'Username'}</th>
+                      <th>{language === 'ar' ? 'الدور' : 'Role'}</th>
+                      <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {systemUsers.map(user => (
+                      <tr key={user.id}>
+                        <td style={{ fontWeight: 'bold' }}>{user.name}</td>
+                        <td className="font-en">{user.phone || '-'}</td>
+                        <td style={{ color: 'var(--gold-secondary)' }}>@{user.username}</td>
+                        <td>
+                          <span style={{ 
+                            background: user.role === 'admin' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)', 
+                            color: user.role === 'admin' ? 'var(--danger)' : 'var(--success)',
+                            padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold'
+                          }}>
+                            {user.role.toUpperCase()}
+                          </span>
+                        </td>
+                        <td>
+                          {user.username !== 'admin' && (
+                            <button 
+                              className="action-btn delete" 
+                              onClick={() => handleDeleteSystemUser(user.id)}
+                              title={language === 'ar' ? 'حذف' : 'Delete'}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
 
       {/* --- CRUD DIALOG MODAL FOR CATEGORY --- */}
@@ -2814,6 +3088,18 @@ export default function AdminDashboard({
                 <div className="form-group">
                   <label>مكونات الطبق بالإنجليزية</label>
                   <textarea className="input-gold" rows={3} value={prodDescEn} onChange={(e) => setProdDescEn(e.target.value)} />
+                </div>
+
+                {/* Recipe AR */}
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'وصفة الشيف (عربي)' : 'Chef Recipe (AR)'}</label>
+                  <textarea className="input-gold" rows={4} placeholder={language === 'ar' ? 'تفاصيل الوصفة والطهي...' : 'Cooking details...'} value={prodRecipeAr} onChange={(e) => setProdRecipeAr(e.target.value)} />
+                </div>
+
+                {/* Recipe EN */}
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'وصفة الشيف (إنجليزي)' : 'Chef Recipe (EN)'}</label>
+                  <textarea className="input-gold" rows={4} placeholder="Cooking details..." value={prodRecipeEn} onChange={(e) => setProdRecipeEn(e.target.value)} />
                 </div>
 
                 {/* Availability checkbox */}
@@ -3648,6 +3934,50 @@ export default function AdminDashboard({
           </div>
         );
       })()}
+    </div>
+      {/* --- SYSTEM USER MODAL --- */}
+      {sysUserModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setSysUserModalOpen(false)}>
+          <div className="admin-modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'إضافة مستخدم جديد' : 'Add New User'}</h2>
+              <button className="close-btn" onClick={() => setSysUserModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveSystemUser}>
+              <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الاسم بالكامل' : 'Full Name'}</label>
+                  <input type="text" className="input-gold" value={sysName} onChange={e => setSysName(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'رقم الهاتف' : 'Phone Number'}</label>
+                  <input type="text" className="input-gold" value={sysPhone} onChange={e => setSysPhone(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'اسم المستخدم (للدخول)' : 'Username (Login)'}</label>
+                  <input type="text" className="input-gold" value={sysUsername} onChange={e => setSysUsername(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الرمز السري' : 'Passcode'}</label>
+                  <input type="password" className="input-gold" value={sysPasscode} onChange={e => setSysPasscode(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الدور/الصلاحية' : 'Role'}</label>
+                  <select className="input-gold" value={sysRole} onChange={e => setSysRole(e.target.value)}>
+                    <option value="staff">{language === 'ar' ? 'موظف (Staff)' : 'Staff'}</option>
+                    <option value="chef">{language === 'ar' ? 'شيف (Chef)' : 'Chef'}</option>
+                    <option value="admin">{language === 'ar' ? 'مدير (Admin)' : 'Admin'}</option>
+                  </select>
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-outline-gold" onClick={() => setSysUserModalOpen(false)}>{t.close}</button>
+                <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

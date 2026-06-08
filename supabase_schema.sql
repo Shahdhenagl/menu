@@ -119,3 +119,44 @@ ON CONFLICT (id) DO NOTHING;
 -- 5. Add Tax and Service columns to settings table
 ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS tax_percent NUMERIC DEFAULT 0;
 ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS service_percent NUMERIC DEFAULT 0;
+
+-- 6. Add Recipe columns to products table
+ALTER TABLE products ADD COLUMN IF NOT EXISTS recipe_ar TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS recipe_en TEXT;
+
+-- 7. Create System Users Table
+CREATE TABLE IF NOT EXISTS system_users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  phone TEXT,
+  username TEXT UNIQUE NOT NULL,
+  passcode TEXT NOT NULL,
+  role TEXT DEFAULT 'staff',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 8. Create Recipe Comments Table
+CREATE TABLE IF NOT EXISTS recipe_comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  user_name TEXT NOT NULL,
+  comment TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Enable RLS for new tables
+ALTER TABLE system_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recipe_comments ENABLE ROW LEVEL SECURITY;
+
+-- Permissive Policies for new tables
+DROP POLICY IF EXISTS "Allow all for everyone" ON system_users;
+CREATE POLICY "Allow all for everyone" ON system_users FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all for everyone" ON recipe_comments;
+CREATE POLICY "Allow all for everyone" ON recipe_comments FOR ALL USING (true) WITH CHECK (true);
+
+-- Seed initial admin user
+INSERT INTO system_users (name, phone, username, passcode, role) VALUES
+  ('Super Admin', '01000000000', 'admin', '123456', 'admin')
+ON CONFLICT (username) DO NOTHING;
+

@@ -18,6 +18,8 @@ export interface Product {
   description_ar: string;
   description_en: string;
   is_available: boolean;
+  recipe_ar?: string;
+  recipe_en?: string;
   created_at?: string;
 }
 
@@ -74,3 +76,20 @@ export interface Expense {
   created_at?: string;
 }
 
+export interface SystemUser {
+  id: string;
+  name: string;
+  phone: string;
+  username: string;
+  passcode: string;
+  role: string;
+  created_at?: string;
+}
+
+export interface RecipeComment {
+  id: string;
+  product_id: string;
+  user_name: string;
+  comment: string;
+  created_at: string;
+}

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment } from '../types';
 
 // Load credentials from environment
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -577,6 +577,106 @@ export const db = {
     const updated = expenses.filter(e => e.id !== id);
     saveLocalData('meridien_expenses', updated);
     return true;
+  },
+
+  // --- SYSTEM USERS ---
+  async getSystemUsers(): Promise<SystemUser[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('system_users')
+          .select('*')
+          .order('created_at', { ascending: true });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase fetch users failed", err);
+      }
+    }
+    return getLocalData('meridien_users', [] as SystemUser[]);
+  },
+
+  async addSystemUser(user: Omit<SystemUser, 'id'>): Promise<SystemUser> {
+    const newUser: SystemUser = {
+      ...user,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('system_users')
+          .insert([newUser])
+          .select()
+          .single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase insert user failed", err);
+      }
+    }
+    const users = getLocalData('meridien_users', [] as SystemUser[]);
+    users.push(newUser);
+    saveLocalData('meridien_users', users);
+    return newUser;
+  },
+
+  async deleteSystemUser(id: string): Promise<boolean> {
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('system_users')
+          .delete()
+          .eq('id', id);
+        if (!error) return true;
+      } catch (err) {
+        console.warn("Supabase delete user failed", err);
+      }
+    }
+    const users = getLocalData('meridien_users', [] as SystemUser[]);
+    const updated = users.filter(u => u.id !== id);
+    saveLocalData('meridien_users', updated);
+    return true;
+  },
+
+  // --- RECIPE COMMENTS ---
+  async getRecipeComments(product_id: string): Promise<RecipeComment[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('recipe_comments')
+          .select('*')
+          .eq('product_id', product_id)
+          .order('created_at', { ascending: true });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase fetch comments failed", err);
+      }
+    }
+    const allComments = getLocalData('meridien_recipe_comments', [] as RecipeComment[]);
+    return allComments.filter(c => c.product_id === product_id).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  },
+
+  async addRecipeComment(comment: Omit<RecipeComment, 'id'>): Promise<RecipeComment> {
+    const newComment: RecipeComment = {
+      ...comment,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('recipe_comments')
+          .insert([newComment])
+          .select()
+          .single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase insert comment failed", err);
+      }
+    }
+    const comments = getLocalData('meridien_recipe_comments', [] as RecipeComment[]);
+    comments.push(newComment);
+    saveLocalData('meridien_recipe_comments', comments);
+    return newComment;
   }
 };
 
