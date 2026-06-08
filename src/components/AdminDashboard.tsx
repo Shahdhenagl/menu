@@ -2820,11 +2820,12 @@ export default function AdminDashboard({
             <h1 className="text-gradient-gold" style={{ fontSize: '1.8rem', marginBottom: '1.5rem' }}>{language === 'ar' ? 'وصفات الشيف 👨‍🍳' : 'Chef Recipes 👨‍🍳'}</h1>
             <div className="products-grid">
               {products.filter(p => p.recipe_ar || p.recipe_en).map(product => (
-                <div key={product.id} className="product-card">
-                  <div className="product-img-container" style={{ height: '180px' }}>
-                    <img src={product.image_url || '/placeholder.jpg'} alt={product.name_ar} />
-                  </div>
-                  <div style={{ padding: '1rem' }}>
+                <div key={product.id} className="premium-card-wrapper">
+                  <div className="premium-card">
+                    <div className="card-image-box" style={{ height: '200px' }}>
+                      <img className="card-image" src={product.image_url || '/placeholder.jpg'} alt={product.name_ar} />
+                    </div>
+                    <div style={{ padding: '1.2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
                     <h3 style={{ fontSize: '1.1rem', color: 'var(--gold-primary)', marginBottom: '0.5rem' }}>
                       {language === 'ar' ? product.name_ar : product.name_en}
                     </h3>
@@ -2879,6 +2880,7 @@ export default function AdminDashboard({
                         </form>
                       </div>
                     )}
+                    </div>
                   </div>
                 </div>
               ))}
