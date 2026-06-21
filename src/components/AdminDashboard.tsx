@@ -23,7 +23,7 @@ interface AdminDashboardProps {
   toggleTheme: () => void;
 }
 
-type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings' | 'recipes' | 'system_users';
+type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters';
 
 export default function AdminDashboard({
   onClose,
@@ -167,6 +167,7 @@ export default function AdminDashboard({
     { id: 'expenses', ar: 'التكاليف والمصروفات', en: 'Costs & Expenses' },
     { id: 'recipes', ar: 'وصفات الشيف', en: 'Chef Recipes' },
     { id: 'system_users', ar: 'مستخدمين النظام', en: 'System Users' },
+    { id: 'waiters', ar: 'إدارة الويترز', en: 'Waiters Management' },
     { id: 'settings', ar: 'إدارة النظام والروابط', en: 'Settings' },
     { id: 'pos', ar: 'نقاط البيع (كابتن أوردر)', en: 'POS System (Captain)' }
   ];
@@ -255,6 +256,36 @@ export default function AdminDashboard({
     try {
       await db.deleteSystemUser(id);
       await fetchSystemUsers();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- WAITERS MODULE STATES ---
+  const [waiterModalOpen, setWaiterModalOpen] = useState(false);
+  const [waiterName, setWaiterName] = useState('');
+  const [waiterPhone, setWaiterPhone] = useState('');
+  const [waiterPasscode, setWaiterPasscode] = useState('');
+
+  const handleSaveWaiter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waiterName.trim() || !waiterPasscode.trim()) return;
+    setLoading(true);
+    try {
+      await db.addSystemUser({
+        name: waiterName,
+        phone: waiterPhone,
+        username: `waiter_${Math.floor(Math.random() * 10000)}`,
+        passcode: waiterPasscode,
+        role: 'waiter'
+      });
+      await fetchSystemUsers();
+      setWaiterModalOpen(false);
+      setWaiterName('');
+      setWaiterPhone('');
+      setWaiterPasscode('');
     } catch (err) {
       console.error(err);
     } finally {
@@ -1586,6 +1617,16 @@ export default function AdminDashboard({
             >
               <Users size={18} />
               <span>{language === 'ar' ? 'مستخدمين النظام' : 'System Users'}</span>
+            </button>
+          )}
+
+          {hasPermission('system_users') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'waiters' ? 'active' : ''}`}
+              onClick={() => setActiveTab('waiters')}
+            >
+              <Coffee size={18} />
+              <span>{language === 'ar' ? 'إدارة الويترز' : 'Waiters Management'}</span>
             </button>
           )}
 
@@ -3019,7 +3060,7 @@ export default function AdminDashboard({
                     </tr>
                   </thead>
                   <tbody>
-                    {systemUsers.map(user => (
+                    {systemUsers.filter(u => u.role !== 'waiter').map(user => (
                       <tr key={user.id}>
                         <td style={{ fontWeight: 'bold' }}>{user.name}</td>
                         <td className="font-en">{user.phone || '-'}</td>
@@ -3046,6 +3087,61 @@ export default function AdminDashboard({
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: WAITERS MANAGEMENT */}
+        {activeTab === 'waiters' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h1 className="text-gradient-gold" style={{ fontSize: '1.8rem', margin: 0 }}>{language === 'ar' ? 'إدارة الويترز (الكابتن) 🤵‍♂️' : 'Waiters Management 🤵‍♂️'}</h1>
+              <button className="btn-gold" onClick={() => setWaiterModalOpen(true)}>
+                <Plus size={18} />
+                <span>{language === 'ar' ? 'إضافة ويتر' : 'Add Waiter'}</span>
+              </button>
+            </div>
+            
+            <div className="table-panel">
+              <div className="table-wrapper">
+                <table className="luxury-table">
+                  <thead>
+                    <tr>
+                      <th>{language === 'ar' ? 'الاسم' : 'Name'}</th>
+                      <th>{language === 'ar' ? 'الهاتف' : 'Phone'}</th>
+                      <th>{language === 'ar' ? 'رمز الدخول (POS)' : 'POS Passcode'}</th>
+                      <th>{language === 'ar' ? 'طلبات اليوم' : 'Orders Today'}</th>
+                      <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {systemUsers.filter(u => u.role === 'waiter').map(user => {
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      const ordersTodayCount = orders.filter(o => 
+                        o.waiter_id === user.id && o.created_at.startsWith(todayStr)
+                      ).length;
+
+                      return (
+                        <tr key={user.id}>
+                          <td style={{ fontWeight: 'bold' }}>{user.name}</td>
+                          <td className="font-en">{user.phone || '-'}</td>
+                          <td style={{ color: 'var(--gold-secondary)' }}>{user.passcode}</td>
+                          <td style={{ fontWeight: 'bold', color: 'var(--success)' }}>{ordersTodayCount}</td>
+                          <td>
+                            <button 
+                              className="action-btn delete" 
+                              onClick={() => handleDeleteSystemUser(user.id)}
+                              title={language === 'ar' ? 'حذف' : 'Delete'}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -4106,6 +4202,38 @@ export default function AdminDashboard({
               </div>
               <div className="admin-modal-footer">
                 <button type="button" className="btn-outline-gold" onClick={() => setSysUserModalOpen(false)}>{t.close}</button>
+                <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- CRUD DIALOG MODAL FOR WAITERS --- */}
+      {waiterModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setWaiterModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'إضافة ويتر جديد' : 'Add New Waiter'}</h2>
+              <button className="btn-close" onClick={() => setWaiterModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveWaiter}>
+              <div className="admin-modal-body">
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الاسم' : 'Name'} *</label>
+                  <input type="text" className="input-gold" value={waiterName} onChange={(e) => setWaiterName(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'رقم الهاتف' : 'Phone Number'}</label>
+                  <input type="text" className="input-gold" value={waiterPhone} onChange={(e) => setWaiterPhone(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'رمز الدخول للـ POS (أرقام فقط)' : 'POS Passcode (Numbers)'} *</label>
+                  <input type="text" className="input-gold" value={waiterPasscode} onChange={(e) => setWaiterPasscode(e.target.value)} required />
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-outline-gold" onClick={() => setWaiterModalOpen(false)}>{t.close}</button>
                 <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
               </div>
             </form>

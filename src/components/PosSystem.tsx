@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ShoppingBag, User, Utensils, CheckCircle, X, 
+  ShoppingBag, Utensils, CheckCircle, X, 
   Plus, Minus, Trash2, ArrowRight
 } from 'lucide-react';
 import { db } from '../lib/supabase';
@@ -22,8 +22,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
 
   // POS State
-  const [view, setView] = useState<PosView>('role_select');
-  const [role, setRole] = useState<'waiter' | 'customer' | null>(null);
+  const [view, setView] = useState<PosView>('waiter_auth');
+  const [role, setRole] = useState<'waiter' | 'customer' | null>('waiter');
   
   // Waiter Auth
   const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(null);
@@ -52,7 +52,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     ]);
     setCategories(cats.sort((a, b) => a.sort_order - b.sort_order));
     setProducts(prods);
-    setWaiters(users.filter(u => u.role.includes('admin') || u.role.includes('pos')));
+    setWaiters(users.filter(u => u.role === 'waiter' || u.role === 'admin'));
     setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing'));
     if (cats.length > 0) setActiveCategory(cats[0].id);
   };
@@ -253,23 +253,6 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
       <div className="pos-content" dir={language === 'ar' ? 'rtl' : 'ltr'}>
         <AnimatePresence mode="wait">
           
-          {view === 'role_select' && (
-            <motion.div key="role" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }}
-              style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-              <h2 style={{ fontSize: '2.5rem', marginBottom: '3rem' }}>{language === 'ar' ? 'مرحباً بك في مريديان' : 'Welcome to Meridien'}</h2>
-              <div className="grid-options">
-                <div className="option-card" onClick={() => { setRole('waiter'); setView('waiter_auth'); }}>
-                  <User size={64} color="var(--gold-primary)" />
-                  <h3>{t.iamWaiter}</h3>
-                </div>
-                <div className="option-card" onClick={() => { setRole('customer'); setView('customer_info'); }}>
-                  <Utensils size={64} color="var(--gold-primary)" />
-                  <h3>{t.iamCustomer}</h3>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
           {view === 'waiter_auth' && (
             <motion.div key="w_auth" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <h2>{t.selectWaiter}</h2>
@@ -290,7 +273,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   <button className="pos-btn" onClick={handleWaiterLogin}>{t.login}</button>
                 </div>
               )}
-              <button className="pos-btn-outline" style={{ marginTop: '2rem' }} onClick={() => setView('role_select')}>{t.back}</button>
+              <button className="pos-btn-outline" style={{ marginTop: '2rem' }} onClick={() => selectedWaiter ? setSelectedWaiter(null) : onClose()}>{selectedWaiter ? t.back : t.close}</button>
             </motion.div>
           )}
 
@@ -317,7 +300,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <button className="pos-btn-outline" onClick={() => {
                   if (role === 'waiter') setView('waiter_dashboard');
-                  else setView('role_select');
+                  else setView('waiter_auth');
                 }}>{t.back}</button>
                 <button className="pos-btn" disabled={customerPhone.length < 10 || !customerName} onClick={() => setView('order_type')}>{t.continue}</button>
               </div>
@@ -455,11 +438,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   }}>{language === 'ar' ? 'لوحة القيادة' : 'Dashboard'}</button>
                 )}
                 <button className="pos-btn" onClick={() => {
-                  setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setOrderType(null); setView(role === 'waiter' ? 'customer_info' : 'role_select');
+                  setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setOrderType(null); setView('customer_info');
                 }}>{t.newOrder}</button>
                 
                 <button className="pos-btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444' }} onClick={() => {
-                  setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setOrderType(null); setRole(null); setSelectedWaiter(null); setView('role_select');
+                  setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setOrderType(null); setRole('waiter'); setSelectedWaiter(null); setView('waiter_auth');
                 }}>
                   {language === 'ar' ? 'خروج' : 'Exit'}
                 </button>
@@ -475,7 +458,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   <button className="pos-btn" onClick={() => { setCustomerPhone(''); setCustomerName(''); setTableNumber(''); setOrderType(null); setCart([]); setView('customer_info'); }}>
                     {t.newOrder}
                   </button>
-                  <button className="pos-btn-outline" onClick={() => { setSelectedWaiter(null); setWaiterPasscode(''); setRole(null); setView('role_select'); }}>
+                  <button className="pos-btn-outline" onClick={() => { setSelectedWaiter(null); setWaiterPasscode(''); setRole('waiter'); setView('waiter_auth'); }}>
                     {language === 'ar' ? 'تسجيل خروج' : 'Logout'}
                   </button>
                 </div>

@@ -426,6 +426,34 @@ export const db = {
       id: crypto.randomUUID(),
       created_at: new Date().toISOString()
     };
+
+    // Round-Robin Waiter Assignment if no waiter is assigned
+    if (!newOrder.waiter_id) {
+      try {
+        // We use db.getSystemUsers and db.getOrders to avoid 'this' context issues if destructured
+        const users = await db.getSystemUsers();
+        const waiters = users.filter(u => u.role === 'waiter');
+        
+        if (waiters.length > 0) {
+          const orders = await db.getOrders();
+          const lastAssignedOrder = orders.find(o => o.waiter_id);
+          
+          let nextWaiter = waiters[0];
+          if (lastAssignedOrder && lastAssignedOrder.waiter_id) {
+            const lastIndex = waiters.findIndex(w => w.id === lastAssignedOrder.waiter_id);
+            if (lastIndex !== -1 && lastIndex + 1 < waiters.length) {
+              nextWaiter = waiters[lastIndex + 1];
+            }
+          }
+          
+          newOrder.waiter_id = nextWaiter.id;
+          newOrder.waiter_name = nextWaiter.name;
+        }
+      } catch (err) {
+        console.error("Error assigning round-robin waiter:", err);
+      }
+    }
+
     if (supabase) {
       try {
         const { data, error } = await supabase
