@@ -20,6 +20,7 @@ export interface Product {
   is_available: boolean;
   recipe_ar?: string;
   recipe_en?: string;
+  talabat_price?: number;
   created_at?: string;
 }
 
@@ -40,6 +41,11 @@ export interface Order {
   items: OrderItem[];
   total_price: number;
   status: 'pending' | 'preparing' | 'delivered' | 'completed' | 'cancelled';
+  order_type?: 'takeaway' | 'talabat' | 'dine_in' | 'delivery';
+  waiter_id?: string;
+  waiter_name?: string;
+  payment_method?: 'cash' | 'visa' | 'wallet' | 'split';
+  payment_details?: any; // JSON representation of split payments
   created_at: string;
 }
 

@@ -59,6 +59,7 @@ export default function AdminDashboard({
   const [prodNameAr, setProdNameAr] = useState('');
   const [prodNameEn, setProdNameEn] = useState('');
   const [prodPrice, setProdPrice] = useState(0);
+  const [prodTalabatPrice, setProdTalabatPrice] = useState<number | ''>('');
   const [prodImageUrl, setProdImageUrl] = useState('');
   const [prodDescAr, setProdDescAr] = useState('');
   const [prodDescEn, setProdDescEn] = useState('');
@@ -166,7 +167,8 @@ export default function AdminDashboard({
     { id: 'expenses', ar: 'التكاليف والمصروفات', en: 'Costs & Expenses' },
     { id: 'recipes', ar: 'وصفات الشيف', en: 'Chef Recipes' },
     { id: 'system_users', ar: 'مستخدمين النظام', en: 'System Users' },
-    { id: 'settings', ar: 'إدارة النظام والروابط', en: 'Settings' }
+    { id: 'settings', ar: 'إدارة النظام والروابط', en: 'Settings' },
+    { id: 'pos', ar: 'نقاط البيع (كابتن أوردر)', en: 'POS System (Captain)' }
   ];
 
   const hasPermission = (tabId: string) => {
@@ -411,6 +413,7 @@ export default function AdminDashboard({
       setProdNameAr(prod.name_ar);
       setProdNameEn(prod.name_en);
       setProdPrice(prod.price);
+      setProdTalabatPrice(prod.talabat_price ?? '');
       setProdImageUrl(prod.image_url);
       setProdDescAr(prod.description_ar);
       setProdDescEn(prod.description_en);
@@ -423,6 +426,7 @@ export default function AdminDashboard({
       setProdNameAr('');
       setProdNameEn('');
       setProdPrice(0);
+      setProdTalabatPrice('');
       setProdImageUrl('');
       setProdDescAr('');
       setProdDescEn('');
@@ -447,6 +451,7 @@ export default function AdminDashboard({
         name_ar: prodNameAr,
         name_en: prodNameEn,
         price: Number(prodPrice),
+        talabat_price: prodTalabatPrice === '' ? undefined : Number(prodTalabatPrice),
         image_url: prodImageUrl,
         description_ar: prodDescAr,
         description_en: prodDescEn,
@@ -2175,9 +2180,11 @@ export default function AdminDashboard({
                         <th>{t.orderRef}</th>
                         <th>{t.custName}</th>
                         <th>{t.custPhone}</th>
+                        <th>{language === 'ar' ? 'نوع الطلب والويتر' : 'Order Type & Waiter'}</th>
                         <th>{t.orderTable}</th>
                         <th>{t.orderItems}</th>
                         <th>{t.orderTotal}</th>
+                        <th>{language === 'ar' ? 'طريقة الدفع' : 'Payment'}</th>
                         <th>{t.orderDate}</th>
                         <th>{t.thStatus}</th>
                       </tr>
@@ -2188,7 +2195,19 @@ export default function AdminDashboard({
                         <td className="font-en" style={{ fontSize: '0.75rem', color: 'var(--gold-primary)', fontWeight: 'bold' }}>#{order.id.slice(0, 8)}</td>
                         <td style={{ fontWeight: '700' }}>{order.customer_name}</td>
                         <td className="font-en">{order.customer_phone}</td>
-                        <td className="font-en" style={{ fontWeight: 'bold' }}>{order.table_number}</td>
+                        <td className="font-en">
+                          {order.order_type ? (
+                            <span style={{ background: 'rgba(212,175,55,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', color: 'var(--gold-primary)', fontWeight: 'bold' }}>
+                              {order.order_type.toUpperCase()}
+                            </span>
+                          ) : '-'}
+                          {order.waiter_name && (
+                            <div style={{ marginTop: '4px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                              🧑‍🍳 {order.waiter_name}
+                            </div>
+                          )}
+                        </td>
+                        <td className="font-en" style={{ fontWeight: 'bold' }}>{order.table_number || '-'}</td>
                         <td style={{ fontSize: '0.85rem', maxWidth: '220px', whiteSpace: 'normal', lineHeight: '1.4' }}>
                           {order.items.map((item, idx) => (
                             <div key={idx} style={{ color: 'var(--text-gray)' }}>
@@ -2197,6 +2216,17 @@ export default function AdminDashboard({
                           ))}
                         </td>
                         <td className="font-en" style={{ color: 'var(--gold-primary)', fontWeight: '800' }}>{order.total_price.toFixed(2)} EGP</td>
+                        <td className="font-en" style={{ textAlign: 'center' }}>
+                          {order.payment_method ? (
+                            <span style={{ 
+                              background: order.payment_method === 'split' ? 'rgba(139,92,246,0.1)' : 'rgba(16,185,129,0.1)',
+                              color: order.payment_method === 'split' ? '#8b5cf6' : '#10b981',
+                              padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold'
+                            }}>
+                              {order.payment_method.toUpperCase()}
+                            </span>
+                          ) : '-'}
+                        </td>
                         <td className="font-en" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                           {new Date(order.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}
                         </td>
@@ -3064,9 +3094,15 @@ export default function AdminDashboard({
                 </div>
 
                 {/* Price */}
-                <div className="form-group">
-                  <label>{t.thPrice} *</label>
-                  <input type="number" className="input-gold" value={prodPrice} onChange={(e) => setProdPrice(Number(e.target.value))} required />
+                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label>{t.thPrice} *</label>
+                    <input type="number" className="input-gold" value={prodPrice} onChange={(e) => setProdPrice(Number(e.target.value))} required />
+                  </div>
+                  <div>
+                    <label>{language === 'ar' ? 'سعر طلبات (اختياري)' : 'Talabat Price'}</label>
+                    <input type="number" className="input-gold" value={prodTalabatPrice} onChange={(e) => setProdTalabatPrice(e.target.value ? Number(e.target.value) : '')} placeholder={language === 'ar' ? 'اختياري...' : 'Optional...'} />
+                  </div>
                 </div>
 
                 {/* Image URL & Upload */}
