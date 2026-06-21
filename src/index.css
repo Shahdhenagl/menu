@@ -1299,3 +1299,61 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+
+ . t a b l e - r e s p o n s i v e   { 
+     w i d t h :   1 0 0 % ; 
+     o v e r f l o w - x :   a u t o ; 
+     m a r g i n - t o p :   1 r e m ; 
+ } 
+ 
+ . a d m i n - t a b l e   { 
+     w i d t h :   1 0 0 % ; 
+     b o r d e r - c o l l a p s e :   s e p a r a t e ; 
+     b o r d e r - s p a c i n g :   0 ; 
+     t e x t - a l i g n :   r i g h t ; 
+     b a c k g r o u n d :   r g b a ( 2 6 ,   2 6 ,   2 6 ,   0 . 8 ) ; 
+     b o r d e r - r a d i u s :   1 2 p x ; 
+     o v e r f l o w :   h i d d e n ; 
+     b o x - s h a d o w :   0   4 p x   6 p x   r g b a ( 0 , 0 , 0 , 0 . 3 ) ; 
+ } 
+ 
+ . a d m i n - t a b l e   t h   { 
+     b a c k g r o u n d :   v a r ( - - g o l d - p r i m a r y ) ; 
+     c o l o r :   # 0 0 0 ; 
+     p a d d i n g :   1 r e m ; 
+     f o n t - w e i g h t :   b o l d ; 
+     t e x t - t r a n s f o r m :   u p p e r c a s e ; 
+     f o n t - s i z e :   0 . 9 r e m ; 
+     l e t t e r - s p a c i n g :   0 . 5 p x ; 
+ } 
+ 
+ . a d m i n - t a b l e   t d   { 
+     p a d d i n g :   1 r e m ; 
+     b o r d e r - b o t t o m :   1 p x   s o l i d   # 3 3 3 ; 
+     c o l o r :   # f f f ; 
+     v e r t i c a l - a l i g n :   m i d d l e ; 
+ } 
+ 
+ . a d m i n - t a b l e   t r : l a s t - c h i l d   t d   { 
+     b o r d e r - b o t t o m :   n o n e ; 
+ } 
+ 
+ . a d m i n - t a b l e   t r : h o v e r   t d   { 
+     b a c k g r o u n d :   r g b a ( 2 1 2 ,   1 7 5 ,   5 5 ,   0 . 0 5 ) ; 
+ } 
+ 
+ . a d m i n - t a b l e   . a c t i o n - b t n   { 
+     b a c k g r o u n d :   t r a n s p a r e n t ; 
+     b o r d e r :   n o n e ; 
+     c o l o r :   v a r ( - - g o l d - p r i m a r y ) ; 
+     c u r s o r :   p o i n t e r ; 
+     p a d d i n g :   0 . 5 r e m ; 
+     b o r d e r - r a d i u s :   6 p x ; 
+     t r a n s i t i o n :   a l l   0 . 2 s ; 
+ } 
+ 
+ . a d m i n - t a b l e   . a c t i o n - b t n : h o v e r   { 
+     b a c k g r o u n d :   r g b a ( 2 1 2 ,   1 7 5 ,   5 5 ,   0 . 1 ) ; 
+ } 
+  
+ 

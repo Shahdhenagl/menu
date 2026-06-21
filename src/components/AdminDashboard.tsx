@@ -37,11 +37,16 @@ export default function AdminDashboard({
   theme,
   toggleTheme
 }: AdminDashboardProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loginUsername, setLoginUsername] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('meridien_admin_auth') === 'true';
+  });
   const [passcode, setPasscode] = useState('');
+  const [loginUsername, setLoginUsername] = useState('');
   const [passcodeError, setPasscodeError] = useState('');
-  const [loggedInUser, setLoggedInUser] = useState<SystemUser | null>(null);
+  const [loggedInUser, setLoggedInUser] = useState<SystemUser | null>(() => {
+    const saved = localStorage.getItem('meridien_logged_in_user');
+    return saved ? JSON.parse(saved) : null;
+  });
   
   const [activeTab, setActiveTab] = useState<TabType>('analytics');
 
@@ -652,11 +657,15 @@ export default function AdminDashboard({
 
     if (isMasterAdmin || matchedUser) {
       setIsAuthenticated(true);
+      localStorage.setItem('meridien_admin_auth', 'true');
       setPasscodeError('');
       if (matchedUser) {
         setLoggedInUser(matchedUser);
+        localStorage.setItem('meridien_logged_in_user', JSON.stringify(matchedUser));
       } else {
-        setLoggedInUser({ id: 'admin', name: 'Super Admin', phone: '', username: 'admin', passcode: '123456', role: 'admin' });
+        const superAdmin = { id: 'admin', name: 'Super Admin', phone: '', username: 'admin', passcode: '123456', role: 'admin' };
+        setLoggedInUser(superAdmin);
+        localStorage.setItem('meridien_logged_in_user', JSON.stringify(superAdmin));
       }
     } else {
       setPasscodeError(language === 'ar' ? 'اسم المستخدم أو الرمز السري غير صحيح!' : 'Incorrect username or passcode!');
@@ -1940,7 +1949,13 @@ export default function AdminDashboard({
           )}
         </nav>
 
-        <button className="btn-outline-gold" onClick={onClose} style={{ marginTop: 'auto', width: '100%' }}>
+        <button className="btn-outline-gold" onClick={() => {
+          localStorage.removeItem('meridien_admin_auth');
+          localStorage.removeItem('meridien_logged_in_user');
+          setIsAuthenticated(false);
+          setLoggedInUser(null);
+          onClose();
+        }} style={{ marginTop: 'auto', width: '100%' }}>
           <LogOut size={16} />
           {t.exitBtn}
         </button>
