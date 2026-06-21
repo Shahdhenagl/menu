@@ -367,12 +367,22 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                 </motion.div>
               )}
 
-              <div style={{ display: 'flex', gap: '1rem' }}>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                 <button className="pos-btn-outline" onClick={() => {
                   if (role === 'waiter') setView('waiter_dashboard');
-                  else setView('waiter_auth');
+                  else setView('role_select');
                 }}>{t.back}</button>
                 <button className="pos-btn" disabled={customerPhone.length < 10 || !customerName} onClick={() => setView('order_type')}>{t.continue}</button>
+                
+                {role === 'waiter' && (
+                  <button className="pos-btn-outline" style={{ borderColor: 'var(--text-gray)', color: 'var(--text-gray)' }} onClick={() => {
+                    setCustomerPhone('0000000000');
+                    setCustomerName(language === 'ar' ? 'عميل طيار' : 'Walk-in Customer');
+                    setView('order_type');
+                  }}>
+                    {language === 'ar' ? 'تخطي' : 'Skip'}
+                  </button>
+                )}
               </div>
             </motion.div>
           )}
