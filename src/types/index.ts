@@ -5,6 +5,14 @@ export interface Category {
   name_ar: string;
   name_en: string;
   sort_order: number;
+  printer_id?: string | null;
+  created_at?: string;
+}
+
+export interface Printer {
+  id: string;
+  name_ar: string;
+  name_en: string;
   created_at?: string;
 }
 

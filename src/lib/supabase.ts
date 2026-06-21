@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer } from '../types';
 
 // Load credentials from environment
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -705,6 +705,59 @@ export const db = {
     comments.push(newComment);
     saveLocalData('meridien_recipe_comments', comments);
     return newComment;
+  },
+
+  // --- PRINTERS ---
+  async getPrinters(): Promise<Printer[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('printers').select('*');
+        if (!error && data) {
+          saveLocalData('meridien_printers', data);
+          return data;
+        }
+      } catch (err) {
+        console.warn("Supabase fetch printers failed", err);
+      }
+    }
+    return getLocalData('meridien_printers', [] as Printer[]);
+  },
+
+  async addPrinter(printer: Omit<Printer, 'id'>): Promise<Printer> {
+    const newPrinter: Printer = {
+      ...printer,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('printers')
+          .insert([newPrinter])
+          .select()
+          .single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase insert printer failed", err);
+      }
+    }
+    const printers = getLocalData('meridien_printers', [] as Printer[]);
+    printers.push(newPrinter);
+    saveLocalData('meridien_printers', printers);
+    return newPrinter;
+  },
+
+  async deletePrinter(id: string): Promise<void> {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('printers').delete().eq('id', id);
+        if (error) console.error("Supabase delete printer error:", error);
+      } catch (err) {
+        console.warn("Supabase delete printer failed", err);
+      }
+    }
+    const printers = getLocalData('meridien_printers', [] as Printer[]);
+    saveLocalData('meridien_printers', printers.filter(p => p.id !== id));
   }
 };
 

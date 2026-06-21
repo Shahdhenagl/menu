@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer } from '../types';
 import { db } from '../lib/supabase';
+import { printOrderTickets } from '../utils/printUtils';
 import { 
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   ResponsiveContainer, Cell, AreaChart, Area 
@@ -8,7 +9,7 @@ import {
 import { 
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
-  Upload, Printer, Sun, Moon, Search, MonitorSmartphone
+  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -23,7 +24,7 @@ interface AdminDashboardProps {
   toggleTheme: () => void;
 }
 
-type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters';
+type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers';
 
 export default function AdminDashboard({
   onClose,
@@ -51,6 +52,7 @@ export default function AdminDashboard({
   const [catNameAr, setCatNameAr] = useState('');
   const [catNameEn, setCatNameEn] = useState('');
   const [catSortOrder, setCatSortOrder] = useState(0);
+  const [catPrinterId, setCatPrinterId] = useState('');
 
   // Products modal / inputs
   const [prodModalOpen, setProdModalOpen] = useState(false);
@@ -169,7 +171,8 @@ export default function AdminDashboard({
     { id: 'system_users', ar: 'مستخدمين النظام', en: 'System Users' },
     { id: 'waiters', ar: 'إدارة الويترز', en: 'Waiters Management' },
     { id: 'settings', ar: 'إدارة النظام والروابط', en: 'Settings' },
-    { id: 'pos', ar: 'نقاط البيع (كابتن أوردر)', en: 'POS System (Captain)' }
+    { id: 'pos', ar: 'نقاط البيع (كابتن أوردر)', en: 'POS System (Captain)' },
+    { id: 'printers', ar: 'إعدادات الطابعات', en: 'Printers' }
   ];
 
   const hasPermission = (tabId: string) => {
@@ -293,9 +296,59 @@ export default function AdminDashboard({
     }
   };
 
+
+  // --- PRINTERS MODULE STATES ---
+  const [printers, setPrinters] = useState<Printer[]>([]);
+  const [printerModalOpen, setPrinterModalOpen] = useState(false);
+  const [printerNameAr, setPrinterNameAr] = useState('');
+  const [printerNameEn, setPrinterNameEn] = useState('');
+
+  const fetchPrinters = async () => {
+    try {
+      const data = await db.getPrinters();
+      setPrinters(data);
+    } catch (err) {
+      console.error("Error loading printers:", err);
+    }
+  };
+
+  const handleSavePrinter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!printerNameAr.trim() || !printerNameEn.trim()) return;
+    setLoading(true);
+    try {
+      await db.addPrinter({
+        name_ar: printerNameAr,
+        name_en: printerNameEn
+      });
+      await fetchPrinters();
+      setPrinterModalOpen(false);
+      setPrinterNameAr('');
+      setPrinterNameEn('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePrinter = async (id: string) => {
+    if (!confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذه الطابعة؟' : 'Are you sure you want to delete this printer?')) return;
+    setLoading(true);
+    try {
+      await db.deletePrinter(id);
+      await fetchPrinters();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchExpenses();
     fetchSystemUsers();
+    fetchPrinters();
   }, []);
 
   const handleSaveExpense = async (e: React.FormEvent) => {
@@ -385,11 +438,13 @@ export default function AdminDashboard({
       setCatNameAr(cat.name_ar);
       setCatNameEn(cat.name_en);
       setCatSortOrder(cat.sort_order);
+      setCatPrinterId(cat.printer_id || '');
     } else {
       setEditingCategory(null);
       setCatNameAr('');
       setCatNameEn('');
       setCatSortOrder(categories.length + 1);
+      setCatPrinterId('');
     }
     setCatModalOpen(true);
   };
@@ -404,13 +459,15 @@ export default function AdminDashboard({
         await db.updateCategory(editingCategory.id, {
           name_ar: catNameAr,
           name_en: catNameEn,
-          sort_order: Number(catSortOrder)
+          sort_order: Number(catSortOrder),
+          printer_id: catPrinterId || null
         });
       } else {
         await db.addCategory({
           name_ar: catNameAr,
           name_en: catNameEn,
-          sort_order: Number(catSortOrder)
+          sort_order: Number(catSortOrder),
+          printer_id: catPrinterId || null
         });
       }
       await refreshData();
@@ -1699,7 +1756,7 @@ export default function AdminDashboard({
                   className="btn-gold" 
                   style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                 >
-                  <Printer size={16} />
+                  <PrinterIcon size={16} />
                   {language === 'ar' ? 'تصدير التحليلات A4 PDF' : 'Export Analytics PDF'}
                 </button>
               </div>
@@ -2330,6 +2387,28 @@ export default function AdminDashboard({
                             <option value="cancelled" style={{ background: '#121212', color: 'var(--danger)' }}>❌ ملغي</option>
                           </select>
 
+                          <button 
+                            type="button" 
+                            className="btn-outline-gold" 
+                            style={{ 
+                              padding: '0.25rem 0.5rem', 
+                              borderRadius: '8px', 
+                              fontSize: '0.75rem', 
+                              marginTop: '0.3rem', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '0.3rem',
+                              width: '100%',
+                              justifyContent: 'center',
+                              borderColor: '#3b82f6',
+                              color: '#3b82f6'
+                            }}
+                            onClick={() => printOrderTickets(order, categories, products, printers, language)}
+                          >
+                            <PrinterIcon size={12} />
+                            <span>{language === 'ar' ? 'طباعة البونات' : 'Print Tickets'}</span>
+                          </button>
+
                           {/* Collect Payment Button */}
                           {!order.status.startsWith('completed') && order.status !== 'cancelled' && (
                             <button 
@@ -2788,7 +2867,7 @@ export default function AdminDashboard({
                     onClick={() => handlePrintReport('expenses')}
                     style={{ padding: '0.5rem 1rem', borderRadius: '12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                   >
-                    <Printer size={16} />
+                    <PrinterIcon size={16} />
                     {language === 'ar' ? 'تصدير التكاليف A4 PDF' : 'Export Expenses PDF'}
                   </button>
 
@@ -3149,6 +3228,53 @@ export default function AdminDashboard({
           </div>
         )}
 
+        {/* TAB: PRINTERS */}
+        {activeTab === 'printers' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h1 className="text-gradient-gold" style={{ fontSize: '1.8rem', margin: 0 }}>{language === 'ar' ? 'إعدادات الطابعات 🖨️' : 'Printers Settings 🖨️'}</h1>
+              <button className="btn-gold" onClick={() => setPrinterModalOpen(true)}>
+                <Plus size={18} />
+                <span>{language === 'ar' ? 'إضافة طابعة' : 'Add Printer'}</span>
+              </button>
+            </div>
+            
+            <div className="table-panel">
+              <div className="table-wrapper">
+                <table className="luxury-table">
+                  <thead>
+                    <tr>
+                      <th>{language === 'ar' ? 'اسم الطابعة (عربي)' : 'Printer Name (AR)'}</th>
+                      <th>{language === 'ar' ? 'اسم الطابعة (إنجليزي)' : 'Printer Name (EN)'}</th>
+                      <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {printers.map(printer => (
+                      <tr key={printer.id}>
+                        <td style={{ fontWeight: 'bold' }}>{printer.name_ar}</td>
+                        <td className="font-en">{printer.name_en}</td>
+                        <td>
+                          <button className="action-btn delete" onClick={() => handleDeletePrinter(printer.id)}>
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {printers.length === 0 && (
+                      <tr>
+                        <td colSpan={3} style={{ textAlign: 'center', padding: '2rem' }}>
+                          {language === 'ar' ? 'لا توجد طابعات مضافة حالياً.' : 'No printers added yet.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
 
       {/* --- CRUD DIALOG MODAL FOR CATEGORY --- */}
@@ -3172,6 +3298,15 @@ export default function AdminDashboard({
                 <div className="form-group">
                   <label>{t.thOrder} *</label>
                   <input type="number" className="input-gold" value={catSortOrder} onChange={(e) => setCatSortOrder(Number(e.target.value))} required />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'طابعة القسم (اختياري)' : 'Station Printer (Optional)'}</label>
+                  <select className="input-gold" value={catPrinterId} onChange={(e) => setCatPrinterId(e.target.value)}>
+                    <option value="">{language === 'ar' ? '-- بدون طابعة متخصصة --' : '-- No specific printer --'}</option>
+                    {printers.map(p => (
+                      <option key={p.id} value={p.id}>{language === 'ar' ? p.name_ar : p.name_en}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="admin-modal-footer">
@@ -4234,6 +4369,34 @@ export default function AdminDashboard({
               </div>
               <div className="admin-modal-footer">
                 <button type="button" className="btn-outline-gold" onClick={() => setWaiterModalOpen(false)}>{t.close}</button>
+                <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- CRUD DIALOG MODAL FOR PRINTERS --- */}
+      {printerModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setPrinterModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'إضافة طابعة جديدة' : 'Add New Printer'}</h2>
+              <button className="btn-close" onClick={() => setPrinterModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSavePrinter}>
+              <div className="admin-modal-body">
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'اسم الطابعة بالعربي' : 'Printer Name (AR)'} *</label>
+                  <input type="text" className="input-gold" value={printerNameAr} onChange={(e) => setPrinterNameAr(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'اسم الطابعة بالإنجليزي' : 'Printer Name (EN)'} *</label>
+                  <input type="text" className="input-gold" value={printerNameEn} onChange={(e) => setPrinterNameEn(e.target.value)} required />
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-outline-gold" onClick={() => setPrinterModalOpen(false)}>{t.close}</button>
                 <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
               </div>
             </form>

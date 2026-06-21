@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShoppingBag, Utensils, CheckCircle, X, 
-  Plus, Minus, Trash2, ArrowRight
+  Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon
 } from 'lucide-react';
 import { db } from '../lib/supabase';
-import type { Category, Product, Order, OrderItem, SystemUser } from '../types';
+import type { Category, Product, Order, OrderItem, SystemUser, Printer } from '../types';
+import { printOrderTickets } from '../utils/printUtils';
 
 interface PosSystemProps {
   onClose: () => void;
@@ -20,10 +21,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [waiters, setWaiters] = useState<SystemUser[]>([]);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [printers, setPrinters] = useState<Printer[]>([]);
+  const [lastPlacedOrder, setLastPlacedOrder] = useState<Order | null>(null);
 
   // POS State
-  const [view, setView] = useState<PosView>('waiter_auth');
-  const [role, setRole] = useState<'waiter' | 'customer' | null>('waiter');
+  const [view, setView] = useState<PosView>('role_select');
+  const [role, setRole] = useState<'waiter' | 'customer' | null>(null);
   
   // Waiter Auth
   const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(null);
@@ -44,16 +47,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   }, []);
 
   const loadData = async () => {
-    const [cats, prods, users, ords] = await Promise.all([
+    const [cats, prods, users, ords, prnts] = await Promise.all([
       db.getCategories(),
       db.getProducts(),
       db.getSystemUsers(),
-      db.getOrders()
+      db.getOrders(),
+      db.getPrinters()
     ]);
     setCategories(cats.sort((a, b) => a.sort_order - b.sort_order));
     setProducts(prods);
-    setWaiters(users.filter(u => u.role === 'waiter' || u.role === 'admin'));
+    setWaiters(users.filter(u => u.role === 'waiter'));
     setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing'));
+    setPrinters(prnts);
     if (cats.length > 0) setActiveCategory(cats[0].id);
   };
 
@@ -156,10 +161,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
       created_at: new Date().toISOString()
     };
     
-    await db.addOrder(newOrder);
+    const placedOrder = await db.addOrder(newOrder);
+    setLastPlacedOrder(placedOrder);
     setCart([]);
     setView('success');
     loadData();
+    
+    // Auto-print tickets for kitchen/bar
+    printOrderTickets(placedOrder, categories, products, printers, language);
   };
 
   return (
@@ -253,27 +262,88 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
       <div className="pos-content" dir={language === 'ar' ? 'rtl' : 'ltr'}>
         <AnimatePresence mode="wait">
           
+          {view === 'role_select' && (
+            <motion.div key="role_sel" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <h2 style={{ fontSize: '2.5rem', marginBottom: '3rem', textShadow: '0 2px 10px rgba(212,175,55,0.3)' }}>
+                {language === 'ar' ? 'أهلاً بك في نظام الطلبات' : 'Welcome to Order System'}
+              </h2>
+              <div className="grid-options" style={{ maxWidth: '800px' }}>
+                <div className="option-card" onClick={() => { setRole('customer'); setView('customer_info'); }}>
+                  <ShoppingBag size={48} color="var(--gold-primary)" />
+                  <h3 style={{ fontSize: '1.5rem', margin: '0.5rem 0' }}>{t.iamCustomer}</h3>
+                  <p style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>
+                    {language === 'ar' ? 'قم بإنشاء طلبك الخاص من المنيو' : 'Create your own order from the menu'}
+                  </p>
+                </div>
+                <div className="option-card" onClick={() => { setRole('waiter'); setView('waiter_auth'); }}>
+                  <Utensils size={48} color="var(--gold-primary)" />
+                  <h3 style={{ fontSize: '1.5rem', margin: '0.5rem 0' }}>{t.iamWaiter}</h3>
+                  <p style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>
+                    {language === 'ar' ? 'تسجيل الدخول للكباتن والويترز' : 'Login for Captains & Waiters'}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {view === 'waiter_auth' && (
-            <motion.div key="w_auth" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <h2>{t.selectWaiter}</h2>
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center', margin: '2rem 0', maxWidth: '600px' }}>
+            <motion.div key="w_auth" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+              <h2 style={{ fontSize: '2rem', marginBottom: '2rem', color: 'var(--gold-primary)' }}>{t.selectWaiter}</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem', width: '100%', maxWidth: '800px', margin: '0 auto 3rem auto' }}>
                 {waiters.map(w => (
-                  <button key={w.id} onClick={() => setSelectedWaiter(w)}
+                  <div 
+                    key={w.id} 
+                    onClick={() => setSelectedWaiter(w)}
                     style={{ 
-                      padding: '1rem 2rem', borderRadius: '8px', 
-                      background: selectedWaiter?.id === w.id ? 'var(--gold-primary)' : '#222',
+                      background: selectedWaiter?.id === w.id ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : '#1a1a1a',
                       color: selectedWaiter?.id === w.id ? '#000' : '#fff',
-                      border: 'none', cursor: 'pointer', fontSize: '1.2rem', fontWeight: 'bold'
-                    }}>{w.name}</button>
+                      border: selectedWaiter?.id === w.id ? '2px solid transparent' : '2px solid #333',
+                      borderRadius: '16px', padding: '1.5rem', cursor: 'pointer',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.8rem',
+                      transition: 'all 0.3s',
+                      transform: selectedWaiter?.id === w.id ? 'translateY(-5px)' : 'none',
+                      boxShadow: selectedWaiter?.id === w.id ? '0 10px 25px rgba(212,175,55,0.4)' : 'none'
+                    }}
+                    className="waiter-card"
+                  >
+                    <div style={{ 
+                      width: '60px', height: '60px', borderRadius: '50%', 
+                      background: selectedWaiter?.id === w.id ? 'rgba(0,0,0,0.1)' : 'rgba(212,175,55,0.1)',
+                      color: selectedWaiter?.id === w.id ? '#000' : 'var(--gold-primary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '1.5rem', fontWeight: 'bold'
+                    }}>
+                      {w.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center' }}>{w.name}</span>
+                  </div>
                 ))}
               </div>
-              {selectedWaiter && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '300px' }}>
-                  <input type="password" placeholder={t.enterPasscode} className="pos-input" value={waiterPasscode} onChange={e => setWaiterPasscode(e.target.value)} />
-                  <button className="pos-btn" onClick={handleWaiterLogin}>{t.login}</button>
-                </div>
-              )}
-              <button className="pos-btn-outline" style={{ marginTop: '2rem' }} onClick={() => selectedWaiter ? setSelectedWaiter(null) : onClose()}>{selectedWaiter ? t.back : t.close}</button>
+              
+              <AnimatePresence>
+                {selectedWaiter && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', maxWidth: '400px' }}>
+                    <div style={{ background: '#222', padding: '2rem', borderRadius: '16px', border: '1px solid #333' }}>
+                      <h3 style={{ textAlign: 'center', marginBottom: '1.5rem', color: 'var(--gold-primary)' }}>
+                        {language === 'ar' ? `مرحباً كابتن ${selectedWaiter.name}` : `Welcome Capt. ${selectedWaiter.name}`}
+                      </h3>
+                      <input type="password" placeholder={t.enterPasscode} className="pos-input" style={{ marginBottom: '1.5rem', background: '#111', fontSize: '1.5rem', letterSpacing: '0.5rem' }} value={waiterPasscode} onChange={e => setWaiterPasscode(e.target.value)} />
+                      <button className="pos-btn" style={{ width: '100%' }} onClick={handleWaiterLogin}>{t.login}</button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              
+              <button className="pos-btn-outline" style={{ marginTop: '2rem', minWidth: '200px' }} onClick={() => {
+                if (selectedWaiter) {
+                  setSelectedWaiter(null);
+                  setWaiterPasscode('');
+                } else {
+                  setView('role_select');
+                }
+              }}>
+                {selectedWaiter ? t.back : (language === 'ar' ? 'رجوع للرئيسية' : 'Back to Home')}
+              </button>
             </motion.div>
           )}
 
@@ -431,7 +501,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                 <CheckCircle size={120} color="var(--gold-primary)" style={{ marginBottom: '2rem' }} />
               </motion.div>
               <h2 style={{ fontSize: '3rem' }}>{t.successMsg}</h2>
-              <div style={{ display: 'flex', gap: '1.5rem', marginTop: '3rem' }}>
+              <div style={{ display: 'flex', gap: '1.5rem', marginTop: '3rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                {lastPlacedOrder && (
+                  <button className="pos-btn" style={{ background: '#3b82f6', color: '#fff' }} onClick={() => printOrderTickets(lastPlacedOrder, categories, products, printers, language)}>
+                    <PrinterIcon size={20} style={{ marginRight: '8px' }} />
+                    {language === 'ar' ? 'طباعة البونات' : 'Print Tickets'}
+                  </button>
+                )}
                 {role === 'waiter' && (
                   <button className="pos-btn-outline" onClick={() => {
                     setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setOrderType(null); setView('waiter_dashboard');
