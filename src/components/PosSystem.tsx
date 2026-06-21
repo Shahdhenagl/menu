@@ -334,9 +334,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                     initial={{ y: -50, opacity: 0 }} 
                     animate={{ y: 0, opacity: 1 }} 
                     transition={{ type: 'spring', stiffness: 100 }}
-                    src={settings.logo_url} 
+                    src={settings.logo_url === '/logo.png' ? '/logo.png?v=3' : settings.logo_url} 
                     alt="Restaurant Logo" 
-                    style={{ width: '180px', height: '180px', objectFit: 'contain', marginBottom: '2rem', filter: 'drop-shadow(0 10px 20px rgba(212,175,55,0.3))' }} 
+                    style={{ width: '180px', height: '180px', objectFit: 'contain', marginBottom: '2rem', filter: 'drop-shadow(0 10px 20px rgba(212,175,55,0.3))', mixBlendMode: 'screen' }} 
                   />
                 ) : (
                   <motion.div 

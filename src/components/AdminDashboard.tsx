@@ -2637,7 +2637,7 @@ export default function AdminDashboard({
                   </div>
                   {setLogoUrl && (
                     <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <img src={setLogoUrl} alt="Logo Preview" style={{ width: '45px', height: '45px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--gold-primary)', padding: '2px', background: '#fff' }} />
+                      <img src={setLogoUrl === '/logo.png' ? '/logo.png?v=3' : setLogoUrl} alt="Logo Preview" style={{ width: '45px', height: '45px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--gold-primary)', padding: '2px', background: '#111', mixBlendMode: 'screen' }} />
                       <button 
                         type="button" 
                         className="btn-outline-gold" 

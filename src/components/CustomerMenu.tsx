@@ -148,7 +148,7 @@ export default function CustomerMenu({
         <a href="#" className="logo-container">
           <div className="logo-circle">
             {settings.logo_url ? (
-              <img src={settings.logo_url} alt="Meridien Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={settings.logo_url === '/logo.png' ? '/logo.png?v=3' : settings.logo_url} alt="Meridien Logo" style={{ width: '100%', height: '100%', objectFit: 'cover', mixBlendMode: 'screen' }} />
             ) : (
               <div style={{ color: 'var(--gold-primary)', fontWeight: '900', fontSize: '1.2rem', fontFamily: 'var(--font-en)' }}>M</div>
             )}
@@ -361,7 +361,7 @@ export default function CustomerMenu({
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
           <div className="logo-circle" style={{ margin: '0 auto 1rem auto', width: '60px', height: '60px' }}>
             {settings.logo_url ? (
-              <img src={settings.logo_url} alt="Meridien Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={settings.logo_url === '/logo.png' ? '/logo.png?v=3' : settings.logo_url} alt="Meridien Logo" style={{ width: '100%', height: '100%', objectFit: 'cover', mixBlendMode: 'screen' }} />
             ) : (
               <div style={{ color: 'var(--gold-primary)', fontWeight: '900', fontSize: '1.5rem', fontFamily: 'var(--font-en)' }}>M</div>
             )}
