@@ -1481,6 +1481,34 @@ export default function AdminDashboard({
           </div>
 
         <nav className="admin-nav">
+          {hasPermission('pos') && (
+            <button 
+              onClick={() => {
+                window.history.pushState({}, '', '/pos');
+                window.dispatchEvent(new Event('popstate'));
+              }}
+              style={{
+                marginBottom: '1rem',
+                background: 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))',
+                color: '#000',
+                border: 'none',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                width: '100%'
+              }}
+            >
+              <MonitorSmartphone size={18} />
+              {language === 'ar' ? 'نظام الـ POS' : 'POS System'}
+            </button>
+          )}
+
+
           {hasPermission('analytics') && (
             <button 
               className={`admin-nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
@@ -1576,33 +1604,6 @@ export default function AdminDashboard({
           <LogOut size={16} />
           {t.exitBtn}
         </button>
-
-        {hasPermission('pos') && (
-          <button 
-            onClick={() => {
-              window.history.pushState({}, '', '/pos');
-              window.dispatchEvent(new Event('popstate'));
-            }}
-            style={{
-              marginTop: '1rem',
-              background: 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))',
-              color: '#000',
-              border: 'none',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              width: '100%'
-            }}
-          >
-            <MonitorSmartphone size={18} />
-            {language === 'ar' ? 'دخول لنظام الـ POS' : 'Enter POS System'}
-          </button>
-        )}
       </aside>
 
       {/* 2. Main content area */}
