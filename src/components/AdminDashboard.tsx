@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice } from '../types';
+import { useState, useEffect, useRef } from 'react';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification } from '../types';
 import { db } from '../lib/supabase';
 import { printOrderTickets } from '../utils/printUtils';
 import { 
@@ -9,7 +9,7 @@ import {
 import {
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
-  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package
+  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -172,7 +172,10 @@ export default function AdminDashboard({
     { id: 'waiters', ar: 'إدارة الويترز', en: 'Waiters Management' },
     { id: 'settings', ar: 'إدارة النظام والروابط', en: 'Settings' },
     { id: 'pos', ar: 'نقاط البيع (كابتن أوردر)', en: 'POS System (Captain)' },
-    { id: 'printers', ar: 'إعدادات الطابعات', en: 'Printers' }
+    { id: 'printers', ar: 'إعدادات الطابعات', en: 'Printers' },
+    { id: 'inventory', ar: 'إدارة المخازن والموردين', en: 'Inventory & Suppliers' },
+    { id: 'inventory_manager', ar: 'أمين المخزن', en: 'Inventory Manager' },
+    { id: 'kitchen_manager', ar: 'مسؤول المطبخ / التصنيع', en: 'Kitchen Manager' }
   ];
 
   const hasPermission = (tabId: string) => {
@@ -304,7 +307,7 @@ export default function AdminDashboard({
   const [printerNameEn, setPrinterNameEn] = useState('');
 
   // --- INVENTORY STATES ---
-  const [inventorySubTab, setInventorySubTab] = useState<'suppliers' | 'items' | 'invoices'>('items');
+  const [inventorySubTab, setInventorySubTab] = useState<'suppliers' | 'items' | 'invoices' | 'mfg_orders'>('items');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [purchaseInvoices, setPurchaseInvoices] = useState<PurchaseInvoice[]>([]);
@@ -318,6 +321,8 @@ export default function AdminDashboard({
   const [invModalOpen, setInvModalOpen] = useState(false);
   const [invName, setInvName] = useState('');
   const [invUnit, setInvUnit] = useState('كجم');
+  const [invUnitsPerCarton, setInvUnitsPerCarton] = useState<number | ''>('');
+  const [invUnitsPerBox, setInvUnitsPerBox] = useState<number | ''>('');
 
   // Purchase Invoice modal
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
@@ -325,22 +330,70 @@ export default function AdminDashboard({
   const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [invoiceCart, setInvoiceCart] = useState<{item_id: string, quantity: number, unit_price: number}[]>([]);
 
+  // Phase 2: Manufacturing Orders & Notifications
+  const [notifications, setNotifications] = useState<SystemNotification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  
+  const [manufacturingOrders, setManufacturingOrders] = useState<ManufacturingOrder[]>([]);
+  const [mfgModalOpen, setMfgModalOpen] = useState(false);
+  const [mfgCart, setMfgCart] = useState<{item_id: string, item_name: string, quantity: number, unit: string, calculated_main_quantity: number}[]>([]);
+
   const fetchInventoryData = async () => {
     try {
       const sups = await db.getSuppliers();
       const items = await db.getInventoryItems();
       const invs = await db.getPurchaseInvoices();
+      const mfg = await db.getManufacturingOrders();
       setSuppliers(sups);
       setInventoryItems(items);
       setPurchaseInvoices(invs);
+      setManufacturingOrders(mfg);
+      
+      if (loggedInUser) {
+        const notifs = await db.getNotifications(loggedInUser.role);
+        setNotifications(notifs);
+      }
     } catch (err) {
       console.error("Error loading inventory:", err);
     }
   };
 
+  const prevUnreadCount = useRef(0);
+
   useEffect(() => {
     fetchInventoryData();
-  }, []);
+  }, [loggedInUser]);
+
+  useEffect(() => {
+    const currentUnread = notifications.filter(n => !n.is_read).length;
+    if (currentUnread > prevUnreadCount.current) {
+      try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContext) {
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+          
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1);
+          
+          gainNode.gain.setValueAtTime(0, ctx.currentTime);
+          gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+          
+          osc.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          
+          osc.start();
+          osc.stop(ctx.currentTime + 0.5);
+        }
+      } catch (e) {
+        console.error('Audio play failed:', e);
+      }
+    }
+    prevUnreadCount.current = currentUnread;
+  }, [notifications]);
 
   const handleSaveSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -379,11 +432,16 @@ export default function AdminDashboard({
         stock_factory: 0,
         stock_distribution: 0,
         avg_purchase_price: 0,
-        last_purchase_price: 0
+        last_purchase_price: 0,
+        units_per_carton: invUnitsPerCarton ? Number(invUnitsPerCarton) : undefined,
+        units_per_box: invUnitsPerBox ? Number(invUnitsPerBox) : undefined
       });
       await fetchInventoryData();
       setInvModalOpen(false);
       setInvName('');
+      setInvUnit('كجم');
+      setInvUnitsPerCarton('');
+      setInvUnitsPerBox('');
     } catch (err) {
       console.error(err);
     } finally {
@@ -439,6 +497,42 @@ export default function AdminDashboard({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveManufacturingOrder = async () => {
+    if (mfgCart.length === 0) return;
+    setLoading(true);
+    try {
+      await db.addManufacturingOrder({
+        status: 'pending',
+        items: mfgCart,
+        requested_by: loggedInUser ? loggedInUser.name : 'Unknown'
+      });
+      await fetchInventoryData();
+      setMfgModalOpen(false);
+      setMfgCart([]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveManufacturingOrder = async (id: string, isApprove: boolean) => {
+    setLoading(true);
+    try {
+      await db.updateManufacturingOrderStatus(id, isApprove ? 'approved' : 'rejected', loggedInUser ? loggedInUser.name : 'Unknown');
+      await fetchInventoryData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const markNotificationAsRead = async (id: string) => {
+    await db.markNotificationRead(id);
+    await fetchInventoryData();
   };
 
   const fetchPrinters = async () => {
@@ -1854,6 +1948,69 @@ export default function AdminDashboard({
 
       {/* 2. Main content area */}
       <main className="admin-main">
+        <div className="admin-top-header" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', position: 'relative' }}>
+          <div className="notifications-wrapper" style={{ position: 'relative' }}>
+            <button 
+              className="btn-icon" 
+              onClick={() => setShowNotifications(!showNotifications)}
+              style={{ position: 'relative', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-color)' }}
+            >
+              <Bell size={24} />
+              {notifications.filter(n => !n.is_read).length > 0 && (
+                <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: 'red', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {notifications.filter(n => !n.is_read).length}
+                </span>
+              )}
+            </button>
+            {showNotifications && (
+              <div className="notifications-dropdown" style={{
+                position: 'absolute',
+                top: '100%',
+                right: language === 'en' ? 0 : 'auto',
+                left: language === 'ar' ? 0 : 'auto',
+                width: '300px',
+                background: 'var(--surface-color)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                zIndex: 1000,
+                maxHeight: '400px',
+                overflowY: 'auto'
+              }}>
+                <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{language === 'ar' ? 'الإشعارات' : 'Notifications'}</h3>
+                </div>
+                <div style={{ padding: '0.5rem' }}>
+                  {notifications.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '1rem' }}>
+                      {language === 'ar' ? 'لا توجد إشعارات' : 'No notifications'}
+                    </p>
+                  ) : (
+                    notifications.map(notif => (
+                      <div key={notif.id} style={{ 
+                        padding: '0.8rem', 
+                        borderBottom: '1px solid var(--border-color)', 
+                        background: notif.is_read ? 'transparent' : 'rgba(212, 175, 55, 0.1)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.3rem',
+                        cursor: notif.is_read ? 'default' : 'pointer'
+                      }} onClick={() => !notif.is_read && markNotificationAsRead(notif.id)}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong style={{ fontSize: '0.9rem' }}>{notif.title}</strong>
+                          {!notif.is_read && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--gold-primary)' }}></span>}
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{notif.message}</p>
+                        <small style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{new Date(notif.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}</small>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* TAB 1: OVERVIEW & ANALYTICS */}
         {activeTab === 'analytics' && (
           <div>
@@ -3458,6 +3615,13 @@ export default function AdminDashboard({
               >
                 {language === 'ar' ? 'الموردين' : 'Suppliers'}
               </button>
+              <button 
+                className={`btn-outline-gold ${inventorySubTab === 'mfg_orders' ? 'active' : ''}`}
+                onClick={() => setInventorySubTab('mfg_orders')}
+                style={{ background: inventorySubTab === 'mfg_orders' ? 'var(--gold-primary)' : 'transparent', color: inventorySubTab === 'mfg_orders' ? '#000' : 'var(--gold-primary)' }}
+              >
+                {language === 'ar' ? 'أوامر التصنيع / أذون الصرف' : 'Manufacturing Orders'}
+              </button>
             </div>
 
             {/* ITEMS SUB TAB */}
@@ -3477,6 +3641,13 @@ export default function AdminDashboard({
                     <div className="stat-info">
                       <h3>{language === 'ar' ? 'قيمة المخزن الأساسي' : 'Main Stock Value'}</h3>
                       <p className="stat-value">{inventoryItems.reduce((sum, item) => sum + (item.stock_main * item.avg_purchase_price), 0).toFixed(2)}</p>
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-icon"><Package color="#000" size={24} /></div>
+                    <div className="stat-info">
+                      <h3>{language === 'ar' ? 'قيمة بضاعة المصنع / المطبخ' : 'Factory Stock Value'}</h3>
+                      <p className="stat-value">{inventoryItems.reduce((sum, item) => sum + (item.stock_factory * item.avg_purchase_price), 0).toFixed(2)}</p>
                     </div>
                   </div>
                 </div>
@@ -3596,6 +3767,74 @@ export default function AdminDashboard({
                       ))}
                       {purchaseInvoices.length === 0 && (
                         <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* MANUFACTURING ORDERS SUB TAB */}
+            {inventorySubTab === 'mfg_orders' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'أوامر التصنيع وأذون الصرف' : 'Manufacturing Orders & Transfers'}</h2>
+                  {(loggedInUser?.role === 'kitchen_manager' || loggedInUser?.role === 'admin') && (
+                    <button className="btn-gold" onClick={() => setMfgModalOpen(true)}>
+                      <Plus size={18} /> {language === 'ar' ? 'طلب صرف خامات' : 'Request Materials'}
+                    </button>
+                  )}
+                </div>
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'رقم الطلب' : 'Order ID'}</th>
+                        <th>{language === 'ar' ? 'المستخدم (بواسطة)' : 'Requested By'}</th>
+                        <th>{language === 'ar' ? 'الأصناف' : 'Items'}</th>
+                        <th>{language === 'ar' ? 'تاريخ الطلب' : 'Date'}</th>
+                        <th>{language === 'ar' ? 'الحالة' : 'Status'}</th>
+                        <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {manufacturingOrders.map(order => (
+                        <tr key={order.id}>
+                          <td className="font-en">#{order.id.slice(0, 8)}</td>
+                          <td>{order.requested_by}</td>
+                          <td>
+                            {order.items.map((i, idx) => (
+                              <div key={idx} style={{ fontSize: '0.85rem' }}>
+                                {i.quantity} {language === 'ar' && i.unit === 'kilo' ? 'كجم' : i.unit === 'gram' ? 'جرام' : i.unit === 'carton' ? 'كرتونة' : i.unit === 'box' ? 'علبة' : i.unit} من {i.item_name}
+                              </div>
+                            ))}
+                          </td>
+                          <td className="font-en">{new Date(order.created_at || '').toLocaleDateString()}</td>
+                          <td>
+                            <span style={{ 
+                              padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold',
+                              background: order.status === 'approved' ? 'rgba(16,185,129,0.2)' : order.status === 'rejected' ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)',
+                              color: order.status === 'approved' ? 'var(--success)' : order.status === 'rejected' ? 'var(--danger)' : 'orange'
+                            }}>
+                              {order.status === 'approved' ? (language === 'ar' ? 'مقبول' : 'Approved') : order.status === 'rejected' ? (language === 'ar' ? 'مرفوض' : 'Rejected') : (language === 'ar' ? 'قيد الانتظار' : 'Pending')}
+                            </span>
+                          </td>
+                          <td>
+                            {order.status === 'pending' && (loggedInUser?.role === 'inventory_manager' || loggedInUser?.role === 'admin') && (
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button className="action-btn edit" onClick={() => handleApproveManufacturingOrder(order.id, true)} title={language === 'ar' ? 'قبول' : 'Approve'}>
+                                  <CheckCircle size={16} color="var(--success)" />
+                                </button>
+                                <button className="action-btn delete" onClick={() => handleApproveManufacturingOrder(order.id, false)} title={language === 'ar' ? 'رفض' : 'Reject'}>
+                                  <X size={16} color="var(--danger)" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {manufacturingOrders.length === 0 && (
+                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -4780,6 +5019,14 @@ export default function AdminDashboard({
                   <label>{language === 'ar' ? 'الوحدة (كجم، لتر، قطعة..)' : 'Unit'}</label>
                   <input type="text" className="input-gold" value={invUnit} onChange={e => setInvUnit(e.target.value)} />
                 </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الوحدات في الكرتونة (اختياري)' : 'Units per Carton (Optional)'}</label>
+                  <input type="number" className="input-gold" min="1" value={invUnitsPerCarton} onChange={e => setInvUnitsPerCarton(e.target.value ? Number(e.target.value) : '')} />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الوحدات في العلبة (اختياري)' : 'Units per Box (Optional)'}</label>
+                  <input type="number" className="input-gold" min="1" value={invUnitsPerBox} onChange={e => setInvUnitsPerBox(e.target.value ? Number(e.target.value) : '')} />
+                </div>
               </div>
               <div className="admin-modal-footer">
                 <button type="button" className="btn-outline-gold" onClick={() => setInvModalOpen(false)}>{t.close}</button>
@@ -4880,6 +5127,85 @@ export default function AdminDashboard({
             <div className="admin-modal-footer">
               <button type="button" className="btn-outline-gold" onClick={() => setInvoiceModalOpen(false)}>{t.close}</button>
               <button type="button" className="btn-gold" onClick={handleSavePurchaseInvoice} disabled={loading || invoiceCart.length === 0}>{t.save}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Add Manufacturing Order */}
+      {mfgModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setMfgModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'طلب صرف خامات (للتصنيع)' : 'Request Materials (Manufacturing)'}</h2>
+              <button className="btn-close" onClick={() => setMfgModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="admin-modal-body">
+              <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                <h3 style={{ marginBottom: '1rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تفاصيل الأصناف' : 'Order Items'}</h3>
+                
+                {/* Add item row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <select id="mfg-new-item" className="input-gold" style={{ padding: '0.5rem' }}>
+                    <option value="">{language === 'ar' ? 'اختر الصنف/الخامة...' : 'Select item...'}</option>
+                    {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                  </select>
+                  <input type="number" id="mfg-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
+                  <select id="mfg-new-unit" className="input-gold" style={{ padding: '0.5rem' }}>
+                    <option value="kilo">{language === 'ar' ? 'كجم' : 'KG'}</option>
+                    <option value="gram">{language === 'ar' ? 'جرام' : 'Gram'}</option>
+                    <option value="piece">{language === 'ar' ? 'قطعة' : 'Piece'}</option>
+                    <option value="carton">{language === 'ar' ? 'كرتونة' : 'Carton'}</option>
+                    <option value="box">{language === 'ar' ? 'علبة' : 'Box'}</option>
+                  </select>
+                  <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
+                    const idEl = document.getElementById('mfg-new-item') as HTMLSelectElement;
+                    const qtyEl = document.getElementById('mfg-new-qty') as HTMLInputElement;
+                    const unitEl = document.getElementById('mfg-new-unit') as HTMLSelectElement;
+                    const itemId = idEl.value;
+                    const qty = parseFloat(qtyEl.value);
+                    const unit = unitEl.value as 'kilo'|'gram'|'piece'|'carton'|'box';
+                    if (itemId && qty > 0) {
+                      setMfgCart([...mfgCart, { item_id: itemId, item_name: inventoryItems.find(i=>i.id===itemId)?.name || '', quantity: qty, unit, calculated_main_quantity: 0 }]);
+                      idEl.value = ''; qtyEl.value = ''; unitEl.value = 'kilo';
+                    }
+                  }}>
+                    <Plus size={16} />
+                  </button>
+                </div>
+
+                {/* Cart list */}
+                {mfgCart.length > 0 && (
+                  <table className="admin-table" style={{ marginTop: '1rem', fontSize: '0.9rem' }}>
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'الصنف' : 'Item'}</th>
+                        <th>{language === 'ar' ? 'الكمية' : 'Qty'}</th>
+                        <th>{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mfgCart.map((c, idx) => (
+                        <tr key={idx}>
+                          <td>{c.item_name}</td>
+                          <td>{c.quantity}</td>
+                          <td>{language === 'ar' && c.unit === 'kilo' ? 'كجم' : c.unit === 'gram' ? 'جرام' : c.unit === 'carton' ? 'كرتونة' : c.unit === 'box' ? 'علبة' : c.unit}</td>
+                          <td>
+                            <button type="button" style={{ background: 'transparent', border: 'none', color: '#ff4d4d', cursor: 'pointer' }} onClick={() => setMfgCart(mfgCart.filter((_, i) => i !== idx))}>
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button type="button" className="btn-outline-gold" onClick={() => setMfgModalOpen(false)}>{t.close}</button>
+              <button type="button" className="btn-gold" onClick={handleSaveManufacturingOrder} disabled={loading || mfgCart.length === 0}>{t.save}</button>
             </div>
           </div>
         </div>

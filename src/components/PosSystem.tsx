@@ -309,7 +309,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
             <motion.div key="role_sel" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
               
               {/* Animated Floating Elements for Royal Effect */}
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 0, opacity: 0.1 }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 0, opacity: 0.25 }}>
                 <motion.div animate={{ y: [-20, 20, -20], rotate: [0, 10, -10, 0] }} transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', top: '15%', left: '10%' }}>
                   <Pizza size={80} color="var(--gold-primary)" />
                 </motion.div>
@@ -325,26 +325,44 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                 <motion.div animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }} transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', top: '50%', left: '5%' }}>
                   <Cake size={60} color="var(--gold-primary)" />
                 </motion.div>
+                <motion.div animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', top: '25%', right: '35%' }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--gold-primary)', boxShadow: '0 0 20px var(--gold-primary)' }} />
+                </motion.div>
+                <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0.8, 0.3] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', bottom: '35%', left: '35%' }}>
+                  <div style={{ width: 15, height: 15, borderRadius: '50%', background: 'var(--gold-primary)', boxShadow: '0 0 20px var(--gold-primary)' }} />
+                </motion.div>
               </div>
 
               {/* Main Content */}
-              <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'radial-gradient(circle at center, rgba(212,175,55,0.05) 0%, transparent 70%)', padding: '4rem', borderRadius: '50%' }}>
+              <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'radial-gradient(circle at center, rgba(212,175,55,0.15) 0%, transparent 70%)', padding: '4rem', borderRadius: '50%' }}>
                 {settings?.logo_url ? (
-                  <motion.img 
+                  <motion.div 
                     initial={{ y: -50, opacity: 0 }} 
                     animate={{ y: 0, opacity: 1 }} 
                     transition={{ type: 'spring', stiffness: 100 }}
-                    src={settings.logo_url === '/logo.png' ? '/logo.png?v=3' : settings.logo_url} 
-                    alt="Restaurant Logo" 
-                    style={{ width: '180px', height: '180px', objectFit: 'contain', marginBottom: '2rem', filter: 'drop-shadow(0 10px 20px rgba(212,175,55,0.3))', mixBlendMode: 'screen' }} 
-                  />
+                    style={{ 
+                      width: '200px', height: '200px', borderRadius: '50%', 
+                      background: 'rgba(255,255,255,0.05)', 
+                      backdropFilter: 'blur(10px)',
+                      border: '3px solid var(--gold-primary)', 
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                      marginBottom: '2rem', overflow: 'hidden',
+                      boxShadow: '0 10px 40px rgba(212,175,55,0.4)' 
+                    }}
+                  >
+                    <img 
+                      src={settings.logo_url === '/logo.png' ? '/logo.png?v=' + new Date().getTime() : settings.logo_url} 
+                      alt="Restaurant Logo" 
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                    />
+                  </motion.div>
                 ) : (
                   <motion.div 
                     initial={{ y: -50, opacity: 0 }} 
                     animate={{ y: 0, opacity: 1 }} 
-                    style={{ width: '150px', height: '150px', borderRadius: '50%', background: 'linear-gradient(45deg, #111, #222)', border: '2px solid var(--gold-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', boxShadow: '0 10px 30px rgba(212,175,55,0.2)' }}
+                    style={{ width: '180px', height: '180px', borderRadius: '50%', background: 'linear-gradient(45deg, #111, #222)', border: '3px solid var(--gold-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', boxShadow: '0 10px 40px rgba(212,175,55,0.4)' }}
                   >
-                    <ChefHat size={64} color="var(--gold-primary)" />
+                    <ChefHat size={80} color="var(--gold-primary)" />
                   </motion.div>
                 )}
 
@@ -458,7 +476,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   if (role === 'waiter') setView('waiter_dashboard');
                   else setView('role_select');
                 }}>{t.back}</button>
-                <button className="pos-btn" disabled={customerPhone.length < 10 || !customerName} onClick={() => setView('order_type')}>{t.continue}</button>
+                <button className="pos-btn" disabled={!customerName} onClick={() => setView('order_type')}>{t.continue}</button>
                 
                 {role === 'waiter' && (
                   <button className="pos-btn-outline" style={{ borderColor: 'var(--text-gray)', color: 'var(--text-gray)' }} onClick={() => {
@@ -773,7 +791,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   </div>
                 </div>
 
-                <button className="pos-btn" style={{ width: '100%', padding: '1rem' }} onClick={async () => {
+                <button className="pos-btn" style={{ width: '100%', padding: '1rem', marginBottom: '1rem' }} onClick={async () => {
                   await db.updateOrder(editingOrder.id, {
                     status: editingOrder.status,
                     order_type: editingOrder.order_type,
@@ -785,6 +803,19 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   loadData();
                 }}>
                   {language === 'ar' ? 'حفظ التعديلات' : 'Save Changes'}
+                </button>
+
+                <button className="pos-btn-outline" style={{ width: '100%', padding: '1rem', borderColor: '#ef4444', color: '#ef4444' }} onClick={async () => {
+                  if(confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذا الطلب؟' : 'Are you sure you want to delete this order?')) {
+                    await db.deleteOrder(editingOrder.id);
+                    setEditingOrder(null);
+                    setEditOrderId(null);
+                    setView('waiter_dashboard');
+                    loadData();
+                  }
+                }}>
+                  <Trash2 size={16} style={{ display: 'inline', marginRight: '4px' }} />
+                  {language === 'ar' ? 'حذف الطلب نهائياً' : 'Delete Order'}
                 </button>
 
               </div>

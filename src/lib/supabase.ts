@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification } from '../types';
 
 // Load credentials from environment
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -533,6 +533,21 @@ export const db = {
     return orders[index];
   },
 
+  async deleteOrder(id: string): Promise<void> {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('orders').delete().eq('id', id);
+        if (error) throw error;
+        return;
+      } catch (err) {
+        console.warn("Supabase delete failed, falling back to mock database.", err);
+      }
+    }
+    const orders = getLocalData('meridien_orders', initialOrders);
+    const updatedOrders = orders.filter(o => o.id !== id);
+    saveLocalData('meridien_orders', updatedOrders);
+  },
+
   // --- SETTINGS ---
   async getSettings(): Promise<RestaurantSettings> {
     if (supabase) {
@@ -874,6 +889,83 @@ export const db = {
     saveLocalData('meridien_inventory_items', inventoryItems);
     
     return newInvoice;
+  },
+
+  // --- MANUFACTURING ORDERS ---
+  async getManufacturingOrders(): Promise<ManufacturingOrder[]> {
+    return getLocalData('meridien_mfg_orders', []);
+  },
+  async addManufacturingOrder(order: Omit<ManufacturingOrder, 'id'>): Promise<ManufacturingOrder> {
+    const newOrder: ManufacturingOrder = { ...order, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    const orders = await this.getManufacturingOrders();
+    saveLocalData('meridien_mfg_orders', [...orders, newOrder]);
+    
+    // Create Notification
+    await this.addNotification({
+      title: 'طلب تصنيع / صرف جديد',
+      message: `تم طلب صرف مواد للمطبخ بواسطة ${newOrder.requested_by}`,
+      target_role: 'inventory_manager'
+    });
+    
+    return newOrder;
+  },
+  async updateManufacturingOrderStatus(id: string, status: 'approved' | 'rejected', approved_by: string): Promise<void> {
+    const orders = await this.getManufacturingOrders();
+    const orderIndex = orders.findIndex(o => o.id === id);
+    if (orderIndex === -1) return;
+    
+    const order = orders[orderIndex];
+    order.status = status;
+    order.approved_by = approved_by;
+    saveLocalData('meridien_mfg_orders', orders);
+
+    if (status === 'approved') {
+      const inventoryItems = await this.getInventoryItems();
+      for (const itemReq of order.items) {
+        const itemIndex = inventoryItems.findIndex(i => i.id === itemReq.item_id);
+        if (itemIndex > -1) {
+          inventoryItems[itemIndex].stock_main -= itemReq.calculated_main_quantity;
+          inventoryItems[itemIndex].stock_factory += itemReq.calculated_main_quantity;
+        }
+      }
+      saveLocalData('meridien_inventory_items', inventoryItems);
+      
+      await this.addNotification({
+        title: 'تمت الموافقة على الطلب',
+        message: `تمت الموافقة على طلب الصرف من قبل ${approved_by}`,
+        target_role: 'kitchen_manager'
+      });
+    } else {
+      await this.addNotification({
+        title: 'تم رفض الطلب',
+        message: `تم رفض طلب الصرف من قبل ${approved_by}`,
+        target_role: 'kitchen_manager'
+      });
+    }
+  },
+
+  // --- NOTIFICATIONS ---
+  async getNotifications(role: string): Promise<SystemNotification[]> {
+    const all = getLocalData('meridien_notifications', []) as SystemNotification[];
+    return all.filter(n => n.target_role === 'all' || n.target_role === role);
+  },
+  async addNotification(notif: Omit<SystemNotification, 'id' | 'created_at' | 'is_read'>): Promise<void> {
+    const all = getLocalData('meridien_notifications', []) as SystemNotification[];
+    const newNotif: SystemNotification = {
+      ...notif,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+      is_read: false
+    };
+    saveLocalData('meridien_notifications', [newNotif, ...all]);
+  },
+  async markNotificationRead(id: string): Promise<void> {
+    const all = getLocalData('meridien_notifications', []) as SystemNotification[];
+    const idx = all.findIndex(n => n.id === id);
+    if (idx > -1) {
+      all[idx].is_read = true;
+      saveLocalData('meridien_notifications', all);
+    }
   }
 };
 

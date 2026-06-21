@@ -129,6 +129,9 @@ export interface InventoryItem {
   last_purchase_price: number;
   avg_purchase_price: number;
   
+  units_per_carton?: number;
+  units_per_box?: number;
+
   created_at?: string;
 }
 
@@ -148,4 +151,30 @@ export interface PurchaseInvoice {
   items: PurchaseInvoiceItem[];
   total_amount: number;
   created_at?: string;
+}
+
+export interface ManufacturingOrderItem {
+  item_id: string;
+  item_name: string;
+  quantity: number;
+  unit: string; // 'kilo' | 'gram' | 'unit' | 'carton' | 'box'
+  calculated_main_quantity: number; // The converted amount that will actually be deducted from the main stock
+}
+
+export interface ManufacturingOrder {
+  id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  items: ManufacturingOrderItem[];
+  requested_by: string; // user name or id
+  approved_by?: string; // user name or id
+  created_at?: string;
+}
+
+export interface SystemNotification {
+  id: string;
+  title: string;
+  message: string;
+  target_role: string | 'all'; // e.g. 'inventory_manager', 'kitchen_manager', 'admin'
+  is_read: boolean;
+  created_at: string;
 }
