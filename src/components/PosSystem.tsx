@@ -457,6 +457,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                 <button className="pos-btn" onClick={() => {
                   setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setOrderType(null); setView(role === 'waiter' ? 'customer_info' : 'role_select');
                 }}>{t.newOrder}</button>
+                
+                <button className="pos-btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444' }} onClick={() => {
+                  setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setOrderType(null); setRole(null); setSelectedWaiter(null); setView('role_select');
+                }}>
+                  {language === 'ar' ? 'خروج' : 'Exit'}
+                </button>
               </div>
             </motion.div>
           )}
