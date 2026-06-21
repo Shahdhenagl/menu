@@ -222,6 +222,20 @@ const initialOrders: Order[] = [
   }
 ];
 
+const initialSuppliers: Supplier[] = [
+  { id: 'sup1', name: 'شركة المراعي', phone: '01000000001' },
+  { id: 'sup2', name: 'مزارع دينا', phone: '01000000002' },
+  { id: 'sup3', name: 'مورد لحوم البلد', phone: '01000000003' }
+];
+
+const initialInventoryItems: InventoryItem[] = [
+  { id: 'inv1', name: 'لحم بقري مفروم', unit: 'كجم', stock_main: 50, stock_factory: 10, stock_distribution: 0, last_purchase_price: 350, avg_purchase_price: 340 },
+  { id: 'inv2', name: 'دجاج كامل', unit: 'حبة', stock_main: 100, stock_factory: 20, stock_distribution: 0, last_purchase_price: 120, avg_purchase_price: 115 },
+  { id: 'inv3', name: 'كفتة مجهزة (مصنع)', unit: 'كجم', stock_main: 0, stock_factory: 5, stock_distribution: 15, last_purchase_price: 0, avg_purchase_price: 360 }
+];
+
+const initialPurchaseInvoices: PurchaseInvoice[] = [];
+
 // Helper to get from localstorage or seed
 function getLocalData<T>(key: string, initial: T): T {
   const data = localStorage.getItem(key);
@@ -781,6 +795,85 @@ export const db = {
     }
     const printers = getLocalData('meridien_printers', [] as Printer[]);
     saveLocalData('meridien_printers', printers.filter(p => p.id !== id));
+  },
+
+  // --- INVENTORY: SUPPLIERS ---
+  async getSuppliers(): Promise<Supplier[]> {
+    return getLocalData('meridien_suppliers', initialSuppliers);
+  },
+  async addSupplier(supplier: Omit<Supplier, 'id'>): Promise<Supplier> {
+    const newSupplier = { ...supplier, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    const suppliers = await this.getSuppliers();
+    saveLocalData('meridien_suppliers', [...suppliers, newSupplier]);
+    return newSupplier;
+  },
+  async deleteSupplier(id: string): Promise<void> {
+    const suppliers = await this.getSuppliers();
+    saveLocalData('meridien_suppliers', suppliers.filter(s => s.id !== id));
+  },
+
+  // --- INVENTORY: ITEMS ---
+  async getInventoryItems(): Promise<InventoryItem[]> {
+    return getLocalData('meridien_inventory_items', initialInventoryItems);
+  },
+  async addInventoryItem(item: Omit<InventoryItem, 'id'>): Promise<InventoryItem> {
+    const newItem = { ...item, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    const items = await this.getInventoryItems();
+    saveLocalData('meridien_inventory_items', [...items, newItem]);
+    return newItem;
+  },
+  async updateInventoryItem(id: string, updates: Partial<InventoryItem>): Promise<InventoryItem> {
+    const items = await this.getInventoryItems();
+    const index = items.findIndex(i => i.id === id);
+    if (index === -1) throw new Error('Item not found');
+    const updated = { ...items[index], ...updates };
+    items[index] = updated;
+    saveLocalData('meridien_inventory_items', items);
+    return updated;
+  },
+  async deleteInventoryItem(id: string): Promise<void> {
+    const items = await this.getInventoryItems();
+    saveLocalData('meridien_inventory_items', items.filter(i => i.id !== id));
+  },
+
+  // --- INVENTORY: PURCHASE INVOICES ---
+  async getPurchaseInvoices(): Promise<PurchaseInvoice[]> {
+    return getLocalData('meridien_purchase_invoices', initialPurchaseInvoices);
+  },
+  async addPurchaseInvoice(invoice: Omit<PurchaseInvoice, 'id'>): Promise<PurchaseInvoice> {
+    const newInvoice = { ...invoice, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    const invoices = await this.getPurchaseInvoices();
+    saveLocalData('meridien_purchase_invoices', [...invoices, newInvoice]);
+
+    // Automatically update stock and prices for each item
+    const inventoryItems = await this.getInventoryItems();
+    
+    for (const invItem of newInvoice.items) {
+      const itemIndex = inventoryItems.findIndex(i => i.id === invItem.item_id);
+      if (itemIndex > -1) {
+        const item = inventoryItems[itemIndex];
+        
+        const oldStock = item.stock_main;
+        const oldAvg = item.avg_purchase_price;
+        const incomingQty = invItem.quantity;
+        const incomingPrice = invItem.unit_price;
+        
+        const newStock = oldStock + incomingQty;
+        // Avoid division by zero
+        const newAvg = newStock > 0 ? ((oldStock * oldAvg) + (incomingQty * incomingPrice)) / newStock : 0;
+        
+        inventoryItems[itemIndex] = {
+          ...item,
+          stock_main: newStock,
+          last_purchase_price: incomingPrice,
+          avg_purchase_price: newAvg
+        };
+      }
+    }
+    
+    saveLocalData('meridien_inventory_items', inventoryItems);
+    
+    return newInvoice;
   }
 };
 

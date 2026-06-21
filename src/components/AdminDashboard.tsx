@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice } from '../types';
 import { db } from '../lib/supabase';
 import { printOrderTickets } from '../utils/printUtils';
 import { 
@@ -9,7 +9,7 @@ import {
 import { 
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
-  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone
+  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, FileText
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -24,7 +24,7 @@ interface AdminDashboardProps {
   toggleTheme: () => void;
 }
 
-type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers';
+type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory';
 
 export default function AdminDashboard({
   onClose,
@@ -302,6 +302,144 @@ export default function AdminDashboard({
   const [printerModalOpen, setPrinterModalOpen] = useState(false);
   const [printerNameAr, setPrinterNameAr] = useState('');
   const [printerNameEn, setPrinterNameEn] = useState('');
+
+  // --- INVENTORY STATES ---
+  const [inventorySubTab, setInventorySubTab] = useState<'suppliers' | 'items' | 'invoices'>('items');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [purchaseInvoices, setPurchaseInvoices] = useState<PurchaseInvoice[]>([]);
+  
+  // Suppliers modal
+  const [supModalOpen, setSupModalOpen] = useState(false);
+  const [supName, setSupName] = useState('');
+  const [supPhone, setSupPhone] = useState('');
+
+  // Inventory Item modal
+  const [invModalOpen, setInvModalOpen] = useState(false);
+  const [invName, setInvName] = useState('');
+  const [invUnit, setInvUnit] = useState('كجم');
+
+  // Purchase Invoice modal
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+  const [invoiceSupplierId, setInvoiceSupplierId] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [invoiceCart, setInvoiceCart] = useState<{item_id: string, quantity: number, unit_price: number}[]>([]);
+
+  const fetchInventoryData = async () => {
+    try {
+      const sups = await db.getSuppliers();
+      const items = await db.getInventoryItems();
+      const invs = await db.getPurchaseInvoices();
+      setSuppliers(sups);
+      setInventoryItems(items);
+      setPurchaseInvoices(invs);
+    } catch (err) {
+      console.error("Error loading inventory:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchInventoryData();
+  }, []);
+
+  const handleSaveSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supName.trim()) return;
+    setLoading(true);
+    try {
+      await db.addSupplier({ name: supName, phone: supPhone });
+      await fetchInventoryData();
+      setSupModalOpen(false);
+      setSupName('');
+      setSupPhone('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSupplier = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this supplier?')) return;
+    try {
+      await db.deleteSupplier(id);
+      await fetchInventoryData();
+    } catch(err) { console.error(err); }
+  };
+
+  const handleSaveInventoryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!invName.trim()) return;
+    setLoading(true);
+    try {
+      await db.addInventoryItem({
+        name: invName,
+        unit: invUnit,
+        stock_main: 0,
+        stock_factory: 0,
+        stock_distribution: 0,
+        avg_purchase_price: 0,
+        last_purchase_price: 0
+      });
+      await fetchInventoryData();
+      setInvModalOpen(false);
+      setInvName('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteInventoryItem = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this item?')) return;
+    try {
+      await db.deleteInventoryItem(id);
+      await fetchInventoryData();
+    } catch(err) { console.error(err); }
+  };
+
+  const handleSavePurchaseInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!invoiceSupplierId || invoiceCart.length === 0) {
+      alert("Please select a supplier and add at least one item.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const sup = suppliers.find(s => s.id === invoiceSupplierId);
+      let total = 0;
+      const itemsToSave = invoiceCart.map(c => {
+        const itemObj = inventoryItems.find(i => i.id === c.item_id);
+        const itemTotal = c.quantity * c.unit_price;
+        total += itemTotal;
+        return {
+          item_id: c.item_id,
+          item_name: itemObj ? itemObj.name : 'Unknown',
+          quantity: c.quantity,
+          unit_price: c.unit_price,
+          total_price: itemTotal
+        };
+      });
+
+      await db.addPurchaseInvoice({
+        supplier_id: invoiceSupplierId,
+        supplier_name: sup ? sup.name : 'Unknown',
+        invoice_date: invoiceDate,
+        items: itemsToSave,
+        total_amount: total
+      });
+      
+      await fetchInventoryData();
+      setInvoiceModalOpen(false);
+      setInvoiceCart([]);
+      setInvoiceSupplierId('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchPrinters = async () => {
     try {
@@ -1694,6 +1832,16 @@ export default function AdminDashboard({
             >
               <Gear size={18} />
               <span>{t.settingsTab}</span>
+            </button>
+          )}
+
+          {(loggedInUser?.role === 'admin' || loggedInUser?.role === 'manager') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
+              onClick={() => setActiveTab('inventory')}
+            >
+              <Package size={18} />
+              <span>{language === 'ar' ? 'إدارة المخازن' : 'Inventory'}</span>
             </button>
           )}
         </nav>
@@ -3274,6 +3422,189 @@ export default function AdminDashboard({
             </div>
           </div>
         )}
+        )}
+
+        {/* --- INVENTORY TAB --- */}
+        {activeTab === 'inventory' && (
+          <div className="admin-section">
+            <div className="section-header" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>{language === 'ar' ? 'إدارة المخازن والموردين' : 'Inventory & Suppliers'}</h1>
+                <p style={{ color: 'var(--text-gray)' }}>
+                  {language === 'ar' ? 'إدارة الموردين، الخامات، وفواتير الشراء' : 'Manage suppliers, raw materials, and purchase invoices'}
+                </p>
+              </div>
+            </div>
+
+            {/* Inventory Sub Navigation */}
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid #333', paddingBottom: '1rem' }}>
+              <button 
+                className={`btn-outline-gold ${inventorySubTab === 'items' ? 'active' : ''}`}
+                onClick={() => setInventorySubTab('items')}
+                style={{ background: inventorySubTab === 'items' ? 'var(--gold-primary)' : 'transparent', color: inventorySubTab === 'items' ? '#000' : 'var(--gold-primary)' }}
+              >
+                {language === 'ar' ? 'جرد المخازن' : 'Inventory Stock'}
+              </button>
+              <button 
+                className={`btn-outline-gold ${inventorySubTab === 'invoices' ? 'active' : ''}`}
+                onClick={() => setInventorySubTab('invoices')}
+                style={{ background: inventorySubTab === 'invoices' ? 'var(--gold-primary)' : 'transparent', color: inventorySubTab === 'invoices' ? '#000' : 'var(--gold-primary)' }}
+              >
+                {language === 'ar' ? 'فواتير المشتريات' : 'Purchase Invoices'}
+              </button>
+              <button 
+                className={`btn-outline-gold ${inventorySubTab === 'suppliers' ? 'active' : ''}`}
+                onClick={() => setInventorySubTab('suppliers')}
+                style={{ background: inventorySubTab === 'suppliers' ? 'var(--gold-primary)' : 'transparent', color: inventorySubTab === 'suppliers' ? '#000' : 'var(--gold-primary)' }}
+              >
+                {language === 'ar' ? 'الموردين' : 'Suppliers'}
+              </button>
+            </div>
+
+            {/* ITEMS SUB TAB */}
+            {inventorySubTab === 'items' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'الأصناف والخامات' : 'Items & Raw Materials'}</h2>
+                  <button className="btn-gold" onClick={() => setInvModalOpen(true)}>
+                    <Plus size={18} /> {language === 'ar' ? 'إضافة صنف جديد' : 'Add New Item'}
+                  </button>
+                </div>
+                
+                {/* Valuation Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                  <div className="stat-card">
+                    <div className="stat-icon"><Package color="#000" size={24} /></div>
+                    <div className="stat-info">
+                      <h3>{language === 'ar' ? 'قيمة المخزن الأساسي' : 'Main Stock Value'}</h3>
+                      <p className="stat-value">{inventoryItems.reduce((sum, item) => sum + (item.stock_main * item.avg_purchase_price), 0).toFixed(2)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'الصنف' : 'Item'}</th>
+                        <th>{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
+                        <th>{language === 'ar' ? 'المخزن الأساسي' : 'Main Stock'}</th>
+                        <th>{language === 'ar' ? 'المصنع' : 'Factory'}</th>
+                        <th>{language === 'ar' ? 'التوزيع' : 'Distribution'}</th>
+                        <th>{language === 'ar' ? 'متوسط السعر' : 'Avg Price'}</th>
+                        <th>{language === 'ar' ? 'آخر سعر شراء' : 'Last Price'}</th>
+                        <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inventoryItems.map(item => (
+                        <tr key={item.id}>
+                          <td>{item.name}</td>
+                          <td>{item.unit}</td>
+                          <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{item.stock_main}</td>
+                          <td>{item.stock_factory}</td>
+                          <td>{item.stock_distribution}</td>
+                          <td>{item.avg_purchase_price.toFixed(2)}</td>
+                          <td>{item.last_purchase_price.toFixed(2)}</td>
+                          <td>
+                            <button className="action-btn delete" onClick={() => handleDeleteInventoryItem(item.id)}>
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {inventoryItems.length === 0 && (
+                        <tr><td colSpan={8} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* SUPPLIERS SUB TAB */}
+            {inventorySubTab === 'suppliers' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'قائمة الموردين' : 'Suppliers List'}</h2>
+                  <button className="btn-gold" onClick={() => setSupModalOpen(true)}>
+                    <Plus size={18} /> {language === 'ar' ? 'إضافة مورد' : 'Add Supplier'}
+                  </button>
+                </div>
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'اسم المورد' : 'Supplier Name'}</th>
+                        <th>{language === 'ar' ? 'رقم الهاتف' : 'Phone'}</th>
+                        <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {suppliers.map(sup => (
+                        <tr key={sup.id}>
+                          <td>{sup.name}</td>
+                          <td>{sup.phone}</td>
+                          <td>
+                            <button className="action-btn delete" onClick={() => handleDeleteSupplier(sup.id)}>
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {suppliers.length === 0 && (
+                        <tr><td colSpan={3} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* PURCHASE INVOICES SUB TAB */}
+            {inventorySubTab === 'invoices' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'فواتير الشراء' : 'Purchase Invoices'}</h2>
+                  <button className="btn-gold" onClick={() => setInvoiceModalOpen(true)}>
+                    <Plus size={18} /> {language === 'ar' ? 'إضافة فاتورة جديدة' : 'Add Purchase Invoice'}
+                  </button>
+                </div>
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                        <th>{language === 'ar' ? 'المورد' : 'Supplier'}</th>
+                        <th>{language === 'ar' ? 'الأصناف' : 'Items'}</th>
+                        <th>{language === 'ar' ? 'الإجمالي' : 'Total'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchaseInvoices.sort((a,b) => new Date(b.created_at||'').getTime() - new Date(a.created_at||'').getTime()).map(inv => (
+                        <tr key={inv.id}>
+                          <td className="font-en">{new Date(inv.invoice_date).toLocaleDateString()}</td>
+                          <td>{inv.supplier_name}</td>
+                          <td>
+                            {inv.items.map((i, idx) => (
+                              <div key={idx} style={{ fontSize: '0.85rem' }}>
+                                {i.quantity} x {i.item_name} (@{i.unit_price})
+                              </div>
+                            ))}
+                          </td>
+                          <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{inv.total_amount.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                      {purchaseInvoices.length === 0 && (
+                        <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
       </main>
 
@@ -4403,6 +4734,158 @@ export default function AdminDashboard({
           </div>
         </div>
       )}
+      {/* --- INVENTORY MODALS --- */}
+      {/* 1. Add Supplier */}
+      {supModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setSupModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'إضافة مورد' : 'Add Supplier'}</h2>
+              <button className="btn-close" onClick={() => setSupModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveSupplier}>
+              <div className="admin-modal-body">
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الاسم' : 'Name'} *</label>
+                  <input type="text" className="input-gold" value={supName} onChange={e => setSupName(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الهاتف' : 'Phone'}</label>
+                  <input type="text" className="input-gold" value={supPhone} onChange={e => setSupPhone(e.target.value)} />
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-outline-gold" onClick={() => setSupModalOpen(false)}>{t.close}</button>
+                <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Add Inventory Item */}
+      {invModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setInvModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'إضافة صنف/خامة' : 'Add Item'}</h2>
+              <button className="btn-close" onClick={() => setInvModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveInventoryItem}>
+              <div className="admin-modal-body">
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'اسم الصنف' : 'Item Name'} *</label>
+                  <input type="text" className="input-gold" value={invName} onChange={e => setInvName(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الوحدة (كجم، لتر، قطعة..)' : 'Unit'}</label>
+                  <input type="text" className="input-gold" value={invUnit} onChange={e => setInvUnit(e.target.value)} />
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-outline-gold" onClick={() => setInvModalOpen(false)}>{t.close}</button>
+                <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Add Purchase Invoice */}
+      {invoiceModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setInvoiceModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'إضافة فاتورة مشتريات' : 'Add Purchase Invoice'}</h2>
+              <button className="btn-close" onClick={() => setInvoiceModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="admin-modal-body">
+              <div className="grid-options" style={{ marginBottom: '1.5rem', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'المورد' : 'Supplier'} *</label>
+                  <select className="input-gold" value={invoiceSupplierId} onChange={e => setInvoiceSupplierId(e.target.value)} required>
+                    <option value="">{language === 'ar' ? 'اختر المورد...' : 'Select supplier...'}</option>
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'التاريخ' : 'Date'} *</label>
+                  <input type="date" className="input-gold" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} required />
+                </div>
+              </div>
+              
+              <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                <h3 style={{ marginBottom: '1rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تفاصيل الأصناف' : 'Invoice Items'}</h3>
+                
+                {/* Add item row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <select id="inv-new-item" className="input-gold" style={{ padding: '0.5rem' }}>
+                    <option value="">{language === 'ar' ? 'اختر الصنف...' : 'Select item...'}</option>
+                    {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                  </select>
+                  <input type="number" id="inv-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
+                  <input type="number" id="inv-new-price" className="input-gold" placeholder={language === 'ar' ? 'السعر' : 'Price'} style={{ padding: '0.5rem' }} step="0.01" min="0" />
+                  <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
+                    const idEl = document.getElementById('inv-new-item') as HTMLSelectElement;
+                    const qtyEl = document.getElementById('inv-new-qty') as HTMLInputElement;
+                    const priceEl = document.getElementById('inv-new-price') as HTMLInputElement;
+                    const itemId = idEl.value;
+                    const qty = parseFloat(qtyEl.value);
+                    const price = parseFloat(priceEl.value);
+                    if (itemId && qty > 0 && price >= 0) {
+                      setInvoiceCart([...invoiceCart, { item_id: itemId, quantity: qty, unit_price: price }]);
+                      idEl.value = ''; qtyEl.value = ''; priceEl.value = '';
+                    }
+                  }}>
+                    <Plus size={16} />
+                  </button>
+                </div>
+
+                {/* Cart list */}
+                {invoiceCart.length > 0 && (
+                  <table className="admin-table" style={{ marginTop: '1rem', fontSize: '0.9rem' }}>
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'الصنف' : 'Item'}</th>
+                        <th>{language === 'ar' ? 'الكمية' : 'Qty'}</th>
+                        <th>{language === 'ar' ? 'السعر' : 'Price'}</th>
+                        <th>{language === 'ar' ? 'الإجمالي' : 'Total'}</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoiceCart.map((c, idx) => {
+                        const item = inventoryItems.find(i => i.id === c.item_id);
+                        return (
+                          <tr key={idx}>
+                            <td>{item?.name}</td>
+                            <td>{c.quantity}</td>
+                            <td>{c.unit_price}</td>
+                            <td>{(c.quantity * c.unit_price).toFixed(2)}</td>
+                            <td>
+                              <button type="button" style={{ background: 'transparent', border: 'none', color: '#ff4d4d', cursor: 'pointer' }} onClick={() => setInvoiceCart(invoiceCart.filter((_, i) => i !== idx))}>
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div style={{ textAlign: 'left', marginTop: '1rem' }}>
+                <h3>{language === 'ar' ? 'إجمالي الفاتورة: ' : 'Invoice Total: '} <span style={{ color: 'var(--gold-primary)' }}>{invoiceCart.reduce((sum, c) => sum + (c.quantity * c.unit_price), 0).toFixed(2)}</span></h3>
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button type="button" className="btn-outline-gold" onClick={() => setInvoiceModalOpen(false)}>{t.close}</button>
+              <button type="button" className="btn-gold" onClick={handleSavePurchaseInvoice} disabled={loading || invoiceCart.length === 0}>{t.save}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
