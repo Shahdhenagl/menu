@@ -6,10 +6,9 @@ import {
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   ResponsiveContainer, Cell, AreaChart, Area 
 } from 'recharts';
-import { 
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
-  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, FileText
+  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package
 } from 'lucide-react';
 
 interface AdminDashboardProps {

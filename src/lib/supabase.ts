@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice } from '../types';
 
 // Load credentials from environment
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -841,7 +841,7 @@ export const db = {
     return getLocalData('meridien_purchase_invoices', initialPurchaseInvoices);
   },
   async addPurchaseInvoice(invoice: Omit<PurchaseInvoice, 'id'>): Promise<PurchaseInvoice> {
-    const newInvoice = { ...invoice, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    const newInvoice: PurchaseInvoice = { ...invoice, id: crypto.randomUUID(), created_at: new Date().toISOString() };
     const invoices = await this.getPurchaseInvoices();
     saveLocalData('meridien_purchase_invoices', [...invoices, newInvoice]);
 
