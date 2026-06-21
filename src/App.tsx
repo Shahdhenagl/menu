@@ -5,7 +5,7 @@ import CustomerMenu from './components/CustomerMenu';
 import CartModal from './components/CartModal';
 import AdminDashboard from './components/AdminDashboard';
 import { PosSystem } from './components/PosSystem';
-import { Sparkles, MonitorSmartphone } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
 function App() {
   const [currentView, setCurrentView] = useState<'menu' | 'admin' | 'pos'>(() => {
@@ -246,24 +246,6 @@ function App() {
             settings={settings}
             language={language}
           />
-          
-          {/* Floating POS Button for Testing/Access */}
-          <button 
-            onClick={() => {
-              window.history.pushState({}, '', '/pos');
-              setCurrentView('pos');
-            }}
-            style={{
-              position: 'fixed', bottom: '80px', left: '20px', zIndex: 900,
-              background: 'linear-gradient(45deg, #d4af37, #aa8410)', color: '#000',
-              border: 'none', borderRadius: '50px', padding: '10px 20px',
-              display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold',
-              boxShadow: '0 4px 15px rgba(212, 175, 55, 0.4)', cursor: 'pointer'
-            }}
-          >
-            <MonitorSmartphone size={20} />
-            {language === 'ar' ? 'نظام POS' : 'POS System'}
-          </button>
         </>
       ) : currentView === 'pos' ? (
         <PosSystem 

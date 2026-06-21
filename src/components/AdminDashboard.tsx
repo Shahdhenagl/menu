@@ -8,7 +8,7 @@ import {
 import { 
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
-  Upload, Printer, Sun, Moon, Search
+  Upload, Printer, Sun, Moon, Search, MonitorSmartphone
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -1576,6 +1576,33 @@ export default function AdminDashboard({
           <LogOut size={16} />
           {t.exitBtn}
         </button>
+
+        {hasPermission('pos') && (
+          <button 
+            onClick={() => {
+              window.history.pushState({}, '', '/pos');
+              window.dispatchEvent(new Event('popstate'));
+            }}
+            style={{
+              marginTop: '1rem',
+              background: 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))',
+              color: '#000',
+              border: 'none',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              width: '100%'
+            }}
+          >
+            <MonitorSmartphone size={18} />
+            {language === 'ar' ? 'دخول لنظام الـ POS' : 'Enter POS System'}
+          </button>
+        )}
       </aside>
 
       {/* 2. Main content area */}
