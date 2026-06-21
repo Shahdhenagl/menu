@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShoppingBag, Utensils, CheckCircle, X, 
-  Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon
+  Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
+  Pizza, Coffee, ChefHat, Wine, Cake
 } from 'lucide-react';
 import { db } from '../lib/supabase';
-import type { Category, Product, Order, OrderItem, SystemUser, Printer } from '../types';
+import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings } from '../types';
 import { printOrderTickets } from '../utils/printUtils';
 
 interface PosSystemProps {
@@ -22,6 +23,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [waiters, setWaiters] = useState<SystemUser[]>([]);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
+  const [settings, setSettings] = useState<RestaurantSettings | null>(null);
   const [lastPlacedOrder, setLastPlacedOrder] = useState<Order | null>(null);
 
   // POS State
@@ -47,19 +49,36 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   }, []);
 
   const loadData = async () => {
-    const [cats, prods, users, ords, prnts] = await Promise.all([
+    const [cats, prods, users, ords, prnts, sets] = await Promise.all([
       db.getCategories(),
       db.getProducts(),
       db.getSystemUsers(),
       db.getOrders(),
-      db.getPrinters()
+      db.getPrinters(),
+      db.getSettings()
     ]);
     setCategories(cats.sort((a, b) => a.sort_order - b.sort_order));
     setProducts(prods);
     setWaiters(users.filter(u => u.role === 'waiter'));
     setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing'));
     setPrinters(prnts);
+    setSettings(sets);
     if (cats.length > 0) setActiveCategory(cats[0].id);
+  };
+
+  const handleClose = () => {
+    if (view === 'role_select') {
+      onClose();
+    } else {
+      setRole(null);
+      setSelectedWaiter(null);
+      setWaiterPasscode('');
+      setCustomerPhone('');
+      setCustomerName('');
+      setOrderType(null);
+      setCart([]);
+      setView('role_select');
+    }
   };
 
   const handleWaiterLogin = () => {
@@ -254,7 +273,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
 
       <div className="pos-header">
         <h1 style={{ color: 'var(--gold-primary)', margin: 0 }}>MERIDIEN POS</h1>
-        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}>
+        <button onClick={handleClose} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <X size={32} />
         </button>
       </div>
@@ -263,25 +282,68 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
         <AnimatePresence mode="wait">
           
           {view === 'role_select' && (
-            <motion.div key="role_sel" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <h2 style={{ fontSize: '2.5rem', marginBottom: '3rem', textShadow: '0 2px 10px rgba(212,175,55,0.3)' }}>
-                {language === 'ar' ? 'أهلاً بك في نظام الطلبات' : 'Welcome to Order System'}
-              </h2>
-              <div className="grid-options" style={{ maxWidth: '800px' }}>
-                <div className="option-card" onClick={() => { setRole('customer'); setView('customer_info'); }}>
-                  <ShoppingBag size={48} color="var(--gold-primary)" />
-                  <h3 style={{ fontSize: '1.5rem', margin: '0.5rem 0' }}>{t.iamCustomer}</h3>
-                  <p style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>
+            <motion.div key="role_sel" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+              
+              {/* Animated Floating Elements for Royal Effect */}
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 0, opacity: 0.1 }}>
+                <motion.div animate={{ y: [-20, 20, -20], rotate: [0, 10, -10, 0] }} transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', top: '15%', left: '10%' }}>
+                  <Pizza size={80} color="var(--gold-primary)" />
+                </motion.div>
+                <motion.div animate={{ y: [20, -20, 20], rotate: [0, -15, 15, 0] }} transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', bottom: '20%', right: '15%' }}>
+                  <Coffee size={100} color="var(--gold-primary)" />
+                </motion.div>
+                <motion.div animate={{ y: [-30, 30, -30], x: [-10, 10, -10] }} transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', top: '30%', right: '10%' }}>
+                  <ChefHat size={90} color="var(--gold-primary)" />
+                </motion.div>
+                <motion.div animate={{ y: [30, -30, 30], x: [10, -10, 10] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', bottom: '15%', left: '20%' }}>
+                  <Wine size={70} color="var(--gold-primary)" />
+                </motion.div>
+                <motion.div animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }} transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', top: '50%', left: '5%' }}>
+                  <Cake size={60} color="var(--gold-primary)" />
+                </motion.div>
+              </div>
+
+              {/* Main Content */}
+              <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'radial-gradient(circle at center, rgba(212,175,55,0.05) 0%, transparent 70%)', padding: '4rem', borderRadius: '50%' }}>
+                {settings?.logo_url ? (
+                  <motion.img 
+                    initial={{ y: -50, opacity: 0 }} 
+                    animate={{ y: 0, opacity: 1 }} 
+                    transition={{ type: 'spring', stiffness: 100 }}
+                    src={settings.logo_url} 
+                    alt="Restaurant Logo" 
+                    style={{ width: '180px', height: '180px', objectFit: 'contain', marginBottom: '2rem', filter: 'drop-shadow(0 10px 20px rgba(212,175,55,0.3))' }} 
+                  />
+                ) : (
+                  <motion.div 
+                    initial={{ y: -50, opacity: 0 }} 
+                    animate={{ y: 0, opacity: 1 }} 
+                    style={{ width: '150px', height: '150px', borderRadius: '50%', background: 'linear-gradient(45deg, #111, #222)', border: '2px solid var(--gold-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem', boxShadow: '0 10px 30px rgba(212,175,55,0.2)' }}
+                  >
+                    <ChefHat size={64} color="var(--gold-primary)" />
+                  </motion.div>
+                )}
+
+                <h2 style={{ fontSize: '2.5rem', marginBottom: '4rem', textShadow: '0 2px 10px rgba(212,175,55,0.3)', textAlign: 'center', fontFamily: 'Cairo, sans-serif' }}>
+                  {language === 'ar' ? 'أهلاً بك في نظام الطلبات' : 'Welcome to Order System'}
+                </h2>
+                
+                <div className="grid-options" style={{ maxWidth: '800px', gap: '3rem' }}>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="option-card" onClick={() => { setRole('customer'); setView('customer_info'); }} style={{ background: 'rgba(26,26,26,0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(212,175,55,0.2)', boxShadow: '0 15px 35px rgba(0,0,0,0.5)', padding: '3rem 2rem' }}>
+                  <ShoppingBag size={56} color="var(--gold-primary)" />
+                  <h3 style={{ fontSize: '1.8rem', margin: '1rem 0' }}>{t.iamCustomer}</h3>
+                  <p style={{ color: 'var(--text-gray)', fontSize: '1rem' }}>
                     {language === 'ar' ? 'قم بإنشاء طلبك الخاص من المنيو' : 'Create your own order from the menu'}
                   </p>
-                </div>
-                <div className="option-card" onClick={() => { setRole('waiter'); setView('waiter_auth'); }}>
-                  <Utensils size={48} color="var(--gold-primary)" />
-                  <h3 style={{ fontSize: '1.5rem', margin: '0.5rem 0' }}>{t.iamWaiter}</h3>
-                  <p style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="option-card" onClick={() => { setRole('waiter'); setView('waiter_auth'); }} style={{ background: 'rgba(26,26,26,0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(212,175,55,0.2)', boxShadow: '0 15px 35px rgba(0,0,0,0.5)', padding: '3rem 2rem' }}>
+                  <Utensils size={56} color="var(--gold-primary)" />
+                  <h3 style={{ fontSize: '1.8rem', margin: '1rem 0' }}>{t.iamWaiter}</h3>
+                  <p style={{ color: 'var(--text-gray)', fontSize: '1rem' }}>
                     {language === 'ar' ? 'تسجيل الدخول للكباتن والويترز' : 'Login for Captains & Waiters'}
                   </p>
-                </div>
+                </motion.div>
+              </div>
               </div>
             </motion.div>
           )}
