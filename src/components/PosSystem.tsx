@@ -204,8 +204,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
         }
         .pos-input:focus { border-color: var(--gold-primary); }
         .grid-options {
-          display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 1.5rem; width: 100%; max-width: 800px; margin: 0 auto;
+          display: grid; grid-template-columns: repeat(2, 1fr);
+          gap: 1.5rem; width: 100%; max-width: 600px; margin: 0 auto;
         }
         .option-card {
           background: #1a1a1a; border: 2px solid #333; border-radius: 16px;
