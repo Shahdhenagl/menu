@@ -14,7 +14,7 @@ interface PosSystemProps {
   language: 'ar' | 'en';
 }
 
-type PosView = 'role_select' | 'waiter_auth' | 'customer_info' | 'order_type' | 'menu' | 'checkout' | 'success' | 'waiter_dashboard';
+type PosView = 'role_select' | 'waiter_auth' | 'customer_info' | 'order_type' | 'menu' | 'checkout' | 'success' | 'waiter_dashboard' | 'waiter_order_edit';
 
 export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   // Global Data
@@ -30,11 +30,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [view, setView] = useState<PosView>('role_select');
   const [role, setRole] = useState<'waiter' | 'customer' | null>(null);
   
-  // Waiter Auth
+  // Waiter Auth & Dashboard
   const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(null);
   const [waiterPasscode, setWaiterPasscode] = useState('');
+  const [viewAllOrders, setViewAllOrders] = useState(false);
   
   // Order Session Details
+  const [editOrderId, setEditOrderId] = useState<string | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [orderType, setOrderType] = useState<'takeaway' | 'talabat' | 'dine_in' | 'delivery' | null>(null);
@@ -77,6 +80,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
       setCustomerName('');
       setOrderType(null);
       setCart([]);
+      setEditOrderId(null);
+      setEditingOrder(null);
       setView('role_select');
     }
   };
@@ -157,6 +162,25 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const placeOrder = async () => {
     if (cart.length === 0) return;
     
+    if (editOrderId && editingOrder) {
+      // We are editing an existing order
+      const updatedOrder = await db.updateOrder(editOrderId, {
+        items: cart,
+        total_price: cartTotal,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        table_number: tableNumber,
+        order_type: orderType || editingOrder.order_type
+      });
+      setLastPlacedOrder(updatedOrder);
+      setCart([]);
+      setEditOrderId(null);
+      setEditingOrder(null);
+      setView('waiter_dashboard');
+      loadData();
+      return;
+    }
+
     // Auto assign waiter if it's a customer ordering
     let assignedWaiterId = selectedWaiter?.id;
     let assignedWaiterName = selectedWaiter?.name;
@@ -600,8 +624,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
 
           {view === 'waiter_dashboard' && (
             <motion.div key="w_dash" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ width: '100%', padding: '2rem', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <h2>{language === 'ar' ? `طلباتي النشطة (${selectedWaiter?.name})` : `My Active Orders (${selectedWaiter?.name})`}</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <h2>{language === 'ar' ? `الطلبات النشطة` : `Active Orders`}</h2>
+                  <div style={{ display: 'flex', background: '#111', borderRadius: '8px', padding: '4px' }}>
+                    <button onClick={() => setViewAllOrders(false)} style={{ padding: '0.5rem 1rem', background: !viewAllOrders ? 'var(--gold-primary)' : 'transparent', color: !viewAllOrders ? '#000' : '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                      {language === 'ar' ? 'طلباتي' : 'My Orders'}
+                    </button>
+                    <button onClick={() => setViewAllOrders(true)} style={{ padding: '0.5rem 1rem', background: viewAllOrders ? 'var(--gold-primary)' : 'transparent', color: viewAllOrders ? '#000' : '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                      {language === 'ar' ? 'الكل' : 'All'}
+                    </button>
+                  </div>
+                </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                   <button className="pos-btn" onClick={() => { setCustomerPhone(''); setCustomerName(''); setTableNumber(''); setOrderType(null); setCart([]); setView('customer_info'); }}>
                     {t.newOrder}
@@ -612,8 +646,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem', overflowY: 'auto', flex: 1, alignContent: 'start' }}>
-                {activeOrders.filter(o => o.waiter_id === selectedWaiter?.id).map(order => (
-                  <div key={order.id} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '16px', padding: '1.5rem' }}>
+                {activeOrders.filter(o => viewAllOrders || o.waiter_id === selectedWaiter?.id).map(order => (
+                  <div key={order.id} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '16px', padding: '1.5rem', position: 'relative' }}>
+                    {viewAllOrders && order.waiter_id !== selectedWaiter?.id && (
+                      <div style={{ position: 'absolute', top: '-10px', right: '10px', background: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>
+                        {order.waiter_name || 'Guest'}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '1rem', marginBottom: '1rem' }}>
                       <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>#{order.id.slice(0, 6)}</span>
                       <span style={{ background: 'rgba(212,175,55,0.1)', color: 'var(--gold-primary)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>{order.order_type?.toUpperCase()}</span>
@@ -624,12 +663,17 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                     </div>
                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>{order.total_price.toFixed(2)} EGP</div>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <button className="pos-btn" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', flex: 1 }} onClick={async () => {
+                      <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#3b82f6', color: '#fff' }} onClick={() => {
+                        setEditingOrder(order);
+                        setEditOrderId(order.id);
+                        setView('waiter_order_edit');
+                      }}>{language === 'ar' ? 'تعديل' : 'Edit'}</button>
+                      <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={async () => {
                         // Quick pay as cash
                         await db.updateOrderStatus(order.id, 'completed');
                         loadData();
-                      }}>{language === 'ar' ? 'إتمام كاش' : 'Pay Cash'}</button>
-                      <button className="pos-btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', flex: 1 }} onClick={async () => {
+                      }}>{language === 'ar' ? 'إتمام' : 'Pay'}</button>
+                      <button className="pos-btn-outline" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={async () => {
                         // Cancel
                         if(confirm('Are you sure you want to cancel?')) {
                           await db.updateOrderStatus(order.id, 'cancelled');
@@ -639,11 +683,110 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                     </div>
                   </div>
                 ))}
-                {activeOrders.filter(o => o.waiter_id === selectedWaiter?.id).length === 0 && (
+                {activeOrders.filter(o => viewAllOrders || o.waiter_id === selectedWaiter?.id).length === 0 && (
                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem', color: '#666', fontSize: '1.2rem' }}>
                     {language === 'ar' ? 'لا توجد طلبات نشطة حالياً' : 'No active orders currently'}
                   </div>
                 )}
+              </div>
+            </motion.div>
+          )}
+
+          {view === 'waiter_order_edit' && editingOrder && (
+            <motion.div key="w_edit" initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} style={{ width: '100%', maxWidth: '600px', margin: '0 auto', padding: '2rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تعديل الطلب' : 'Edit Order'} #{editingOrder.id.slice(0, 6)}</h2>
+                <button className="pos-btn-outline" onClick={() => { setEditingOrder(null); setEditOrderId(null); setView('waiter_dashboard'); }}>
+                  {t.back}
+                </button>
+              </div>
+
+              <div style={{ background: '#1a1a1a', padding: '2rem', borderRadius: '16px', border: '1px solid #333' }}>
+                
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'حالة الطلب' : 'Order Status'}</label>
+                  <select 
+                    className="pos-input" 
+                    value={editingOrder.status}
+                    onChange={(e) => setEditingOrder({...editingOrder, status: e.target.value as Order['status']})}
+                  >
+                    <option value="pending">{language === 'ar' ? 'قيد الانتظار' : 'Pending'}</option>
+                    <option value="preparing">{language === 'ar' ? 'جاري التجهيز' : 'Preparing'}</option>
+                    <option value="delivered">{language === 'ar' ? 'تم التقديم' : 'Delivered'}</option>
+                    <option value="completed">{language === 'ar' ? 'مكتمل (تم الدفع)' : 'Completed'}</option>
+                    <option value="cancelled">{language === 'ar' ? 'ملغي' : 'Cancelled'}</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'نوع الطلب' : 'Order Type'}</label>
+                    <select 
+                      className="pos-input" 
+                      value={editingOrder.order_type || 'takeaway'}
+                      onChange={(e) => setEditingOrder({...editingOrder, order_type: e.target.value as any})}
+                    >
+                      <option value="takeaway">{t.takeaway}</option>
+                      <option value="dine_in">{t.dineIn}</option>
+                      <option value="delivery">{t.delivery}</option>
+                      <option value="talabat">{t.talabat}</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--gold-primary)' }}>{t.tableNum}</label>
+                    <input 
+                      type="text" 
+                      className="pos-input" 
+                      value={editingOrder.table_number || ''}
+                      onChange={(e) => setEditingOrder({...editingOrder, table_number: e.target.value})}
+                      disabled={editingOrder.order_type !== 'dine_in'}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid #333', paddingTop: '1.5rem', marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 style={{ margin: 0 }}>{language === 'ar' ? 'الأصناف' : 'Items'}</h3>
+                    <button className="pos-btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }} onClick={() => {
+                      setCart(editingOrder.items);
+                      setCustomerName(editingOrder.customer_name);
+                      setCustomerPhone(editingOrder.customer_phone);
+                      setOrderType(editingOrder.order_type || 'takeaway');
+                      setTableNumber(editingOrder.table_number || '');
+                      setView('menu');
+                    }}>
+                      <Plus size={16} style={{ display: 'inline', marginRight: '4px' }}/> 
+                      {language === 'ar' ? 'إضافة/تعديل أصناف' : 'Add/Edit Items'}
+                    </button>
+                  </div>
+                  <div style={{ background: '#111', padding: '1rem', borderRadius: '8px' }}>
+                    {editingOrder.items.map((item, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: idx === editingOrder.items.length - 1 ? 'none' : '1px solid #222' }}>
+                        <span>{item.quantity}x {language === 'ar' ? item.name_ar : item.name_en}</span>
+                        <span>{(item.price * item.quantity).toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed #444', fontWeight: 'bold', color: 'var(--gold-primary)' }}>
+                      <span>{t.total}</span>
+                      <span>{editingOrder.total_price.toFixed(2)} EGP</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button className="pos-btn" style={{ width: '100%', padding: '1rem' }} onClick={async () => {
+                  await db.updateOrder(editingOrder.id, {
+                    status: editingOrder.status,
+                    order_type: editingOrder.order_type,
+                    table_number: editingOrder.table_number
+                  });
+                  setEditingOrder(null);
+                  setEditOrderId(null);
+                  setView('waiter_dashboard');
+                  loadData();
+                }}>
+                  {language === 'ar' ? 'حفظ التعديلات' : 'Save Changes'}
+                </button>
+
               </div>
             </motion.div>
           )}

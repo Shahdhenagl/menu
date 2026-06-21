@@ -496,6 +496,29 @@ export const db = {
     return orders[index];
   },
 
+  async updateOrder(id: string, updates: Partial<Order>): Promise<Order> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .update(updates)
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      } catch (err) {
+        console.warn("Supabase update failed, falling back to mock database.", err);
+      }
+    }
+    const orders = getLocalData('meridien_orders', initialOrders);
+    const index = orders.findIndex(o => o.id === id);
+    if (index === -1) throw new Error("Order not found");
+    orders[index] = { ...orders[index], ...updates };
+    saveLocalData('meridien_orders', orders);
+    return orders[index];
+  },
+
   // --- SETTINGS ---
   async getSettings(): Promise<RestaurantSettings> {
     if (supabase) {
