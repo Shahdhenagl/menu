@@ -3422,7 +3422,6 @@ export default function AdminDashboard({
             </div>
           </div>
         )}
-        )}
 
         {/* --- INVENTORY TAB --- */}
         {activeTab === 'inventory' && (
