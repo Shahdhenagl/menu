@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog } from '../types';
 
 // Load credentials from environment
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -965,6 +965,47 @@ export const db = {
     if (idx > -1) {
       all[idx].is_read = true;
       saveLocalData('meridien_notifications', all);
+    }
+  },
+
+  // --- Production Logs (Factory to Distribution) ---
+  async getProductionLogs(): Promise<ProductionLog[]> {
+    return getLocalData('meridien_production_logs', []) as ProductionLog[];
+  },
+  
+  async addProductionLog(logData: Omit<ProductionLog, 'id' | 'created_at'>): Promise<void> {
+    const all = getLocalData('meridien_production_logs', []) as ProductionLog[];
+    const newLog: ProductionLog = {
+      ...logData,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    saveLocalData('meridien_production_logs', [newLog, ...all]);
+
+    // Update inventory: decrease stock_factory for consumed, increase stock_distribution for produced
+    const items = getLocalData('meridien_inventory_items', []) as InventoryItem[];
+    let updated = false;
+
+    // Process consumed items (Decrease factory stock)
+    for (const consumed of logData.consumed_items) {
+      const itemIdx = items.findIndex(i => i.id === consumed.item_id);
+      if (itemIdx > -1) {
+        items[itemIdx].stock_factory = Math.max(0, (items[itemIdx].stock_factory || 0) - consumed.quantity);
+        updated = true;
+      }
+    }
+
+    // Process produced items (Increase distribution stock)
+    for (const produced of logData.produced_items) {
+      const itemIdx = items.findIndex(i => i.id === produced.item_id);
+      if (itemIdx > -1) {
+        items[itemIdx].stock_distribution = (items[itemIdx].stock_distribution || 0) + produced.quantity;
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      saveLocalData('meridien_inventory_items', items);
     }
   }
 };

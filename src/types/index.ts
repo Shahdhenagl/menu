@@ -178,3 +178,23 @@ export interface SystemNotification {
   is_read: boolean;
   created_at: string;
 }
+
+export interface ProductionConsumedItem {
+  item_id: string;
+  item_name: string;
+  quantity: number;
+}
+
+export interface ProductionProducedItem {
+  item_id: string;
+  item_name: string;
+  quantity: number;
+}
+
+export interface ProductionLog {
+  id: string;
+  produced_items: ProductionProducedItem[];
+  consumed_items: ProductionConsumedItem[];
+  recorded_by: string;
+  created_at?: string;
+}

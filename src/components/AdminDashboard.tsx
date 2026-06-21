@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog } from '../types';
 import { db } from '../lib/supabase';
 import { printOrderTickets } from '../utils/printUtils';
 import { 
@@ -24,7 +24,7 @@ interface AdminDashboardProps {
   toggleTheme: () => void;
 }
 
-type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory';
+type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'factory';
 
 export default function AdminDashboard({
   onClose,
@@ -313,6 +313,12 @@ export default function AdminDashboard({
 
   // --- INVENTORY STATES ---
   const [inventorySubTab, setInventorySubTab] = useState<'suppliers' | 'items' | 'invoices' | 'mfg_orders'>('items');
+  const [factorySubTab, setFactorySubTab] = useState<'mfg_requests' | 'production'>('mfg_requests');
+  const [productionLogs, setProductionLogs] = useState<ProductionLog[]>([]);
+  const [producedItemId, setProducedItemId] = useState('');
+  const [producedQuantity, setProducedQuantity] = useState(1);
+  const [consumedItems, setConsumedItems] = useState<{item_id: string, quantity: number}[]>([]);
+  const [productionModalOpen, setProductionModalOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [purchaseInvoices, setPurchaseInvoices] = useState<PurchaseInvoice[]>([]);
@@ -349,10 +355,12 @@ export default function AdminDashboard({
       const items = await db.getInventoryItems();
       const invs = await db.getPurchaseInvoices();
       const mfg = await db.getManufacturingOrders();
+      const prodLogs = await db.getProductionLogs();
       setSuppliers(sups);
       setInventoryItems(items);
       setPurchaseInvoices(invs);
       setManufacturingOrders(mfg);
+      setProductionLogs(prodLogs);
       
       if (loggedInUser) {
         const notifs = await db.getNotifications(loggedInUser.role);
@@ -516,6 +524,40 @@ export default function AdminDashboard({
       await fetchInventoryData();
       setMfgModalOpen(false);
       setMfgCart([]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveProductionLog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!producedItemId || producedQuantity <= 0 || consumedItems.length === 0) {
+      alert(language === 'ar' ? 'يجب اختيار منتج وإضافة خامات مستهلكة!' : 'Must select a product and add consumed items!');
+      return;
+    }
+    setLoading(true);
+    try {
+      const prodItem = inventoryItems.find(i => i.id === producedItemId);
+      await db.addProductionLog({
+        produced_items: [{
+          item_id: producedItemId,
+          item_name: prodItem?.name || '',
+          quantity: producedQuantity
+        }],
+        consumed_items: consumedItems.map(c => ({
+          item_id: c.item_id,
+          item_name: inventoryItems.find(i => i.id === c.item_id)?.name || '',
+          quantity: c.quantity
+        })),
+        recorded_by: loggedInUser?.name || 'Unknown'
+      });
+      await fetchInventoryData();
+      setProductionModalOpen(false);
+      setProducedItemId('');
+      setProducedQuantity(1);
+      setConsumedItems([]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -1938,13 +1980,23 @@ export default function AdminDashboard({
             </button>
           )}
 
-          {(loggedInUser?.role === 'admin' || loggedInUser?.role === 'manager') && (
+          {(loggedInUser?.role === 'admin' || loggedInUser?.role === 'inventory_manager' || loggedInUser?.role === 'manager') && (
             <button 
               className={`admin-nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
               onClick={() => setActiveTab('inventory')}
             >
               <Package size={18} />
               <span>{language === 'ar' ? 'إدارة المخازن' : 'Inventory'}</span>
+            </button>
+          )}
+
+          {(loggedInUser?.role === 'admin' || loggedInUser?.role === 'kitchen_manager') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'factory' ? 'active' : ''}`}
+              onClick={() => setActiveTab('factory')}
+            >
+              <Coffee size={18} />
+              <span>{language === 'ar' ? 'المصنع والمطبخ' : 'Factory & Kitchen'}</span>
             </button>
           )}
         </nav>
@@ -3794,11 +3846,6 @@ export default function AdminDashboard({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                   <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'أوامر التصنيع وأذون الصرف' : 'Manufacturing Orders & Transfers'}</h2>
-                  {(loggedInUser?.role === 'kitchen_manager' || loggedInUser?.role === 'admin') && (
-                    <button className="btn-gold" onClick={() => setMfgModalOpen(true)}>
-                      <Plus size={18} /> {language === 'ar' ? 'طلب صرف خامات' : 'Request Materials'}
-                    </button>
-                  )}
                 </div>
                 <div className="table-responsive">
                   <table className="admin-table">
@@ -3850,6 +3897,138 @@ export default function AdminDashboard({
                       ))}
                       {manufacturingOrders.length === 0 && (
                         <tr><td colSpan={6} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* --- FACTORY TAB --- */}
+        {activeTab === 'factory' && (
+          <div className="admin-section">
+            <div className="section-header" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>{language === 'ar' ? 'المصنع والمطبخ' : 'Factory & Kitchen'}</h1>
+                <p style={{ color: 'var(--text-gray)' }}>
+                  {language === 'ar' ? 'إدارة الإنتاج، الصرف الدفتري، وتحويل المنتجات' : 'Manage production, material requests, and product transfers'}
+                </p>
+              </div>
+            </div>
+
+            {/* Factory Sub Navigation */}
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid #333', paddingBottom: '1rem' }}>
+              <button 
+                className={`btn-outline-gold ${factorySubTab === 'mfg_requests' ? 'active' : ''}`}
+                onClick={() => setFactorySubTab('mfg_requests')}
+                style={{ background: factorySubTab === 'mfg_requests' ? 'var(--gold-primary)' : 'transparent', color: factorySubTab === 'mfg_requests' ? '#000' : 'var(--gold-primary)' }}
+              >
+                {language === 'ar' ? 'أذون الصرف' : 'Material Requests'}
+              </button>
+              <button 
+                className={`btn-outline-gold ${factorySubTab === 'production' ? 'active' : ''}`}
+                onClick={() => setFactorySubTab('production')}
+                style={{ background: factorySubTab === 'production' ? 'var(--gold-primary)' : 'transparent', color: factorySubTab === 'production' ? '#000' : 'var(--gold-primary)' }}
+              >
+                {language === 'ar' ? 'الإنتاج والتوزيع' : 'Production & Distribution'}
+              </button>
+            </div>
+
+            {factorySubTab === 'mfg_requests' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'طلبات صرف الخامات' : 'Raw Material Requests'}</h2>
+                  <button className="btn-gold" onClick={() => setMfgModalOpen(true)}>
+                    <Plus size={18} /> {language === 'ar' ? 'طلب صرف خامات' : 'Request Materials'}
+                  </button>
+                </div>
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'رقم الطلب' : 'Order ID'}</th>
+                        <th>{language === 'ar' ? 'المستخدم (بواسطة)' : 'Requested By'}</th>
+                        <th>{language === 'ar' ? 'الأصناف' : 'Items'}</th>
+                        <th>{language === 'ar' ? 'تاريخ الطلب' : 'Date'}</th>
+                        <th>{language === 'ar' ? 'الحالة' : 'Status'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {manufacturingOrders.map(order => (
+                        <tr key={order.id}>
+                          <td className="font-en">#{order.id.slice(0, 8)}</td>
+                          <td>{order.requested_by}</td>
+                          <td>
+                            {order.items.map((i, idx) => (
+                              <div key={idx} style={{ fontSize: '0.85rem' }}>
+                                {i.quantity} {language === 'ar' && i.unit === 'kilo' ? 'كجم' : i.unit === 'gram' ? 'جرام' : i.unit === 'carton' ? 'كرتونة' : i.unit === 'box' ? 'علبة' : i.unit} من {i.item_name}
+                              </div>
+                            ))}
+                          </td>
+                          <td className="font-en">{new Date(order.created_at || '').toLocaleDateString()}</td>
+                          <td>
+                            <span style={{ 
+                              padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold',
+                              background: order.status === 'approved' ? 'rgba(16,185,129,0.2)' : order.status === 'rejected' ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)',
+                              color: order.status === 'approved' ? 'var(--success)' : order.status === 'rejected' ? 'var(--danger)' : 'orange'
+                            }}>
+                              {order.status === 'approved' ? (language === 'ar' ? 'مقبول' : 'Approved') : order.status === 'rejected' ? (language === 'ar' ? 'مرفوض' : 'Rejected') : (language === 'ar' ? 'قيد الانتظار' : 'Pending')}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {manufacturingOrders.length === 0 && (
+                        <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {factorySubTab === 'production' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'سجل الإنتاج (التسليم للتوزيع)' : 'Production Logs'}</h2>
+                  <button className="btn-gold" onClick={() => setProductionModalOpen(true)}>
+                    <Plus size={18} /> {language === 'ar' ? 'تسجيل إنتاج جديد' : 'Record New Production'}
+                  </button>
+                </div>
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                        <th>{language === 'ar' ? 'بواسطة' : 'Recorded By'}</th>
+                        <th>{language === 'ar' ? 'المنتجات الجاهزة (إلى التوزيع)' : 'Produced (To Dist)'}</th>
+                        <th>{language === 'ar' ? 'الخامات المستهلكة (من المصنع)' : 'Consumed (From Factory)'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productionLogs.map(log => (
+                        <tr key={log.id}>
+                          <td className="font-en">{new Date(log.created_at || '').toLocaleDateString()}</td>
+                          <td>{log.recorded_by}</td>
+                          <td>
+                            {log.produced_items.map((i: any, idx: number) => (
+                              <div key={idx} style={{ color: 'var(--success)', fontWeight: 'bold' }}>
+                                + {i.quantity} {i.item_name}
+                              </div>
+                            ))}
+                          </td>
+                          <td>
+                            {log.consumed_items.map((i: any, idx: number) => (
+                              <div key={idx} style={{ color: 'var(--danger)' }}>
+                                - {i.quantity} {i.item_name}
+                              </div>
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                      {productionLogs.length === 0 && (
+                        <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد عمليات إنتاج مسجلة' : 'No production logs'}</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -5221,6 +5400,98 @@ export default function AdminDashboard({
             <div className="admin-modal-footer">
               <button type="button" className="btn-outline-gold" onClick={() => setMfgModalOpen(false)}>{t.close}</button>
               <button type="button" className="btn-gold" onClick={handleSaveManufacturingOrder} disabled={loading || mfgCart.length === 0}>{t.save}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Production Modal */}
+      {productionModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setProductionModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'تسجيل إنتاج جديد (تحويل لتوزيع)' : 'Record New Production'}</h2>
+              <button className="btn-close" onClick={() => setProductionModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="admin-modal-body">
+              
+              <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                <h3 style={{ marginBottom: '1rem', color: 'var(--success)' }}>{language === 'ar' ? 'المنتج الجاهز (سيتم إضافته للتوزيع)' : 'Produced Item (To Distribution)'}</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.5rem' }}>
+                  <select 
+                    className="input-gold" 
+                    style={{ padding: '0.5rem' }} 
+                    value={producedItemId} 
+                    onChange={e => setProducedItemId(e.target.value)}
+                  >
+                    <option value="">{language === 'ar' ? 'اختر المنتج...' : 'Select produced item...'}</option>
+                    {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                  </select>
+                  <input 
+                    type="number" 
+                    className="input-gold" 
+                    placeholder={language === 'ar' ? 'الكمية المنتجة' : 'Produced Qty'} 
+                    style={{ padding: '0.5rem' }} 
+                    step="0.01" 
+                    min="0.01"
+                    value={producedQuantity}
+                    onChange={e => setProducedQuantity(parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                <h3 style={{ marginBottom: '1rem', color: 'var(--danger)' }}>{language === 'ar' ? 'الخامات المستهلكة (سيتم خصمها من المصنع)' : 'Consumed Raw Materials (From Factory)'}</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <select id="prod-consumed-item" className="input-gold" style={{ padding: '0.5rem' }}>
+                    <option value="">{language === 'ar' ? 'اختر الخامة...' : 'Select raw material...'}</option>
+                    {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name} ({i.stock_factory} {language === 'ar' ? 'بالمصنع' : 'in factory'})</option>)}
+                  </select>
+                  <input type="number" id="prod-consumed-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية المستهلكة' : 'Consumed Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
+                  <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
+                    const idEl = document.getElementById('prod-consumed-item') as HTMLSelectElement;
+                    const qtyEl = document.getElementById('prod-consumed-qty') as HTMLInputElement;
+                    const itemId = idEl.value;
+                    const qty = parseFloat(qtyEl.value);
+                    if (itemId && qty > 0) {
+                      setConsumedItems([...consumedItems, { item_id: itemId, quantity: qty }]);
+                      idEl.value = ''; qtyEl.value = '';
+                    }
+                  }}>
+                    <Plus size={16} />
+                  </button>
+                </div>
+
+                {consumedItems.length > 0 && (
+                  <table className="admin-table" style={{ marginTop: '1rem', fontSize: '0.9rem' }}>
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'الخامة' : 'Item'}</th>
+                        <th>{language === 'ar' ? 'الكمية المخصومة' : 'Deducted Qty'}</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {consumedItems.map((c, idx) => (
+                        <tr key={idx}>
+                          <td>{inventoryItems.find(i => i.id === c.item_id)?.name}</td>
+                          <td>{c.quantity}</td>
+                          <td>
+                            <button type="button" style={{ background: 'transparent', border: 'none', color: '#ff4d4d', cursor: 'pointer' }} onClick={() => setConsumedItems(consumedItems.filter((_, i) => i !== idx))}>
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+            </div>
+            <div className="admin-modal-footer">
+              <button type="button" className="btn-outline-gold" onClick={() => setProductionModalOpen(false)}>{t.close}</button>
+              <button type="button" className="btn-gold" onClick={handleSaveProductionLog} disabled={loading || !producedItemId || producedQuantity <= 0 || consumedItems.length === 0}>{t.save}</button>
             </div>
           </div>
         </div>
