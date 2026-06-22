@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShoppingBag, Utensils, CheckCircle, X, 
   Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
-  Pizza, Coffee, ChefHat, Wine, Cake, User, Phone, ArrowLeft, MessageCircle, Search
+  Pizza, Coffee, ChefHat, Wine, Cake, MessageCircle
 } from 'lucide-react';
 import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer } from '../types';
