@@ -711,6 +711,7 @@ export default function AdminDashboard({
     setSetTiktok(settings.tiktok_url);
     setSetSnapchat(settings.snapchat_url);
     setSetTalabat(settings.talabat_url || '');
+    setSetLocationUrl(settings.location_url || '');
     setTaxPercent(settings.tax_percent || 0);
     setServicePercent(settings.service_percent || 0);
     setPromos(settings.promo_codes || {});
