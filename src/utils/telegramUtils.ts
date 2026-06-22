@@ -6,22 +6,35 @@ export async function sendTelegramMessage(botToken: string | undefined, chatId: 
     console.warn("Telegram bot token or chat ID is missing.");
     return false;
   }
-  try {
-    const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: 'HTML'
-      })
-    });
-    return response.ok;
-  } catch (err) {
-    console.error("Failed to send Telegram message", err);
+  
+  // Split by comma, semicolon, or whitespace
+  const ids = chatId.split(/[,\s;]+/).map(id => id.trim()).filter(id => id.length > 0);
+  if (ids.length === 0) {
     return false;
   }
+
+  let allSuccess = true;
+  for (const singleId of ids) {
+    try {
+      const url = `https://api.telegram.org/bot${token}/sendMessage`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          chat_id: singleId,
+          text: text,
+          parse_mode: 'HTML'
+        })
+      });
+      if (!response.ok) {
+        allSuccess = false;
+      }
+    } catch (err) {
+      console.error("Failed to send Telegram message to ID: " + singleId, err);
+      allSuccess = false;
+    }
+  }
+  return allSuccess;
 }
