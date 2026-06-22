@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer } from '../types';
 import { db } from '../lib/supabase';
 import { printOrderTickets } from '../utils/printUtils';
 import { 
@@ -24,7 +24,7 @@ interface AdminDashboardProps {
   toggleTheme: () => void;
 }
 
-type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'factory';
+type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'factory';
 
 export default function AdminDashboard({
   onClose,
@@ -93,8 +93,22 @@ export default function AdminDashboard({
   const [setTiktok, setSetTiktok] = useState(settings.tiktok_url);
   const [setSnapchat, setSetSnapchat] = useState(settings.snapchat_url);
   const [setTalabat, setSetTalabat] = useState(settings.talabat_url || '');
+  const [setLocationUrl, setSetLocationUrl] = useState((settings as any).location_url || '');
   const [taxPercent, setTaxPercent] = useState<number>(settings.tax_percent || 0);
   const [servicePercent, setServicePercent] = useState<number>(settings.service_percent || 0);
+
+  // --- DEBT CUSTOMERS STATE ---
+  const [debtCustomers, setDebtCustomers] = useState<Customer[]>([]);
+  const [debtSettleAmount, setDebtSettleAmount] = useState<Record<string, number>>({});
+
+  const fetchDebtCustomers = async () => {
+    try {
+      const custs = await db.getCustomers();
+      setDebtCustomers(custs);
+    } catch (err) {
+      console.error('Error loading debt customers:', err);
+    }
+  };
   
   // Custom promos / offers management
   const [newPromoCode, setNewPromoCode] = useState('');
@@ -633,6 +647,7 @@ export default function AdminDashboard({
     fetchExpenses();
     fetchSystemUsers();
     fetchPrinters();
+    fetchDebtCustomers();
   }, []);
 
   const handleSaveExpense = async (e: React.FormEvent) => {
@@ -1099,6 +1114,7 @@ export default function AdminDashboard({
         tiktok_url: setTiktok,
         snapchat_url: setSnapchat,
         talabat_url: setTalabat,
+        location_url: setLocationUrl,
         tax_percent: taxPercent,
         service_percent: servicePercent
       });
@@ -1984,6 +2000,26 @@ export default function AdminDashboard({
             >
               <Users size={18} />
               <span>{t.customersTab}</span>
+            </button>
+          )}
+
+          {hasPermission('customers') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'debts' ? 'active' : ''}`}
+              onClick={() => setActiveTab('debts')}
+            >
+              <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>💳</span>
+              <span>{language === 'ar' ? 'الحسابات الآجلة' : 'Debts'}</span>
+            </button>
+          )}
+
+          {hasPermission('orders') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'invoices' ? 'active' : ''}`}
+              onClick={() => setActiveTab('invoices')}
+            >
+              <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>🧾</span>
+              <span>{language === 'ar' ? 'الفواتير والأرباح' : 'Invoices & Profit'}</span>
             </button>
           )}
 
@@ -3012,6 +3048,238 @@ export default function AdminDashboard({
           </div>
         )}
 
+        {/* TAB: DEBTS / الحسابات الآجلة */}
+        {activeTab === 'debts' && (
+          <div>
+            <div className="table-panel">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div>
+                  <h1 className="text-gradient-gold" style={{ fontSize: '1.5rem', margin: 0 }}>💳 {language === 'ar' ? 'الحسابات الآجلة (المديونيات)' : 'Deferred Accounts (Debts)'}</h1>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-gray)', marginTop: '0.2rem' }}>
+                    {language === 'ar' ? 'عرض وإدارة المديونيات على العملاء - يمكنك تسديد جزء أو كل المبلغ' : 'View and manage customer debts - you can settle partial or full amounts'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Debt Summary Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(239,68,68,0.2)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'إجمالي المديونيات' : 'Total Debts'}</div>
+                  <div className="font-en" style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--danger)' }}>
+                    {debtCustomers.reduce((s, c) => s + (c.total_debt || 0), 0).toLocaleString()} <span style={{ fontSize: '0.9rem' }}>EGP</span>
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(212,175,55,0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(212,175,55,0.2)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'عدد العملاء المدينين' : 'Customers with Debt'}</div>
+                  <div className="font-en" style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--gold-primary)' }}>
+                    {debtCustomers.filter(c => (c.total_debt || 0) > 0).length}
+                  </div>
+                </div>
+              </div>
+
+              <div className="table-wrapper">
+                <table className="luxury-table">
+                  <thead>
+                    <tr>
+                      <th>{language === 'ar' ? 'العميل' : 'Customer'}</th>
+                      <th>{language === 'ar' ? 'رقم الهاتف' : 'Phone'}</th>
+                      <th>{language === 'ar' ? 'المديونية الحالية' : 'Current Debt'}</th>
+                      <th>{language === 'ar' ? 'تسديد مبلغ' : 'Settle Amount'}</th>
+                      <th>{language === 'ar' ? 'إجراء' : 'Action'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {debtCustomers.map(cust => (
+                      <tr key={cust.id}>
+                        <td style={{ fontWeight: '700' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: (cust.total_debt || 0) > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', border: `1px solid ${(cust.total_debt || 0) > 0 ? 'var(--danger)' : 'var(--success)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: (cust.total_debt || 0) > 0 ? 'var(--danger)' : 'var(--success)', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                              {cust.name.trim().charAt(0).toUpperCase()}
+                            </div>
+                            <span>{cust.name}</span>
+                          </div>
+                        </td>
+                        <td className="font-en">
+                          <a href={`https://wa.me/${cust.phone.startsWith('+') ? cust.phone : '+2' + cust.phone}`} target="_blank" rel="noopener noreferrer" style={{ color: '#25D366', textDecoration: 'none', fontWeight: 'bold' }}>
+                            {cust.phone} 💬
+                          </a>
+                        </td>
+                        <td className="font-en" style={{ fontWeight: '800', color: (cust.total_debt || 0) > 0 ? 'var(--danger)' : 'var(--success)', fontSize: '1.1rem' }}>
+                          {(cust.total_debt || 0).toLocaleString()} EGP
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            max={cust.total_debt || 0}
+                            className="input-gold"
+                            placeholder={language === 'ar' ? 'مبلغ التسديد' : 'Amount'}
+                            value={debtSettleAmount[cust.id] || ''}
+                            onChange={(e) => setDebtSettleAmount(prev => ({ ...prev, [cust.id]: Number(e.target.value) }))}
+                            style={{ width: '120px', padding: '0.4rem 0.6rem', fontSize: '0.9rem' }}
+                          />
+                        </td>
+                        <td>
+                          <button
+                            className="btn-gold"
+                            disabled={(debtSettleAmount[cust.id] || 0) <= 0 || (debtSettleAmount[cust.id] || 0) > (cust.total_debt || 0)}
+                            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', borderRadius: '10px' }}
+                            onClick={async () => {
+                              const amount = debtSettleAmount[cust.id] || 0;
+                              if (amount <= 0 || amount > (cust.total_debt || 0)) return;
+                              const newDebt = (cust.total_debt || 0) - amount;
+                              await db.updateCustomerDebt(cust.id, newDebt);
+                              await fetchDebtCustomers();
+                              setDebtSettleAmount(prev => ({ ...prev, [cust.id]: 0 }));
+                              alert(language === 'ar' ? `تم تسديد ${amount} جنيه بنجاح! المديونية المتبقية: ${newDebt} جنيه` : `Settled ${amount} EGP! Remaining: ${newDebt} EGP`);
+                            }}
+                          >
+                            <CheckCircle size={14} />
+                            <span style={{ marginInlineStart: '4px' }}>{language === 'ar' ? 'تسديد' : 'Settle'}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {debtCustomers.length === 0 && (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem' }}>
+                          {language === 'ar' ? 'لا يوجد عملاء مسجلين بمديونيات' : 'No customers with debts found'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: INVOICES & PROFIT / الفواتير والأرباح */}
+        {activeTab === 'invoices' && (
+          <div>
+            <div className="table-panel">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div>
+                  <h1 className="text-gradient-gold" style={{ fontSize: '1.5rem', margin: 0 }}>🧾 {language === 'ar' ? 'الفواتير والأرباح' : 'Invoices & Profit'}</h1>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-gray)', marginTop: '0.2rem' }}>
+                    {language === 'ar' ? 'عرض جميع الفواتير المكتملة مع حساب تكلفة المواد والربح الصافي' : 'View all completed invoices with COGS and net profit calculation'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Invoice Summary Cards */}
+              {(() => {
+                const completedInvoices = orders.filter(o => o.status === 'completed' || o.status?.startsWith('completed'));
+                const totalSales = completedInvoices.reduce((s, o) => s + o.total_price, 0);
+                const totalCost = completedInvoices.reduce((s, o) => s + (o.total_cost || 0), 0);
+                const totalProfit = totalSales - totalCost;
+                return (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                      <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(16,185,129,0.2)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'إجمالي المبيعات' : 'Total Sales'}</div>
+                        <div className="font-en" style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--success)' }}>
+                          +{totalSales.toLocaleString()} <span style={{ fontSize: '0.8rem' }}>EGP</span>
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(239,68,68,0.2)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'إجمالي التكلفة (الخامات)' : 'Total COGS'}</div>
+                        <div className="font-en" style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--danger)' }}>
+                          -{totalCost.toLocaleString()} <span style={{ fontSize: '0.8rem' }}>EGP</span>
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(212,175,55,0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(212,175,55,0.2)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'صافي الربح' : 'Net Profit'}</div>
+                        <div className="font-en" style={{ fontSize: '1.5rem', fontWeight: '800', color: totalProfit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                          {totalProfit >= 0 ? '+' : ''}{totalProfit.toLocaleString()} <span style={{ fontSize: '0.8rem' }}>EGP</span>
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(212,175,55,0.03)', padding: '1rem', borderRadius: '14px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'عدد الفواتير' : 'Invoice Count'}</div>
+                        <div className="font-en" style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--gold-primary)' }}>
+                          {completedInvoices.length}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="table-wrapper">
+                      <table className="luxury-table">
+                        <thead>
+                          <tr>
+                            <th>{language === 'ar' ? 'رقم الفاتورة' : 'Invoice #'}</th>
+                            <th>{language === 'ar' ? 'العميل' : 'Customer'}</th>
+                            <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                            <th>{language === 'ar' ? 'طريقة الدفع' : 'Payment'}</th>
+                            <th>{language === 'ar' ? 'سعر البيع' : 'Sale Price'}</th>
+                            <th>{language === 'ar' ? 'التكلفة' : 'Cost'}</th>
+                            <th>{language === 'ar' ? 'الربح' : 'Profit'}</th>
+                            <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {completedInvoices.map(inv => {
+                            const cost = inv.total_cost || 0;
+                            const profit = inv.total_price - cost;
+                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet' ? '📱 محفظة' : '💵 كاش';
+                            return (
+                              <tr key={inv.id}>
+                                <td className="font-en" style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--gold-primary)' }}>#{inv.id.slice(0, 8)}</td>
+                                <td style={{ fontWeight: '600' }}>
+                                  {inv.customer_name}
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{inv.customer_phone}</div>
+                                </td>
+                                <td className="font-en" style={{ fontSize: '0.8rem' }}>{new Date(inv.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}</td>
+                                <td style={{ fontSize: '0.85rem' }}>{payLabel}</td>
+                                <td className="font-en" style={{ fontWeight: 'bold', color: 'var(--success)' }}>+{inv.total_price.toLocaleString()}</td>
+                                <td className="font-en" style={{ fontWeight: 'bold', color: 'var(--danger)' }}>-{cost.toLocaleString()}</td>
+                                <td className="font-en" style={{ fontWeight: '800', color: profit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                                  {profit >= 0 ? '+' : ''}{profit.toLocaleString()} EGP
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                    <button
+                                      className="btn-outline-gold"
+                                      style={{ padding: '0.3rem 0.5rem', fontSize: '0.75rem', borderRadius: '8px' }}
+                                      onClick={() => {
+                                        const items = inv.items.map((i: any) => `${language === 'ar' ? i.name_ar : i.name_en} x${i.quantity} = ${(i.price * i.quantity).toFixed(2)}`).join('\n');
+                                        alert(`${language === 'ar' ? 'تفاصيل الفاتورة' : 'Invoice Details'} #${inv.id.slice(0,8)}\n\n${items}\n\n${language === 'ar' ? 'الإجمالي' : 'Total'}: ${inv.total_price} EGP\n${language === 'ar' ? 'التكلفة' : 'Cost'}: ${cost} EGP\n${language === 'ar' ? 'الربح' : 'Profit'}: ${profit} EGP`);
+                                      }}
+                                    >
+                                      👁 {language === 'ar' ? 'عرض' : 'View'}
+                                    </button>
+                                    <button
+                                      style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)', padding: '0.3rem 0.5rem', fontSize: '0.75rem', borderRadius: '8px', cursor: 'pointer' }}
+                                      onClick={async () => {
+                                        if (confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذه الفاتورة؟' : 'Are you sure you want to delete this invoice?')) {
+                                          await db.deleteOrder(inv.id);
+                                          await refreshData();
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {completedInvoices.length === 0 && (
+                            <tr>
+                              <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem' }}>
+                                {language === 'ar' ? 'لا توجد فواتير مكتملة حالياً' : 'No completed invoices found'}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
         {/* TAB 5: SYSTEM SETTINGS CUSTOMIZER */}
         {activeTab === 'settings' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -3096,6 +3364,15 @@ export default function AdminDashboard({
                 <div className="form-group">
                   <label>{t.setNameEn}</label>
                   <input type="text" className="input-gold" value={setNameEn} onChange={(e) => setSetNameEn(e.target.value)} />
+                </div>
+
+                {/* Location URL */}
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'رابط اللوكيشن (Google Maps)' : 'Location URL (Google Maps)'}</label>
+                  <input type="text" className="input-gold" value={setLocationUrl} onChange={(e) => setSetLocationUrl(e.target.value)} placeholder="https://maps.google.com/..." />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {language === 'ar' ? 'سيُرسل مع فاتورة الواتساب للعميل' : 'Will be sent with WhatsApp invoice to customer'}
+                  </span>
                 </div>
               </div>
 

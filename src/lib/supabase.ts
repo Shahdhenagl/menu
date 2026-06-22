@@ -327,7 +327,8 @@ export const db = {
     }
 
     if (newOrder.status === 'completed') {
-      await this.deductInventoryForOrder(newOrder);
+      const cost = await this.deductInventoryForOrder(newOrder);
+      newOrder.total_cost = cost;
     }
 
     if (supabase) {
@@ -355,12 +356,14 @@ export const db = {
         const { data: currentOrder } = await supabase.from('orders').select('*').eq('id', id).single();
         if (currentOrder) {
           const updatedOrder = { ...currentOrder, status };
+          let cost = updatedOrder.total_cost || 0;
           if (status === 'completed' && !currentOrder.inventory_deducted) {
-            await this.deductInventoryForOrder(updatedOrder);
+            cost = await this.deductInventoryForOrder(updatedOrder);
+            updatedOrder.total_cost = cost;
           }
           const { data, error } = await supabase
             .from('orders')
-            .update({ status, inventory_deducted: updatedOrder.inventory_deducted })
+            .update({ status, inventory_deducted: updatedOrder.inventory_deducted, total_cost: cost })
             .eq('id', id)
             .select()
             .single();
@@ -376,7 +379,7 @@ export const db = {
     if (index === -1) throw new Error("Order not found");
     orders[index].status = status;
     if (status === 'completed' && !orders[index].inventory_deducted) {
-      await this.deductInventoryForOrder(orders[index]);
+      orders[index].total_cost = await this.deductInventoryForOrder(orders[index]);
     }
     saveLocalData('meridien_orders', orders);
     return orders[index];
@@ -389,7 +392,7 @@ export const db = {
         if (currentOrder) {
           const updatedOrder = { ...currentOrder, ...updates };
           if (updatedOrder.status === 'completed' && !currentOrder.inventory_deducted) {
-            await this.deductInventoryForOrder(updatedOrder);
+            updates.total_cost = await this.deductInventoryForOrder(updatedOrder);
             updates.inventory_deducted = true;
           }
           const { data, error } = await supabase
@@ -410,7 +413,7 @@ export const db = {
     if (index === -1) throw new Error("Order not found");
     orders[index] = { ...orders[index], ...updates };
     if (orders[index].status === 'completed' && !orders[index].inventory_deducted) {
-      await this.deductInventoryForOrder(orders[index]);
+      orders[index].total_cost = await this.deductInventoryForOrder(orders[index]);
     }
     saveLocalData('meridien_orders', orders);
     return orders[index];
@@ -1249,10 +1252,12 @@ export const db = {
   },
 
   // --- AUTOMATIC CASHIER STOCK DEDUCTION ---
-  async deductInventoryForOrder(order: Order): Promise<void> {
+  async deductInventoryForOrder(order: Order): Promise<number> {
     if (order.status !== 'completed' || order.inventory_deducted) {
-      return;
+      return 0;
     }
+
+    let total_cost = 0;
 
     try {
       if (supabase) {
@@ -1269,16 +1274,25 @@ export const db = {
               
               const { data: itemData } = await supabase
                 .from('inventory_items')
-                .select('stock_distribution')
+                .select('name, stock_distribution, avg_purchase_price, low_stock_threshold')
                 .eq('id', rec.inventory_item_id)
                 .single();
               
               if (itemData) {
+                total_cost += (Number(itemData.avg_purchase_price) || 0) * deductQty;
                 const newStockDist = Math.max(0, (Number(itemData.stock_distribution) || 0) - deductQty);
                 await supabase
                   .from('inventory_items')
                   .update({ stock_distribution: newStockDist })
                   .eq('id', rec.inventory_item_id);
+
+                if (newStockDist <= (Number(itemData.low_stock_threshold) || 5000)) {
+                  await this.addNotification({
+                    title: 'تنبيه: اقتراب نفاذ المخزون',
+                    message: `الخامة "${itemData.name}" اقتربت من النفاذ في المخزن الموزع. الكمية المتبقية: ${newStockDist}`,
+                    target_role: 'admin'
+                  });
+                }
               }
             }
           }
@@ -1286,16 +1300,25 @@ export const db = {
           // 2. Also deduct the product itself if it exists in inventory_items
           const { data: prodItem } = await supabase
             .from('inventory_items')
-            .select('stock_distribution')
+            .select('name, stock_distribution, avg_purchase_price, low_stock_threshold')
             .eq('id', item.id)
             .single();
 
           if (prodItem) {
+            total_cost += (Number(prodItem.avg_purchase_price) || 0) * item.quantity;
             const newStockDist = Math.max(0, (Number(prodItem.stock_distribution) || 0) - item.quantity);
             await supabase
               .from('inventory_items')
               .update({ stock_distribution: newStockDist })
               .eq('id', item.id);
+
+            if (newStockDist <= (Number(prodItem.low_stock_threshold) || 5000)) {
+              await this.addNotification({
+                title: 'تنبيه: اقتراب نفاذ المخزون',
+                message: `الصنف "${prodItem.name}" اقترب من النفاذ في المخزن الموزع. الكمية المتبقية: ${newStockDist}`,
+                target_role: 'admin'
+              });
+            }
           }
         }
       } else {
@@ -1310,16 +1333,34 @@ export const db = {
             const deductQty = rec.quantity * item.quantity;
             const itemIdx = items.findIndex(i => i.id === rec.inventory_item_id);
             if (itemIdx > -1) {
+              total_cost += (items[itemIdx].avg_purchase_price || 0) * deductQty;
               items[itemIdx].stock_distribution = Math.max(0, (items[itemIdx].stock_distribution || 0) - deductQty);
               updated = true;
+
+              if (items[itemIdx].stock_distribution <= (items[itemIdx].low_stock_threshold || 5000)) {
+                await this.addNotification({
+                  title: 'تنبيه: اقتراب نفاذ المخزون',
+                  message: `الخامة "${items[itemIdx].name}" اقتربت من النفاذ في المخزن الموزع. الكمية المتبقية: ${items[itemIdx].stock_distribution}`,
+                  target_role: 'admin'
+                });
+              }
             }
           }
 
           // 2. Deduct product itself
           const prodItemIdx = items.findIndex(i => i.id === item.id);
           if (prodItemIdx > -1) {
+            total_cost += (items[prodItemIdx].avg_purchase_price || 0) * item.quantity;
             items[prodItemIdx].stock_distribution = Math.max(0, (items[prodItemIdx].stock_distribution || 0) - item.quantity);
             updated = true;
+
+            if (items[prodItemIdx].stock_distribution <= (items[prodItemIdx].low_stock_threshold || 5000)) {
+              await this.addNotification({
+                title: 'تنبيه: اقتراب نفاذ المخزون',
+                message: `الصنف "${items[prodItemIdx].name}" اقترب من النفاذ في المخزن الموزع. الكمية المتبقية: ${items[prodItemIdx].stock_distribution}`,
+                target_role: 'admin'
+              });
+            }
           }
         }
 
@@ -1332,6 +1373,61 @@ export const db = {
     } catch (err) {
       console.error("Error in deductInventoryForOrder:", err);
     }
+    return total_cost;
+  },
+
+  // --- CUSTOMERS (الحسابات الآجلة) ---
+  async getCustomers(): Promise<Customer[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return data || [];
+      } catch (err) {
+        console.warn("Supabase fetch failed, falling back to mock database.", err);
+      }
+    }
+    return getLocalData('meridien_customers', []) as Customer[];
+  },
+
+  async addCustomer(customer: Omit<Customer, 'id' | 'created_at'>): Promise<Customer> {
+    const newCust = {
+      ...customer,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('customers').insert([newCust]).select().single();
+        if (error) throw error;
+        return data;
+      } catch (err) {
+        console.warn("Supabase insert failed, falling back to mock database.", err);
+      }
+    }
+    const customers = await this.getCustomers();
+    customers.unshift(newCust);
+    saveLocalData('meridien_customers', customers);
+    return newCust;
+  },
+
+  async updateCustomerDebt(id: string, newDebt: number): Promise<void> {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('customers').update({ total_debt: newDebt }).eq('id', id);
+        if (error) throw error;
+        return;
+      } catch (err) {
+        console.warn("Supabase update failed, falling back to mock database.", err);
+      }
+    }
+    const customers = await this.getCustomers();
+    const idx = customers.findIndex(c => c.id === id);
+    if (idx > -1) {
+      customers[idx].total_debt = newDebt;
+      saveLocalData('meridien_customers', customers);
+    }
   }
 };
+
 

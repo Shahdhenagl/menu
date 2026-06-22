@@ -2,6 +2,14 @@
 -- Run this script in your Supabase SQL Editor (https://supabase.com/dashboard/project/xrajwseaukolbidvwfsp/sql/new)
 
 -- 1. Create Tables
+CREATE TABLE IF NOT EXISTS customers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  phone TEXT,
+  total_debt NUMERIC DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS categories (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name_ar TEXT NOT NULL,

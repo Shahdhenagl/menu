@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShoppingBag, Utensils, CheckCircle, X, 
   Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
-  Pizza, Coffee, ChefHat, Wine, Cake
+  Pizza, Coffee, ChefHat, Wine, Cake, User, Phone, ArrowLeft, MessageCircle, Search
 } from 'lucide-react';
 import { db } from '../lib/supabase';
-import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings } from '../types';
+import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer } from '../types';
 import { printOrderTickets } from '../utils/printUtils';
 
 interface PosSystemProps {
@@ -43,6 +43,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [orderType, setOrderType] = useState<'takeaway' | 'talabat' | 'dine_in' | 'delivery' | null>(null);
   const [tableNumber, setTableNumber] = useState('');
   
+  // Payment and Customers
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'visa' | 'deferred'>('cash');
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+
   // Menu & Cart
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [cart, setCart] = useState<OrderItem[]>([]);
@@ -52,13 +57,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   }, []);
 
   const loadData = async () => {
-    const [cats, prods, users, ords, prnts, sets] = await Promise.all([
+    const [cats, prods, users, ords, prnts, sets, custs] = await Promise.all([
       db.getCategories(),
       db.getProducts(),
       db.getSystemUsers(),
       db.getOrders(),
       db.getPrinters(),
-      db.getSettings()
+      db.getSettings(),
+      db.getCustomers()
     ]);
     setCategories(cats.sort((a, b) => a.sort_order - b.sort_order));
     setProducts(prods);
@@ -66,6 +72,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing'));
     setPrinters(prnts);
     setSettings(sets);
+    setCustomers(custs);
     if (cats.length > 0) setActiveCategory(cats[0].id);
   };
 
@@ -170,7 +177,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
         customer_name: customerName,
         customer_phone: customerPhone,
         table_number: tableNumber,
-        order_type: orderType || editingOrder.order_type
+        order_type: orderType || editingOrder.order_type,
+        payment_method: paymentMethod,
+        customer_id: paymentMethod === 'deferred' ? selectedCustomerId : undefined
       });
       setLastPlacedOrder(updatedOrder);
       setCart([]);
@@ -197,12 +206,22 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
       table_number: tableNumber || '-',
       items: cart,
       total_price: cartTotal,
-      status: 'pending',
+      status: paymentMethod === 'deferred' ? 'completed' : 'pending', // Deferred is auto-completed financially
       order_type: orderType || 'takeaway',
       waiter_id: assignedWaiterId,
       waiter_name: assignedWaiterName,
+      payment_method: paymentMethod,
+      customer_id: paymentMethod === 'deferred' ? selectedCustomerId : undefined,
       created_at: new Date().toISOString()
     };
+    
+    // If deferred, update customer debt
+    if (paymentMethod === 'deferred' && selectedCustomerId) {
+      const cust = customers.find(c => c.id === selectedCustomerId);
+      if (cust) {
+        await db.updateCustomerDebt(cust.id, (cust.total_debt || 0) + cartTotal);
+      }
+    }
     
     const placedOrder = await db.addOrder(newOrder);
     setLastPlacedOrder(placedOrder);
@@ -601,8 +620,23 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
               <p style={{ fontSize: '1.2rem', color: '#aaa', marginBottom: '3rem' }}>
                 {orderType?.toUpperCase()} {tableNumber && `- Table ${tableNumber}`}
               </p>
+              <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button className={`pos-btn-outline ${paymentMethod === 'cash' ? 'active-pay' : ''}`} onClick={() => setPaymentMethod('cash')} style={{ background: paymentMethod === 'cash' ? 'var(--gold-primary)' : '', color: paymentMethod === 'cash' ? '#000' : '' }}>{language === 'ar' ? 'كاش' : 'Cash'}</button>
+                <button className={`pos-btn-outline ${paymentMethod === 'visa' ? 'active-pay' : ''}`} onClick={() => setPaymentMethod('visa')} style={{ background: paymentMethod === 'visa' ? 'var(--gold-primary)' : '', color: paymentMethod === 'visa' ? '#000' : '' }}>{language === 'ar' ? 'فيزا' : 'Visa'}</button>
+                <button className={`pos-btn-outline ${paymentMethod === 'deferred' ? 'active-pay' : ''}`} onClick={() => setPaymentMethod('deferred')} style={{ background: paymentMethod === 'deferred' ? 'var(--gold-primary)' : '', color: paymentMethod === 'deferred' ? '#000' : '' }}>{language === 'ar' ? 'آجل (تسجيل مديونية)' : 'Deferred'}</button>
+              </div>
+
+              {paymentMethod === 'deferred' && (
+                <div style={{ marginBottom: '2rem', width: '300px' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'اختر العميل' : 'Select Customer'}</label>
+                  <select className="pos-input" value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)}>
+                    <option value="">{language === 'ar' ? '-- اختر عميل --' : '-- Select Customer --'}</option>
+                    {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
+                  </select>
+                </div>
+              )}
               
-              <button className="pos-btn" style={{ width: '300px', marginBottom: '1rem', padding: '1.5rem' }} onClick={placeOrder}>
+              <button className="pos-btn" style={{ width: '300px', marginBottom: '1rem', padding: '1.5rem' }} disabled={paymentMethod === 'deferred' && !selectedCustomerId} onClick={placeOrder}>
                 {language === 'ar' ? 'تأكيد الطلب' : 'Confirm Order'}
               </button>
               <button className="pos-btn-outline" style={{ width: '300px' }} onClick={() => setView('menu')}>{t.back}</button>
@@ -617,10 +651,21 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
               <h2 style={{ fontSize: '3rem' }}>{t.successMsg}</h2>
               <div style={{ display: 'flex', gap: '1.5rem', marginTop: '3rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                 {lastPlacedOrder && (
-                  <button className="pos-btn" style={{ background: '#3b82f6', color: '#fff' }} onClick={() => printOrderTickets(lastPlacedOrder, categories, products, printers, language)}>
-                    <PrinterIcon size={20} style={{ marginRight: '8px' }} />
-                    {language === 'ar' ? 'طباعة البونات' : 'Print Tickets'}
-                  </button>
+                  <>
+                    <button className="pos-btn" style={{ background: '#3b82f6', color: '#fff' }} onClick={() => printOrderTickets(lastPlacedOrder, categories, products, printers, language)}>
+                      <PrinterIcon size={20} style={{ marginRight: '8px' }} />
+                      {language === 'ar' ? 'طباعة البونات' : 'Print Tickets'}
+                    </button>
+                    <button className="pos-btn" style={{ background: '#25D366', color: '#fff' }} onClick={() => {
+                      const msg = language === 'ar' 
+                        ? `مرحباً بك في ${settings?.restaurant_name_ar || 'مطعمنا'}!\nتفاصيل طلبك #${lastPlacedOrder.id.slice(0,6)}\nالإجمالي: ${lastPlacedOrder.total_price} ج.م\nتاريخ: ${new Date().toLocaleDateString()}\nاللوكيشن: ${settings?.location_url || ''}`
+                        : `Welcome to ${settings?.restaurant_name_en || 'our restaurant'}!\nOrder #${lastPlacedOrder.id.slice(0,6)}\nTotal: ${lastPlacedOrder.total_price} EGP\nDate: ${new Date().toLocaleDateString()}\nLocation: ${settings?.location_url || ''}`;
+                      window.open(`https://wa.me/${lastPlacedOrder.customer_phone || settings?.whatsapp_number}?text=${encodeURIComponent(msg)}`, '_blank');
+                    }}>
+                      <MessageCircle size={20} style={{ marginRight: '8px' }} />
+                      {language === 'ar' ? 'واتساب' : 'WhatsApp'}
+                    </button>
+                  </>
                 )}
                 {role === 'waiter' && (
                   <button className="pos-btn-outline" onClick={() => {
