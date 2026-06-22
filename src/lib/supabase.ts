@@ -915,6 +915,31 @@ export const db = {
     
     return newInvoice;
   },
+  async updatePurchaseInvoice(id: string, updates: Partial<PurchaseInvoice>): Promise<PurchaseInvoice> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('purchase_invoices')
+          .update(updates)
+          .eq('id', id)
+          .select()
+          .single();
+        if (!error && data) return data;
+        console.warn("Supabase updatePurchaseInvoice failed", error);
+      } catch (err) {
+        console.warn("Supabase updatePurchaseInvoice failed", err);
+      }
+    }
+    const invoices = await this.getPurchaseInvoices();
+    const index = invoices.findIndex(i => i.id === id);
+    if (index > -1) {
+      invoices[index] = { ...invoices[index], ...updates };
+      saveLocalData('meridien_purchase_invoices', invoices);
+      return invoices[index];
+    }
+    throw new Error("Invoice not found");
+  },
+
 
   // --- MANUFACTURING ORDERS ---
   async getManufacturingOrders(): Promise<ManufacturingOrder[]> {

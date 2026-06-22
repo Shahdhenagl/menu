@@ -166,6 +166,11 @@ export interface PurchaseInvoice {
   invoice_date: string;
   items: PurchaseInvoiceItem[];
   total_amount: number;
+  paid_cash?: number;
+  paid_visa?: number;
+  paid_wallet?: number;
+  paid_instapay?: number;
+  remaining_amount?: number;
   created_at?: string;
 }
 

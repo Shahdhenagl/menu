@@ -9,7 +9,7 @@ import {
 import {
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
-  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle
+  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle, Eye
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -366,6 +366,18 @@ export default function AdminDashboard({
   const [invoiceSupplierId, setInvoiceSupplierId] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [invoiceCart, setInvoiceCart] = useState<{item_id: string, quantity: number, unit_price: number}[]>([]);
+  const [invoicePaidCash, setInvoicePaidCash] = useState<number | ''>('');
+  const [invoicePaidVisa, setInvoicePaidVisa] = useState<number | ''>('');
+  const [invoicePaidWallet, setInvoicePaidWallet] = useState<number | ''>('');
+  const [invoicePaidInstapay, setInvoicePaidInstapay] = useState<number | ''>('');
+
+  // Supplier Profile and Debt states
+  const [selectedSupplierProfile, setSelectedSupplierProfile] = useState<Supplier | null>(null);
+  const [payDebtModalOpen, setPayDebtModalOpen] = useState(false);
+  const [selectedInvoiceToPay, setSelectedInvoiceToPay] = useState<PurchaseInvoice | null>(null);
+  const [payAmount, setPayAmount] = useState<number | ''>('');
+  const [payMethod, setPayMethod] = useState<'cash' | 'visa' | 'wallet' | 'instapay'>('cash');
+
 
   // Phase 2: Manufacturing Orders & Notifications
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
@@ -459,6 +471,55 @@ export default function AdminDashboard({
     } catch(err) { console.error(err); }
   };
 
+  const handlePayDebt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedInvoiceToPay || !payAmount) return;
+    const amountToPay = Number(payAmount) || 0;
+    if (amountToPay <= 0) {
+      alert(language === 'ar' ? 'يرجى إدخال مبلغ صحيح' : 'Please enter a valid amount');
+      return;
+    }
+    const currentRemaining = selectedInvoiceToPay.remaining_amount ?? selectedInvoiceToPay.total_amount;
+    if (amountToPay > currentRemaining) {
+      alert(language === 'ar' ? 'المبلغ المدفوع أكبر من المتبقي!' : 'Paid amount cannot exceed remaining amount!');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const updates: Partial<PurchaseInvoice> = {};
+      if (payMethod === 'cash') {
+        updates.paid_cash = (selectedInvoiceToPay.paid_cash ?? 0) + amountToPay;
+      } else if (payMethod === 'visa') {
+        updates.paid_visa = (selectedInvoiceToPay.paid_visa ?? 0) + amountToPay;
+      } else if (payMethod === 'wallet') {
+        updates.paid_wallet = (selectedInvoiceToPay.paid_wallet ?? 0) + amountToPay;
+      } else if (payMethod === 'instapay') {
+        updates.paid_instapay = (selectedInvoiceToPay.paid_instapay ?? 0) + amountToPay;
+      }
+      updates.remaining_amount = currentRemaining - amountToPay;
+
+      const updatedInvoice = await db.updatePurchaseInvoice(selectedInvoiceToPay.id!, updates);
+      
+      await fetchInventoryData();
+      setSelectedInvoiceToPay(updatedInvoice);
+      setPayDebtModalOpen(false);
+      setPayAmount('');
+      
+      if (selectedSupplierProfile) {
+        const latestSups = await db.getSuppliers();
+        const latestSup = latestSups.find(s => s.id === selectedSupplierProfile.id);
+        if (latestSup) setSelectedSupplierProfile(latestSup);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save payment");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   const handleSaveInventoryItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!invName.trim()) return;
@@ -519,18 +580,33 @@ export default function AdminDashboard({
         };
       });
 
+      const paidCash = Number(invoicePaidCash) || 0;
+      const paidVisa = Number(invoicePaidVisa) || 0;
+      const paidWallet = Number(invoicePaidWallet) || 0;
+      const paidInstapay = Number(invoicePaidInstapay) || 0;
+      const remaining = Math.max(0, total - (paidCash + paidVisa + paidWallet + paidInstapay));
+
       await db.addPurchaseInvoice({
         supplier_id: invoiceSupplierId,
         supplier_name: sup ? sup.name : 'Unknown',
         invoice_date: invoiceDate,
         items: itemsToSave,
-        total_amount: total
+        total_amount: total,
+        paid_cash: paidCash,
+        paid_visa: paidVisa,
+        paid_wallet: paidWallet,
+        paid_instapay: paidInstapay,
+        remaining_amount: remaining
       });
       
       await fetchInventoryData();
       setInvoiceModalOpen(false);
       setInvoiceCart([]);
       setInvoiceSupplierId('');
+      setInvoicePaidCash('');
+      setInvoicePaidVisa('');
+      setInvoicePaidWallet('');
+      setInvoicePaidInstapay('');
     } catch (err) {
       console.error(err);
     } finally {
@@ -4170,6 +4246,9 @@ export default function AdminDashboard({
                           <td>{sup.name}</td>
                           <td>{sup.phone}</td>
                           <td>
+                            <button className="action-btn edit" style={{ marginInlineEnd: '0.5rem' }} title={language === 'ar' ? 'عرض الملف' : 'View Profile'} onClick={() => setSelectedSupplierProfile(sup)}>
+                              <Eye size={16} />
+                            </button>
                             <button className="action-btn delete" onClick={() => handleDeleteSupplier(sup.id)}>
                               <Trash2 size={16} />
                             </button>
@@ -4201,7 +4280,9 @@ export default function AdminDashboard({
                         <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
                         <th>{language === 'ar' ? 'المورد' : 'Supplier'}</th>
                         <th>{language === 'ar' ? 'الأصناف' : 'Items'}</th>
+                        <th>{language === 'ar' ? 'طرق الدفع' : 'Payment Methods'}</th>
                         <th>{language === 'ar' ? 'الإجمالي' : 'Total'}</th>
+                        <th>{language === 'ar' ? 'الآجل (المتبقي)' : 'Remaining (Credit)'}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -4216,11 +4297,21 @@ export default function AdminDashboard({
                               </div>
                             ))}
                           </td>
+                          <td style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
+                            {inv.paid_cash ? <div>💵 {language === 'ar' ? 'كاش: ' : 'Cash: '}{inv.paid_cash.toFixed(2)}</div> : null}
+                            {inv.paid_visa ? <div>💳 {language === 'ar' ? 'فيزا: ' : 'Visa: '}{inv.paid_visa.toFixed(2)}</div> : null}
+                            {inv.paid_wallet ? <div>📱 {language === 'ar' ? 'محفظة: ' : 'Wallet: '}{inv.paid_wallet.toFixed(2)}</div> : null}
+                            {inv.paid_instapay ? <div>⚡ {language === 'ar' ? 'إنستاباي: ' : 'Instapay: '}{inv.paid_instapay.toFixed(2)}</div> : null}
+                            {!inv.paid_cash && !inv.paid_visa && !inv.paid_wallet && !inv.paid_instapay ? <span style={{ color: 'var(--text-gray)' }}>-</span> : null}
+                          </td>
                           <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{inv.total_amount.toFixed(2)}</td>
+                          <td style={{ color: (inv.remaining_amount ?? 0) > 0 ? '#ff4d4d' : '#2ecc71', fontWeight: 'bold' }}>
+                            {(inv.remaining_amount ?? 0).toFixed(2)}
+                          </td>
                         </tr>
                       ))}
                       {purchaseInvoices.length === 0 && (
-                        <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
+                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -5761,10 +5852,14 @@ export default function AdminDashboard({
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
                   <select id="inv-new-item" className="input-gold" style={{ padding: '0.5rem' }}>
                     <option value="">{language === 'ar' ? 'اختر الصنف...' : 'Select item...'}</option>
-                    {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                    {inventoryItems.map(i => (
+                      <option key={i.id} value={i.id}>
+                        {i.name} ({language === 'ar' ? 'متوسط:' : 'Avg:'} {i.avg_purchase_price.toFixed(2)} | {language === 'ar' ? 'آخر شراء:' : 'Last:'} {i.last_purchase_price.toFixed(2)})
+                      </option>
+                    ))}
                   </select>
                   <input type="number" id="inv-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
-                  <input type="number" id="inv-new-price" className="input-gold" placeholder={language === 'ar' ? 'السعر' : 'Price'} style={{ padding: '0.5rem' }} step="0.01" min="0" />
+                  <input type="number" id="inv-new-price" className="input-gold" placeholder={language === 'ar' ? 'سعر الوحدة' : 'Unit Price'} style={{ padding: '0.5rem' }} step="0.01" min="0" />
                   <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
                     const idEl = document.getElementById('inv-new-item') as HTMLSelectElement;
                     const qtyEl = document.getElementById('inv-new-qty') as HTMLInputElement;
@@ -5788,7 +5883,7 @@ export default function AdminDashboard({
                       <tr>
                         <th>{language === 'ar' ? 'الصنف' : 'Item'}</th>
                         <th>{language === 'ar' ? 'الكمية' : 'Qty'}</th>
-                        <th>{language === 'ar' ? 'السعر' : 'Price'}</th>
+                        <th>{language === 'ar' ? 'سعر الوحدة' : 'Unit Price'}</th>
                         <th>{language === 'ar' ? 'الإجمالي' : 'Total'}</th>
                         <th></th>
                       </tr>
@@ -5816,6 +5911,35 @@ export default function AdminDashboard({
               </div>
               <div style={{ textAlign: 'left', marginTop: '1rem' }}>
                 <h3>{language === 'ar' ? 'إجمالي الفاتورة: ' : 'Invoice Total: '} <span style={{ color: 'var(--gold-primary)' }}>{invoiceCart.reduce((sum, c) => sum + (c.quantity * c.unit_price), 0).toFixed(2)}</span></h3>
+              </div>
+
+              {/* Payment Details */}
+              <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginTop: '1rem' }}>
+                <h3 style={{ marginBottom: '1rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تفاصيل السداد (طرق الدفع)' : 'Payment Details'}</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'مدفوع نقدًا (كاش)' : 'Paid Cash'}</label>
+                    <input type="number" className="input-gold" value={invoicePaidCash} onChange={e => setInvoicePaidCash(e.target.value === '' ? '' : parseFloat(e.target.value))} placeholder="0.00" min="0" step="0.01" />
+                  </div>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'مدفوع فيزا' : 'Paid Visa'}</label>
+                    <input type="number" className="input-gold" value={invoicePaidVisa} onChange={e => setInvoicePaidVisa(e.target.value === '' ? '' : parseFloat(e.target.value))} placeholder="0.00" min="0" step="0.01" />
+                  </div>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'مدفوع محفظة' : 'Paid Wallet'}</label>
+                    <input type="number" className="input-gold" value={invoicePaidWallet} onChange={e => setInvoicePaidWallet(e.target.value === '' ? '' : parseFloat(e.target.value))} placeholder="0.00" min="0" step="0.01" />
+                  </div>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'مدفوع إنستاباي' : 'Paid Instapay'}</label>
+                    <input type="number" className="input-gold" value={invoicePaidInstapay} onChange={e => setInvoicePaidInstapay(e.target.value === '' ? '' : parseFloat(e.target.value))} placeholder="0.00" min="0" step="0.01" />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', padding: '0.5rem', background: '#333', borderRadius: '4px' }}>
+                  <span style={{ fontWeight: 'bold' }}>{language === 'ar' ? 'المبلغ المتبقي (آجل):' : 'Remaining Amount (Credit):'}</span>
+                  <span style={{ color: (invoiceCart.reduce((sum, c) => sum + (c.quantity * c.unit_price), 0) - ((Number(invoicePaidCash) || 0) + (Number(invoicePaidVisa) || 0) + (Number(invoicePaidWallet) || 0) + (Number(invoicePaidInstapay) || 0))) > 0 ? '#ff4d4d' : '#2ecc71', fontWeight: 'bold' }}>
+                    {Math.max(0, invoiceCart.reduce((sum, c) => sum + (c.quantity * c.unit_price), 0) - ((Number(invoicePaidCash) || 0) + (Number(invoicePaidVisa) || 0) + (Number(invoicePaidWallet) || 0) + (Number(invoicePaidInstapay) || 0))).toFixed(2)}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="admin-modal-footer">
@@ -5993,6 +6117,161 @@ export default function AdminDashboard({
               <button type="button" className="btn-outline-gold" onClick={() => setProductionModalOpen(false)}>{t.close}</button>
               <button type="button" className="btn-gold" onClick={handleSaveProductionLog} disabled={loading || !producedItemId || producedQuantity <= 0 || consumedItems.length === 0}>{t.save}</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Supplier Profile Modal */}
+      {selectedSupplierProfile && (
+        <div className="admin-modal-overlay" onClick={() => setSelectedSupplierProfile(null)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px' }}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'ملف المورد' : 'Supplier Profile'} - {selectedSupplierProfile.name}</h2>
+              <button className="btn-close" onClick={() => setSelectedSupplierProfile(null)}><X size={20} /></button>
+            </div>
+            <div className="admin-modal-body">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ background: '#222', padding: '1rem', borderRadius: '8px' }}>
+                  <span style={{ display: 'block', color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'رقم الهاتف:' : 'Phone:'}</span>
+                  <span style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{selectedSupplierProfile.phone || '-'}</span>
+                </div>
+                <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #ff4d4d' }}>
+                  <span style={{ display: 'block', color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'إجمالي المديونية (الآجل):' : 'Total Debt (Credit):'}</span>
+                  <span style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#ff4d4d' }}>
+                    {purchaseInvoices
+                      .filter(inv => inv.supplier_id === selectedSupplierProfile.id)
+                      .reduce((sum, inv) => sum + (inv.remaining_amount ?? 0), 0)
+                      .toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <h3 style={{ color: 'var(--gold-primary)', marginBottom: '1rem' }}>{language === 'ar' ? 'فواتير المشتريات' : 'Purchase Invoices'}</h3>
+              <div className="table-responsive" style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                      <th>{language === 'ar' ? 'الأصناف' : 'Items'}</th>
+                      <th>{language === 'ar' ? 'طرق الدفع' : 'Payment Methods'}</th>
+                      <th>{language === 'ar' ? 'الإجمالي' : 'Total'}</th>
+                      <th>{language === 'ar' ? 'الآجل' : 'Remaining'}</th>
+                      <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {purchaseInvoices
+                      .filter(inv => inv.supplier_id === selectedSupplierProfile.id)
+                      .sort((a,b) => new Date(b.created_at||'').getTime() - new Date(a.created_at||'').getTime())
+                      .map(inv => (
+                        <tr key={inv.id}>
+                          <td className="font-en">{new Date(inv.invoice_date).toLocaleDateString()}</td>
+                          <td>
+                            {inv.items.map((i, idx) => (
+                              <div key={idx} style={{ fontSize: '0.85rem' }}>
+                                {i.quantity} x {i.item_name} (@{i.unit_price})
+                              </div>
+                            ))}
+                          </td>
+                          <td style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
+                            {inv.paid_cash ? <div>💵 {language === 'ar' ? 'كاش: ' : 'Cash: '}{inv.paid_cash.toFixed(2)}</div> : null}
+                            {inv.paid_visa ? <div>💳 {language === 'ar' ? 'فيزا: ' : 'Visa: '}{inv.paid_visa.toFixed(2)}</div> : null}
+                            {inv.paid_wallet ? <div>📱 {language === 'ar' ? 'محفظة: ' : 'Wallet: '}{inv.paid_wallet.toFixed(2)}</div> : null}
+                            {inv.paid_instapay ? <div>⚡ {language === 'ar' ? 'إنستاباي: ' : 'Instapay: '}{inv.paid_instapay.toFixed(2)}</div> : null}
+                            {!inv.paid_cash && !inv.paid_visa && !inv.paid_wallet && !inv.paid_instapay ? <span style={{ color: 'var(--text-gray)' }}>-</span> : null}
+                          </td>
+                          <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{inv.total_amount.toFixed(2)}</td>
+                          <td style={{ color: (inv.remaining_amount ?? 0) > 0 ? '#ff4d4d' : '#2ecc71', fontWeight: 'bold' }}>
+                            {(inv.remaining_amount ?? 0).toFixed(2)}
+                          </td>
+                          <td>
+                            {(inv.remaining_amount ?? 0) > 0 ? (
+                              <button 
+                                className="btn-gold" 
+                                style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                                onClick={() => {
+                                  setSelectedInvoiceToPay(inv);
+                                  setPayAmount(inv.remaining_amount ?? 0);
+                                  setPayDebtModalOpen(true);
+                                }}
+                              >
+                                {language === 'ar' ? 'سداد' : 'Pay'}
+                              </button>
+                            ) : (
+                              <span style={{ color: '#2ecc71', fontSize: '0.85rem' }}>{language === 'ar' ? 'مدفوعة بالكامل' : 'Fully Paid'}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    {purchaseInvoices.filter(inv => inv.supplier_id === selectedSupplierProfile.id).length === 0 && (
+                      <tr><td colSpan={6} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد فواتير مضافة لهذا المورد' : 'No invoices for this supplier'}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button type="button" className="btn-outline-gold" onClick={() => setSelectedSupplierProfile(null)}>{t.close}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Pay Debt Modal */}
+      {payDebtModalOpen && selectedInvoiceToPay && (
+        <div className="admin-modal-overlay" onClick={() => setPayDebtModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'سداد دفعة للمورد' : 'Pay Supplier Debt'}</h2>
+              <button className="btn-close" onClick={() => setPayDebtModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handlePayDebt}>
+              <div className="admin-modal-body">
+                <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <span>{language === 'ar' ? 'إجمالي الفاتورة:' : 'Invoice Total:'}</span>
+                    <span style={{ fontWeight: 'bold' }}>{selectedInvoiceToPay.total_amount.toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ff4d4d' }}>
+                    <span>{language === 'ar' ? 'المتبقي (الآجل):' : 'Remaining (Credit):'}</span>
+                    <span style={{ fontWeight: 'bold' }}>{(selectedInvoiceToPay.remaining_amount ?? selectedInvoiceToPay.total_amount).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label>{language === 'ar' ? 'المبلغ المراد سداده' : 'Amount to Pay'} *</label>
+                  <input 
+                    type="number" 
+                    className="input-gold" 
+                    value={payAmount} 
+                    onChange={e => setPayAmount(e.target.value === '' ? '' : parseFloat(e.target.value))} 
+                    required 
+                    min="0.01" 
+                    max={selectedInvoiceToPay.remaining_amount ?? selectedInvoiceToPay.total_amount} 
+                    step="0.01" 
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'} *</label>
+                  <select 
+                    className="input-gold" 
+                    value={payMethod} 
+                    onChange={e => setPayMethod(e.target.value as any)}
+                    required
+                  >
+                    <option value="cash">{language === 'ar' ? 'نقدًا (كاش)' : 'Cash'}</option>
+                    <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
+                    <option value="wallet">{language === 'ar' ? 'محفظة' : 'Wallet'}</option>
+                    <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
+                  </select>
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-outline-gold" onClick={() => setPayDebtModalOpen(false)}>{t.close}</button>
+                <button type="submit" className="btn-gold" disabled={loading}>{language === 'ar' ? 'سداد الآن' : 'Pay Now'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
