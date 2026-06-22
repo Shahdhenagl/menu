@@ -1072,6 +1072,17 @@ export default function AdminDashboard({
 
   // --- ORDERS STATUS ACTIONS ---
   const handleUpdateOrderStatus = async (id: string, status: Order['status']) => {
+    if (status === 'cancelled') {
+      triggerOtpProtectedAction('إلغاء الطلب', 'Cancel Order', async () => {
+        try {
+          await db.updateOrderStatus(id, status);
+          await refreshData();
+        } catch (err) {
+          console.error(err);
+        }
+      }, id);
+      return;
+    }
     try {
       await db.updateOrderStatus(id, status);
       await refreshData();
