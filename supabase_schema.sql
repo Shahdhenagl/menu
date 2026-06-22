@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS categories (
   name_ar TEXT NOT NULL,
   name_en TEXT NOT NULL,
   sort_order INTEGER DEFAULT 0,
+  department TEXT DEFAULT 'restaurant',
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

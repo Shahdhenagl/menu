@@ -13,11 +13,23 @@ export const printOrderTickets = (
   order.items.forEach(item => {
     const product = products.find(p => p.name_ar === item.name_ar || p.name_en === item.name_en);
     let printerId = 'general';
+    let dept = 'restaurant';
     
     if (product) {
       const category = categories.find(c => c.id === product.category_id);
-      if (category && category.printer_id) {
-        printerId = category.printer_id;
+      if (category) {
+        dept = category.department || 'restaurant';
+        if (category.printer_id) {
+          printerId = category.printer_id;
+        } else {
+          // Fallback to the first printer in the same department
+          const deptPrinter = printers.find(p => p.department === dept);
+          if (deptPrinter) {
+            printerId = deptPrinter.id;
+          } else {
+            printerId = `general_${dept}`;
+          }
+        }
       }
     }
     

@@ -6,6 +6,7 @@ export interface Category {
   name_en: string;
   sort_order: number;
   printer_id?: string | null;
+  department?: 'restaurant' | 'bar';
   created_at?: string;
 }
 
@@ -13,6 +14,7 @@ export interface Printer {
   id: string;
   name_ar: string;
   name_en: string;
+  department?: 'restaurant' | 'bar';
   created_at?: string;
 }
 

@@ -58,6 +58,7 @@ export default function AdminDashboard({
   const [catNameEn, setCatNameEn] = useState('');
   const [catSortOrder, setCatSortOrder] = useState(0);
   const [catPrinterId, setCatPrinterId] = useState('');
+  const [catDepartment, setCatDepartment] = useState<'restaurant' | 'bar'>('restaurant');
 
   // Products modal / inputs
   const [prodModalOpen, setProdModalOpen] = useState(false);
@@ -123,6 +124,7 @@ export default function AdminDashboard({
 
   // Manual orders states & filtering
   const [orderFilterType, setOrderFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
+  const [ordersDepartmentFilter, setOrdersDepartmentFilter] = useState<'all' | 'restaurant' | 'bar'>('all');
   const [selectedFilterDay, setSelectedFilterDay] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedFilterMonth, setSelectedFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [selectedFilterYear, setSelectedFilterYear] = useState<number>(() => new Date().getFullYear());
@@ -164,6 +166,7 @@ export default function AdminDashboard({
   const [analyticsFilterDay, setAnalyticsFilterDay] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [analyticsFilterMonth, setAnalyticsFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [analyticsFilterYear, setAnalyticsFilterYear] = useState<number>(() => new Date().getFullYear());
+  const [analyticsDepartmentFilter, setAnalyticsDepartmentFilter] = useState<'all' | 'restaurant' | 'bar'>('all');
 
   const fetchExpenses = async () => {
     try {
@@ -329,6 +332,7 @@ export default function AdminDashboard({
   const [printerModalOpen, setPrinterModalOpen] = useState(false);
   const [printerNameAr, setPrinterNameAr] = useState('');
   const [printerNameEn, setPrinterNameEn] = useState('');
+  const [printerDepartment, setPrinterDepartment] = useState<'restaurant' | 'bar'>('restaurant');
 
   // --- INVENTORY STATES ---
   const [inventorySubTab, setInventorySubTab] = useState<'suppliers' | 'items' | 'invoices' | 'mfg_orders'>('items');
@@ -617,12 +621,14 @@ export default function AdminDashboard({
     try {
       await db.addPrinter({
         name_ar: printerNameAr,
-        name_en: printerNameEn
+        name_en: printerNameEn,
+        department: printerDepartment
       });
       await fetchPrinters();
       setPrinterModalOpen(false);
       setPrinterNameAr('');
       setPrinterNameEn('');
+      setPrinterDepartment('restaurant');
     } catch (err) {
       console.error(err);
     } finally {
@@ -742,12 +748,14 @@ export default function AdminDashboard({
       setCatNameEn(cat.name_en);
       setCatSortOrder(cat.sort_order);
       setCatPrinterId(cat.printer_id || '');
+      setCatDepartment(cat.department || 'restaurant');
     } else {
       setEditingCategory(null);
       setCatNameAr('');
       setCatNameEn('');
       setCatSortOrder(categories.length + 1);
       setCatPrinterId('');
+      setCatDepartment('restaurant');
     }
     setCatModalOpen(true);
   };
@@ -763,14 +771,16 @@ export default function AdminDashboard({
           name_ar: catNameAr,
           name_en: catNameEn,
           sort_order: Number(catSortOrder),
-          printer_id: catPrinterId || null
+          printer_id: catPrinterId || null,
+          department: catDepartment
         });
       } else {
         await db.addCategory({
           name_ar: catNameAr,
           name_en: catNameEn,
           sort_order: Number(catSortOrder),
-          printer_id: catPrinterId || null
+          printer_id: catPrinterId || null,
+          department: catDepartment
         });
       }
       await refreshData();
@@ -1030,7 +1040,17 @@ export default function AdminDashboard({
     }
   };
 
+  const orderHasDepartment = (order: Order, dept: 'restaurant' | 'bar') => {
+    return order.items.some(item => {
+      const product = products.find(p => p.name_ar === item.name_ar || p.name_en === item.name_en);
+      if (!product) return false;
+      const category = categories.find(c => c.id === product.category_id);
+      return category && (category.department || 'restaurant') === dept;
+    });
+  };
+
   const filteredOrders = orders.filter(order => {
+    if (ordersDepartmentFilter !== 'all' && !orderHasDepartment(order, ordersDepartmentFilter)) return false;
     if (!order.created_at) return true;
     const orderDate = new Date(order.created_at);
     if (orderFilterType === 'day') {
@@ -1130,6 +1150,7 @@ export default function AdminDashboard({
 
   // --- ANALYTICS CALCULATIONS ---
   const analyticsFilteredOrders = orders.filter(o => {
+    if (analyticsDepartmentFilter !== 'all' && !orderHasDepartment(o, analyticsDepartmentFilter)) return false;
     if (analyticsFilterType === 'all') return true;
     if (!o.created_at) return true;
     const dateObj = new Date(o.created_at);
@@ -2191,6 +2212,11 @@ export default function AdminDashboard({
                 <button className={`btn-filter ${analyticsFilterType === 'year' ? 'active' : ''}`} onClick={() => setAnalyticsFilterType('year')}>
                   {language === 'ar' ? 'بالسنة' : 'By Year'}
                 </button>
+                <select className="input-gold" value={analyticsDepartmentFilter} onChange={(e) => setAnalyticsDepartmentFilter(e.target.value as any)} style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem', marginLeft: '1rem' }}>
+                  <option value="all">{language === 'ar' ? 'جميع الأقسام' : 'All Departments'}</option>
+                  <option value="restaurant">{language === 'ar' ? 'المطعم' : 'Restaurant'}</option>
+                  <option value="bar">{language === 'ar' ? 'البار' : 'Bar'}</option>
+                </select>
               </div>
 
               {analyticsFilterType === 'day' && (
@@ -2708,6 +2734,13 @@ export default function AdminDashboard({
                         <option value="day">{language === 'ar' ? 'باليوم 📅' : 'By Day 📅'}</option>
                         <option value="month">{language === 'ar' ? 'بالشهر 🗓️' : 'By Month 🗓️'}</option>
                         <option value="year">{language === 'ar' ? 'بالسنة ⏳' : 'By Year ⏳'}</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <select className="input-gold" value={ordersDepartmentFilter} onChange={(e) => setOrdersDepartmentFilter(e.target.value as any)} style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}>
+                        <option value="all">{language === 'ar' ? 'جميع الأقسام' : 'All Departments'}</option>
+                        <option value="restaurant">{language === 'ar' ? 'المطعم' : 'Restaurant'}</option>
+                        <option value="bar">{language === 'ar' ? 'البار' : 'Bar'}</option>
                       </select>
                     </div>
 
@@ -4405,6 +4438,13 @@ export default function AdminDashboard({
                     ))}
                   </select>
                 </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'القسم' : 'Department'} *</label>
+                  <select className="input-gold" value={catDepartment} onChange={(e) => setCatDepartment(e.target.value as 'restaurant'|'bar')} required>
+                    <option value="restaurant">{language === 'ar' ? 'مطعم' : 'Restaurant'}</option>
+                    <option value="bar">{language === 'ar' ? 'بار' : 'Bar'}</option>
+                  </select>
+                </div>
               </div>
               <div className="admin-modal-footer">
                 <button type="button" className="btn-outline-gold" onClick={() => setCatModalOpen(false)}>{t.close}</button>
@@ -5576,6 +5616,13 @@ export default function AdminDashboard({
                 <div className="form-group">
                   <label>{language === 'ar' ? 'اسم الطابعة بالإنجليزي' : 'Printer Name (EN)'} *</label>
                   <input type="text" className="input-gold" value={printerNameEn} onChange={(e) => setPrinterNameEn(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'القسم' : 'Department'} *</label>
+                  <select className="input-gold" value={printerDepartment} onChange={(e) => setPrinterDepartment(e.target.value as 'restaurant'|'bar')} required>
+                    <option value="restaurant">{language === 'ar' ? 'مطعم' : 'Restaurant'}</option>
+                    <option value="bar">{language === 'ar' ? 'بار' : 'Bar'}</option>
+                  </select>
                 </div>
               </div>
               <div className="admin-modal-footer">

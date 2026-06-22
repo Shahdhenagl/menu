@@ -66,7 +66,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
       db.getSettings(),
       db.getCustomers()
     ]);
-    setCategories(cats.sort((a, b) => a.sort_order - b.sort_order));
+    setCategories(cats.sort((a, b) => {
+      const aBar = a.department === 'bar';
+      const bBar = b.department === 'bar';
+      if (aBar && !bBar) return 1;
+      if (!aBar && bBar) return -1;
+      return a.sort_order - b.sort_order;
+    }));
     setProducts(prods);
     setWaiters(users.filter(u => u.role === 'waiter'));
     setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing'));
