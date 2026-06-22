@@ -153,6 +153,7 @@ export default function AdminDashboard({
   const [expModalOpen, setExpModalOpen] = useState(false);
   const [expName, setExpName] = useState('');
   const [expType, setExpType] = useState('بضائع وخامات');
+  const [customExpType, setCustomExpType] = useState('');
   const [expAmount, setExpAmount] = useState(0);
   const [expDate, setExpDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [expPaymentMethod, setExpPaymentMethod] = useState<'cash' | 'visa' | 'wallet' | 'instapay'>('cash');
@@ -666,9 +667,10 @@ export default function AdminDashboard({
     }
     setLoading(true);
     try {
+      const finalType = expType === 'custom' ? customExpType.trim() : expType;
       await db.addExpense({
         name: expName.trim(),
-        type: expType,
+        type: finalType || 'أخرى',
         amount: Number(expAmount),
         payment_method: expPaymentMethod,
         expense_date: expDate
@@ -677,6 +679,7 @@ export default function AdminDashboard({
       setExpModalOpen(false);
       setExpName('');
       setExpType('بضائع وخامات');
+      setCustomExpType('');
       setExpAmount(0);
       setExpDate(new Date().toISOString().split('T')[0]);
       setExpPaymentMethod('cash');
@@ -5224,16 +5227,29 @@ export default function AdminDashboard({
                     value={expType} 
                     onChange={(e) => setExpType(e.target.value)}
                     required
-                    style={{ appearance: 'none', background: 'rgba(0,0,0,0.4)', color: '#fff', border: '1px solid var(--gold-secondary)' }}
+                    style={{ appearance: 'none', background: 'rgba(0,0,0,0.4)', color: '#fff', border: '1px solid var(--gold-secondary)', marginBottom: expType === 'custom' ? '1rem' : '0' }}
                   >
-                    <option value="بضائع وخامات" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'بضائع وخامات' : 'Goods & Raw Materials'}</option>
-                    <option value="مرتبات" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'مرتبات العاملين' : 'Salaries'}</option>
-                    <option value="إيجار" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'إيجار' : 'Rent'}</option>
-                    <option value="خدمات (كهرباء ومياه)" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'خدمات (كهرباء ومياه)' : 'Utilities (Electricity/Water)'}</option>
-                    <option value="صيانة" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'صيانة وإصلاحات' : 'Maintenance'}</option>
-                    <option value="تسويق" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'تسويق وإعلانات' : 'Marketing & Ads'}</option>
-                    <option value="أخرى" style={{ background: '#1c1c1c', color: '#fff' }}>{language === 'ar' ? 'أخرى' : 'Others'}</option>
+                    {Array.from(new Set([
+                      'بضائع وخامات', 'مرتبات', 'إيجار', 'خدمات (كهرباء ومياه)', 'صيانة', 'تسويق', 'أخرى',
+                      ...expenses.map(e => e.type).filter(Boolean)
+                    ])).map(t => (
+                      <option key={t} value={t} style={{ background: '#1c1c1c', color: '#fff' }}>{t}</option>
+                    ))}
+                    <option value="custom" style={{ background: 'var(--gold-primary)', color: '#000', fontWeight: 'bold' }}>
+                      + {language === 'ar' ? 'إضافة تصنيف جديد...' : 'Add new category...'}
+                    </option>
                   </select>
+                  {expType === 'custom' && (
+                    <input 
+                      type="text" 
+                      className="input-gold" 
+                      placeholder={language === 'ar' ? 'اكتب التصنيف الجديد هنا...' : 'Type new category here...'} 
+                      value={customExpType} 
+                      onChange={(e) => setCustomExpType(e.target.value)} 
+                      required 
+                      autoFocus
+                    />
+                  )}
                 </div>
 
                 {/* Expense Amount */}
