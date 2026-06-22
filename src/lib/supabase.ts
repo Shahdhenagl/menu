@@ -156,18 +156,14 @@ export const db = {
 
   async updateCategory(id: string, category: Partial<Category>): Promise<Category> {
     if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('categories')
-          .update(category)
-          .eq('id', id)
-          .select()
-          .single();
-        if (error) throw error;
-        return data;
-      } catch (err) {
-        console.warn("Supabase update failed, falling back to mock database.", err);
-      }
+      const { data, error } = await supabase
+        .from('categories')
+        .update(category)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     }
     const categories = getLocalData('meridien_categories', initialCategories);
     const index = categories.findIndex(c => c.id === id);

@@ -790,6 +790,7 @@ export default function AdminDashboard({
       setCatModalOpen(false);
     } catch (err) {
       console.error(err);
+      alert(language === 'ar' ? 'حدث خطأ أثناء حفظ التصنيف. تأكد من تشغيل supabase_patch_v3.sql في قاعدة البيانات.' : 'Error saving category. Make sure supabase_patch_v3.sql has been executed.');
     } finally {
       setLoading(false);
     }
@@ -2591,6 +2592,7 @@ export default function AdminDashboard({
                     <tr>
                       <th>{t.thNameAr}</th>
                       <th>{t.thNameEn}</th>
+                      <th>{language === 'ar' ? 'القسم' : 'Dept'}</th>
                       <th>{t.thOrder}</th>
                       <th>{t.thActions}</th>
                     </tr>
@@ -2600,6 +2602,7 @@ export default function AdminDashboard({
                       <tr key={cat.id}>
                         <td style={{ fontWeight: '700' }}>{cat.name_ar}</td>
                         <td className="font-en">{cat.name_en}</td>
+                        <td><span style={{ padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.8rem', background: (cat.department || 'restaurant') === 'restaurant' ? 'rgba(76,175,80,0.15)' : 'rgba(156,39,176,0.15)', color: (cat.department || 'restaurant') === 'restaurant' ? '#4caf50' : '#9c27b0' }}>{(cat.department || 'restaurant') === 'restaurant' ? (language === 'ar' ? 'مطعم' : 'Rest') : (language === 'ar' ? 'بار' : 'Bar')}</span></td>
                         <td className="font-en">{cat.sort_order}</td>
                         <td>
                           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-start' }}>
