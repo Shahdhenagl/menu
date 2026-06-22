@@ -75,19 +75,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     setOtpAction(() => action);
     setOtpModalOpen(true);
 
-    if (settings?.telegram_chat_id) {
-      const text = `🔑 <b>رمز التحقق (OTP) لإجراء حساس</b>\n\n` +
-        `• <b>الإجراء:</b> ${language === 'ar' ? actionName : actionNameEn}\n` +
-        `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
-        `• <b>الطلب:</b> <code>#${orderIdForLog ? orderIdForLog.slice(0, 6) : 'N/A'}</code>\n\n` +
-        `• <b>رمز OTP:</b> <code>${code}</code>`;
-      
-      import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
-        sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
-      });
-    } else {
-      alert(`OTP Code (Dev Fallback): ${code}`);
-    }
+    const token = settings?.telegram_bot_token || '8722542358:AAF_2J1eM-WB2IiwLuRkYU29A8pvWd3DtTw';
+    const chatId = settings?.telegram_chat_id || '5507184715,7441837470';
+
+    const text = `🔑 <b>رمز التحقق (OTP) لإجراء حساس</b>\n\n` +
+      `• <b>الإجراء:</b> ${language === 'ar' ? actionName : actionNameEn}\n` +
+      `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
+      `• <b>الطلب:</b> <code>#${orderIdForLog ? orderIdForLog.slice(0, 6) : 'N/A'}</code>\n\n` +
+      `• <b>رمز OTP:</b> <code>${code}</code>`;
+    
+    import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+      sendTelegramMessage(token, chatId, text);
+    });
   };
 
   // Item transfer state
