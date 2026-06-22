@@ -44,13 +44,26 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [tableNumber, setTableNumber] = useState('');
   
   // Payment and Customers
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'visa' | 'deferred'>('cash');
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
 
   // Menu & Cart
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [cart, setCart] = useState<OrderItem[]>([]);
+
+  // Waiting/Delivered states, Payment and Transfer states
+  const [originalOrderItems, setOriginalOrderItems] = useState<OrderItem[]>([]);
+  const [collectPaymentOrder, setCollectPaymentOrder] = useState<Order | null>(null);
+  const [payCash, setPayCash] = useState<number | ''>('');
+  const [payVisa, setPayVisa] = useState<number | ''>('');
+  const [payWallet, setPayWallet] = useState<number | ''>('');
+  const [payInstapay, setPayInstapay] = useState<number | ''>('');
+  const [payIsDeferred, setPayIsDeferred] = useState(false);
+  const [payCustomerId, setPayCustomerId] = useState('');
+
+  // Item transfer state
+  const [transferItem, setTransferItem] = useState<OrderItem | null>(null);
+  const [transferTargetOrderId, setTransferTargetOrderId] = useState<string>('');
+  const [transferQty, setTransferQty] = useState<number>(1);
   
   useEffect(() => {
     loadData();
@@ -75,7 +88,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     }));
     setProducts(prods);
     setWaiters(users.filter(u => u.role === 'waiter'));
-    setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing'));
+    setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing' || o.status === 'delivered'));
     setPrinters(prnts);
     setSettings(sets);
     setCustomers(custs);
@@ -176,6 +189,29 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     if (cart.length === 0) return;
     
     if (editOrderId && editingOrder) {
+      // Detect deletions and cancellation/reduction of quantities
+      let deletedItemsText = '';
+      originalOrderItems.forEach(orig => {
+        const currentItem = cart.find(c => c.id === orig.id);
+        if (!currentItem) {
+          deletedItemsText += `\n- <b>${orig.name_ar} (تم حذفه بالكامل)</b>. الكمية السابقة: ${orig.quantity}`;
+        } else if (currentItem.quantity < orig.quantity) {
+          deletedItemsText += `\n- <b>${orig.name_ar} (تقليل كمية)</b>. الكمية السابقة: ${orig.quantity} -> الكمية الحالية: ${currentItem.quantity}`;
+        }
+      });
+
+      if (deletedItemsText && settings?.telegram_chat_id) {
+        const text = `🗑️ <b>تنبيه تعديل وحذف أصناف من الفاتورة</b>\n\n` +
+          `• <b>رقم الطلب:</b> <code>#${editOrderId.slice(0, 6)}</code>\n` +
+          `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
+          `• <b>العميل:</b> ${customerName || 'غير معروف'}\n` +
+          `• <b>الأصناف المعدلة:</b>${deletedItemsText}`;
+        
+        import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+          sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
+        });
+      }
+
       // We are editing an existing order
       const updatedOrder = await db.updateOrder(editOrderId, {
         items: cart,
@@ -183,14 +219,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
         customer_name: customerName,
         customer_phone: customerPhone,
         table_number: tableNumber,
-        order_type: orderType || editingOrder.order_type,
-        payment_method: paymentMethod,
-        customer_id: paymentMethod === 'deferred' ? selectedCustomerId : undefined
+        order_type: orderType || editingOrder.order_type
       });
       setLastPlacedOrder(updatedOrder);
       setCart([]);
       setEditOrderId(null);
       setEditingOrder(null);
+      setOriginalOrderItems([]);
       setView('waiter_dashboard');
       loadData();
       return;
@@ -212,22 +247,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
       table_number: tableNumber || '-',
       items: cart,
       total_price: cartTotal,
-      status: paymentMethod === 'deferred' ? 'completed' : 'pending', // Deferred is auto-completed financially
+      status: 'pending',
       order_type: orderType || 'takeaway',
       waiter_id: assignedWaiterId,
       waiter_name: assignedWaiterName,
-      payment_method: paymentMethod,
-      customer_id: paymentMethod === 'deferred' ? selectedCustomerId : undefined,
       created_at: new Date().toISOString()
     };
-    
-    // If deferred, update customer debt
-    if (paymentMethod === 'deferred' && selectedCustomerId) {
-      const cust = customers.find(c => c.id === selectedCustomerId);
-      if (cust) {
-        await db.updateCustomerDebt(cust.id, (cust.total_debt || 0) + cartTotal);
-      }
-    }
     
     const placedOrder = await db.addOrder(newOrder);
     setLastPlacedOrder(placedOrder);
@@ -237,6 +262,84 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     
     // Auto-print tickets for kitchen/bar
     printOrderTickets(placedOrder, categories, products, printers, language);
+  };
+
+  const handleTransferSubmit = async () => {
+    if (!transferItem || !transferTargetOrderId || !editingOrder) return;
+    if (transferQty < 1 || transferQty > transferItem.quantity) return;
+
+    try {
+      const targetOrder = activeOrders.find(o => o.id === transferTargetOrderId);
+      if (!targetOrder) return;
+
+      // 1. Deduct from source order
+      const sourceItems = editingOrder.items.map(item => {
+        if (item.id === transferItem.id) {
+          return { ...item, quantity: item.quantity - transferQty };
+        }
+        return item;
+      }).filter(item => item.quantity > 0);
+
+      const sourceTotal = sourceItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+      // 2. Add to target order
+      const targetItems = [...targetOrder.items];
+      const existingItemIdx = targetItems.findIndex(item => item.id === transferItem.id);
+      if (existingItemIdx > -1) {
+        targetItems[existingItemIdx] = {
+          ...targetItems[existingItemIdx],
+          quantity: targetItems[existingItemIdx].quantity + transferQty
+        };
+      } else {
+        targetItems.push({
+          ...transferItem,
+          quantity: transferQty
+        });
+      }
+
+      const targetTotal = targetItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+      // 3. Save updates
+      await db.updateOrder(editingOrder.id, {
+        items: sourceItems,
+        total_price: sourceTotal
+      });
+
+      await db.updateOrder(targetOrder.id, {
+        items: targetItems,
+        total_price: targetTotal
+      });
+
+      // 4. Send Telegram Notification
+      if (settings?.telegram_chat_id) {
+        const text = `🔄 <b>تنبيه نقل أصناف بين الطلبات</b>\n\n` +
+          `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
+          `• <b>من الطلب:</b> <code>#${editingOrder.id.slice(0, 6)}</code> (${editingOrder.customer_name})\n` +
+          `• <b>إلى الطلب:</b> <code>#${targetOrder.id.slice(0, 6)}</code> (${targetOrder.customer_name})\n` +
+          `• <b>الصنف المنقول:</b> ${language === 'ar' ? transferItem.name_ar : transferItem.name_en}\n` +
+          `• <b>الكمية المنقولة:</b> ${transferQty}`;
+
+        import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+          sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
+        });
+      }
+
+      // Reset states
+      setTransferItem(null);
+      setTransferTargetOrderId('');
+      setTransferQty(1);
+
+      // Update local state to trigger render correctly
+      setEditingOrder({
+        ...editingOrder,
+        items: sourceItems,
+        total_price: sourceTotal
+      });
+
+      loadData();
+    } catch (err) {
+      alert(language === 'ar' ? 'فشل نقل الصنف، يرجى المحاولة مرة أخرى' : 'Failed to transfer item, please try again.');
+    }
   };
 
   return (
@@ -584,26 +687,50 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                 <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
                   {cart.length === 0 && <p style={{ textAlign: 'center', color: '#666', marginTop: '2rem' }}>Empty</p>}
                   <AnimatePresence>
-                    {cart.map(item => (
-                      <motion.div key={item.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8 }}
-                        style={{ background: '#1a1a1a', padding: '1rem', borderRadius: '12px', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 'bold' }}>{language === 'ar' ? item.name_ar : item.name_en}</span>
-                          <span style={{ color: 'var(--gold-primary)' }}>{(item.price * item.quantity).toFixed(2)}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#000', padding: '4px', borderRadius: '8px' }}>
-                            <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, -1); }} style={{ background: '#333', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}><Minus size={16} /></button>
-                            <span style={{ fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{item.quantity}</span>
-                            <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, 1); }} style={{ background: 'var(--gold-primary)', border: 'none', color: '#000', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}><Plus size={16} /></button>
+                    {cart.map(item => {
+                      const originalItem = originalOrderItems.find(o => o.id === item.id);
+                      const isOriginal = originalItem !== undefined;
+                      const minQuantity = originalItem ? originalItem.quantity : 1;
+                      const cannotDecrease = isOriginal && item.quantity <= minQuantity;
+
+                      return (
+                        <motion.div key={item.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8 }}
+                          style={{ background: '#1a1a1a', padding: '1rem', borderRadius: '12px', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: 'bold' }}>{language === 'ar' ? item.name_ar : item.name_en}</span>
+                            <span style={{ color: 'var(--gold-primary)' }}>{(item.price * item.quantity).toFixed(2)}</span>
                           </div>
-                          <button onClick={(e) => { e.stopPropagation(); removeFromCart(item.id); }} style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}>
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </motion.div>
-                    ))}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#000', padding: '4px', borderRadius: '8px' }}>
+                              <button 
+                                disabled={cannotDecrease}
+                                onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, -1); }} 
+                                style={{ 
+                                  background: cannotDecrease ? '#222' : '#333', 
+                                  border: 'none', 
+                                  color: cannotDecrease ? '#555' : '#fff', 
+                                  width: '32px', height: '32px', borderRadius: '6px', 
+                                  cursor: cannotDecrease ? 'not-allowed' : 'pointer' 
+                                }}
+                              >
+                                <Minus size={16} />
+                              </button>
+                              <span style={{ fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{item.quantity}</span>
+                              <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, 1); }} style={{ background: 'var(--gold-primary)', border: 'none', color: '#000', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}><Plus size={16} /></button>
+                            </div>
+                            
+                            {!isOriginal ? (
+                              <button onClick={(e) => { e.stopPropagation(); removeFromCart(item.id); }} style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}>
+                                <Trash2 size={18} />
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 'bold' }}>{language === 'ar' ? 'مؤكد' : 'Confirmed'}</span>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
                   </AnimatePresence>
                 </div>
                 <div style={{ padding: '1.5rem', background: '#1a1a1a', borderTop: '1px solid #333' }}>
@@ -623,27 +750,26 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
           {view === 'checkout' && (
             <motion.div key="checkout" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <h2 style={{ fontSize: '3rem', color: 'var(--gold-primary)' }}>{cartTotal.toFixed(2)} EGP</h2>
-              <p style={{ fontSize: '1.2rem', color: '#aaa', marginBottom: '3rem' }}>
+              <p style={{ fontSize: '1.2rem', color: '#aaa', marginBottom: '1.5rem' }}>
                 {orderType?.toUpperCase()} {tableNumber && `- Table ${tableNumber}`}
               </p>
-              <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                <button className={`pos-btn-outline ${paymentMethod === 'cash' ? 'active-pay' : ''}`} onClick={() => setPaymentMethod('cash')} style={{ background: paymentMethod === 'cash' ? 'var(--gold-primary)' : '', color: paymentMethod === 'cash' ? '#000' : '' }}>{language === 'ar' ? 'كاش' : 'Cash'}</button>
-                <button className={`pos-btn-outline ${paymentMethod === 'visa' ? 'active-pay' : ''}`} onClick={() => setPaymentMethod('visa')} style={{ background: paymentMethod === 'visa' ? 'var(--gold-primary)' : '', color: paymentMethod === 'visa' ? '#000' : '' }}>{language === 'ar' ? 'فيزا' : 'Visa'}</button>
-                <button className={`pos-btn-outline ${paymentMethod === 'deferred' ? 'active-pay' : ''}`} onClick={() => setPaymentMethod('deferred')} style={{ background: paymentMethod === 'deferred' ? 'var(--gold-primary)' : '', color: paymentMethod === 'deferred' ? '#000' : '' }}>{language === 'ar' ? 'آجل (تسجيل مديونية)' : 'Deferred'}</button>
-              </div>
-
-              {paymentMethod === 'deferred' && (
-                <div style={{ marginBottom: '2rem', width: '300px' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'اختر العميل' : 'Select Customer'}</label>
-                  <select className="pos-input" value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)}>
-                    <option value="">{language === 'ar' ? '-- اختر عميل --' : '-- Select Customer --'}</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
-                  </select>
-                </div>
-              )}
               
-              <button className="pos-btn" style={{ width: '300px', marginBottom: '1rem', padding: '1.5rem' }} disabled={paymentMethod === 'deferred' && !selectedCustomerId} onClick={placeOrder}>
-                {language === 'ar' ? 'تأكيد الطلب' : 'Confirm Order'}
+              <div style={{ background: '#111', padding: '1.5rem', borderRadius: '12px', width: '100%', maxWidth: '400px', marginBottom: '2rem', border: '1px solid #333' }}>
+                <h4 style={{ margin: '0 0 1rem 0', borderBottom: '1px solid #222', paddingBottom: '0.5rem', color: 'var(--gold-primary)' }}>
+                  {language === 'ar' ? 'ملخص الطلب' : 'Order Summary'}
+                </h4>
+                <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                  {cart.map((item, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', margin: '0.3rem 0' }}>
+                      <span>{item.quantity}x {language === 'ar' ? item.name_ar : item.name_en}</span>
+                      <span>{(item.price * item.quantity).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <button className="pos-btn" style={{ width: '300px', marginBottom: '1rem', padding: '1.5rem' }} onClick={placeOrder}>
+                {language === 'ar' ? 'تأكيد وإرسال الطلب 🚀' : 'Confirm & Send Order 🚀'}
               </button>
               <button className="pos-btn-outline" style={{ width: '300px' }} onClick={() => setView('menu')}>{t.back}</button>
             </motion.div>
@@ -722,9 +848,22 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                         {order.waiter_name || 'Guest'}
                       </div>
                     )}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '1rem', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
                       <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>#{order.id.slice(0, 6)}</span>
-                      <span style={{ background: 'rgba(212,175,55,0.1)', color: 'var(--gold-primary)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>{order.order_type?.toUpperCase()}</span>
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <span style={{ background: 'rgba(212,175,55,0.1)', color: 'var(--gold-primary)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                          {order.order_type?.toUpperCase()}
+                        </span>
+                        <span style={{ 
+                          background: order.status === 'delivered' ? 'rgba(46,204,113,0.15)' : 'rgba(243,156,18,0.15)', 
+                          color: order.status === 'delivered' ? '#2ecc71' : '#f39c12', 
+                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' 
+                        }}>
+                          {order.status === 'delivered' ? (language === 'ar' ? 'تم التسليم' : 'Delivered') : 
+                           order.status === 'preparing' ? (language === 'ar' ? 'جاري التحضير' : 'Preparing') : 
+                           (language === 'ar' ? 'معلق' : 'Pending')}
+                        </span>
+                      </div>
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
                       <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{order.customer_name}</div>
@@ -735,17 +874,42 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                       <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#3b82f6', color: '#fff' }} onClick={() => {
                         setEditingOrder(order);
                         setEditOrderId(order.id);
+                        setOriginalOrderItems(order.items);
                         setView('waiter_order_edit');
                       }}>{language === 'ar' ? 'تعديل' : 'Edit'}</button>
-                      <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={async () => {
-                        // Quick pay as cash
-                        await db.updateOrderStatus(order.id, 'completed');
-                        loadData();
-                      }}>{language === 'ar' ? 'إتمام' : 'Pay'}</button>
+                      
+                      {order.status === 'delivered' ? (
+                        <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#2ecc71', color: '#000' }} onClick={() => {
+                          setCollectPaymentOrder(order);
+                          setPayCash('');
+                          setPayVisa('');
+                          setPayWallet('');
+                          setPayInstapay('');
+                          setPayIsDeferred(false);
+                          setPayCustomerId(order.customer_id || '');
+                        }}>{language === 'ar' ? 'تحصيل الدفع' : 'Collect Payment'}</button>
+                      ) : (
+                        <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#f39c12', color: '#000' }} onClick={async () => {
+                          await db.updateOrderStatus(order.id, 'delivered');
+                          loadData();
+                        }}>{language === 'ar' ? 'تم التسليم' : 'Mark Delivered'}</button>
+                      )}
+                      
                       <button className="pos-btn-outline" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={async () => {
                         // Cancel
-                        if(confirm('Are you sure you want to cancel?')) {
+                        if(confirm(language === 'ar' ? 'هل أنت متأكد من إلغاء هذا الطلب؟' : 'Are you sure you want to cancel?')) {
                           await db.updateOrderStatus(order.id, 'cancelled');
+                          if (settings?.telegram_chat_id) {
+                            const text = `⚠️ <b>تنبيه إلغاء طلب نشط</b>\n\n` +
+                              `• <b>رقم الطلب:</b> <code>#${order.id.slice(0, 6)}</code>\n` +
+                              `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
+                              `• <b>العميل:</b> ${order.customer_name || 'غير معروف'}\n` +
+                              `• <b>القيمة الإجمالية:</b> ${order.total_price.toFixed(2)} EGP`;
+                            
+                            import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+                              sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
+                            });
+                          }
                           loadData();
                         }
                       }}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
@@ -830,9 +994,23 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   </div>
                   <div style={{ background: '#111', padding: '1rem', borderRadius: '8px' }}>
                     {editingOrder.items.map((item, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: idx === editingOrder.items.length - 1 ? 'none' : '1px solid #222' }}>
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: idx === editingOrder.items.length - 1 ? 'none' : '1px solid #222' }}>
                         <span>{item.quantity}x {language === 'ar' ? item.name_ar : item.name_en}</span>
-                        <span>{(item.price * item.quantity).toFixed(2)}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <span>{(item.price * item.quantity).toFixed(2)}</span>
+                          <button 
+                            className="pos-btn-outline" 
+                            style={{ padding: '2px 8px', fontSize: '0.8rem', borderColor: 'var(--gold-primary)', color: 'var(--gold-primary)', cursor: 'pointer', minWidth: 'auto' }}
+                            onClick={() => {
+                              setTransferItem(item);
+                              setTransferQty(1);
+                              const otherOrders = activeOrders.filter(o => o.id !== editingOrder.id);
+                              setTransferTargetOrderId(otherOrders[0]?.id || '');
+                            }}
+                          >
+                            {language === 'ar' ? 'نقل' : 'Transfer'}
+                          </button>
+                        </div>
                       </div>
                     ))}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed #444', fontWeight: 'bold', color: 'var(--gold-primary)' }}>
@@ -870,6 +1048,420 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                 </button>
 
               </div>
+            </motion.div>
+          )}
+
+          {/* Collect Payment Modal */}
+          {collectPaymentOrder && (
+            <motion.div 
+              key="collect_payment_modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.85)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 9999,
+                padding: '1rem',
+                backdropFilter: 'blur(8px)',
+                direction: language === 'ar' ? 'rtl' : 'ltr'
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                style={{
+                  background: '#18181b',
+                  border: '2px solid var(--gold-primary)',
+                  borderRadius: '20px',
+                  width: '100%',
+                  maxWidth: '500px',
+                  padding: '2rem',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                  maxHeight: '90vh',
+                  overflowY: 'auto'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, color: 'var(--gold-primary)', fontSize: '1.4rem', fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'تحصيل دفع الفاتورة' : 'Collect Bill Payment'} #{collectPaymentOrder.id.slice(0, 6)}
+                  </h3>
+                  <button 
+                    onClick={() => setCollectPaymentOrder(null)} 
+                    style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer' }}
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <div style={{ background: 'rgba(212,175,55,0.05)', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px dashed rgba(212,175,55,0.2)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <span style={{ color: '#a1a1aa' }}>{language === 'ar' ? 'اسم العميل:' : 'Customer:'}</span>
+                    <span style={{ fontWeight: 'bold', color: '#fff' }}>{collectPaymentOrder.customer_name}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#a1a1aa' }}>{language === 'ar' ? 'إجمالي الفاتورة:' : 'Total Price:'}</span>
+                    <span style={{ fontWeight: 'bold', color: 'var(--gold-primary)', fontSize: '1.2rem' }}>
+                      {collectPaymentOrder.total_price.toFixed(2)} EGP
+                    </span>
+                  </div>
+                </div>
+
+                {/* Input Breakdown Fields */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                      💵 {language === 'ar' ? 'نقدي (كاش):' : 'Cash:'}
+                    </label>
+                    <input 
+                      type="number"
+                      className="pos-input"
+                      placeholder="0.00"
+                      value={payCash}
+                      onChange={(e) => setPayCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      min="0"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                      💳 {language === 'ar' ? 'فيزا / كارت:' : 'Visa / Card:'}
+                    </label>
+                    <input 
+                      type="number"
+                      className="pos-input"
+                      placeholder="0.00"
+                      value={payVisa}
+                      onChange={(e) => setPayVisa(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      min="0"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                      📱 {language === 'ar' ? 'محفظة إلكترونية:' : 'Mobile Wallet:'}
+                    </label>
+                    <input 
+                      type="number"
+                      className="pos-input"
+                      placeholder="0.00"
+                      value={payWallet}
+                      onChange={(e) => setPayWallet(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      min="0"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                      ⚡ {language === 'ar' ? 'إنستا باي:' : 'InstaPay:'}
+                    </label>
+                    <input 
+                      type="number"
+                      className="pos-input"
+                      placeholder="0.00"
+                      value={payInstapay}
+                      onChange={(e) => setPayInstapay(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      min="0"
+                    />
+                  </div>
+
+                  {/* Deferred Toggle */}
+                  <div style={{ borderTop: '1px solid #27272a', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#fff', userSelect: 'none' }}>
+                      <input 
+                        type="checkbox"
+                        checked={payIsDeferred}
+                        onChange={(e) => {
+                          setPayIsDeferred(e.target.checked);
+                          if (e.target.checked && !payCustomerId) {
+                            setPayCustomerId(collectPaymentOrder.customer_id || (customers[0]?.id || ''));
+                          }
+                        }}
+                        style={{ width: '18px', height: '18px', accentColor: 'var(--gold-primary)' }}
+                      />
+                      <span style={{ fontWeight: 'bold' }}>{language === 'ar' ? 'تسجيل جزء آجل (على الحساب)' : 'Record remaining as deferred (Credit)'}</span>
+                    </label>
+
+                    {payIsDeferred && (
+                      <div style={{ marginTop: '0.8rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                          👤 {language === 'ar' ? 'اختر العميل لتسجيل المديونية:' : 'Select Customer:'}
+                        </label>
+                        <select
+                          className="pos-input"
+                          value={payCustomerId}
+                          onChange={(e) => setPayCustomerId(e.target.value)}
+                        >
+                          <option value="">{language === 'ar' ? '-- اختر العميل --' : '-- Select Customer --'}</option>
+                          {customers.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} ({c.phone}) - {language === 'ar' ? 'الدين الحالي: ' : 'Current Debt: '}{c.total_debt.toFixed(2)} EGP
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Calculations & Validation */}
+                {(() => {
+                  const cashVal = Number(payCash) || 0;
+                  const visaVal = Number(payVisa) || 0;
+                  const walletVal = Number(payWallet) || 0;
+                  const instapayVal = Number(payInstapay) || 0;
+                  const totalPaid = cashVal + visaVal + walletVal + instapayVal;
+                  const remaining = collectPaymentOrder.total_price - totalPaid;
+
+                  let statusText = '';
+                  let isError = false;
+                  let canSubmit = false;
+
+                  if (Math.abs(remaining) < 0.01) {
+                    statusText = language === 'ar' ? '✓ تم دفع كامل قيمة الفاتورة' : '✓ Full payment entered';
+                    canSubmit = true;
+                  } else if (remaining > 0) {
+                    if (payIsDeferred) {
+                      if (!payCustomerId) {
+                        statusText = language === 'ar' ? '⚠️ يرجى اختيار العميل لتسجيل المبلغ الآجل' : '⚠️ Please select a customer for deferred amount';
+                        isError = true;
+                      } else {
+                        statusText = language === 'ar' 
+                          ? `ℹ️ سيتم تسجيل ${remaining.toFixed(2)} EGP كدين على العميل المختار` 
+                          : `ℹ️ ${remaining.toFixed(2)} EGP will be registered as debt for selected customer`;
+                        canSubmit = true;
+                      }
+                    } else {
+                      statusText = language === 'ar' 
+                        ? `⚠️ يتبقى ${remaining.toFixed(2)} EGP غير مدفوعة (فعل خيار الآجل أو أكمل السداد)` 
+                        : `⚠️ ${remaining.toFixed(2)} EGP remaining (check deferred or complete payment)`;
+                      isError = true;
+                    }
+                  } else {
+                    statusText = language === 'ar' 
+                      ? `⚠️ قيمة المدفوعات تتجاوز الفاتورة بـ ${Math.abs(remaining).toFixed(2)} EGP` 
+                      : `⚠️ Payments exceed total by ${Math.abs(remaining).toFixed(2)} EGP`;
+                    isError = true;
+                  }
+
+                  return (
+                    <>
+                      <div style={{ 
+                        background: isError ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
+                        color: isError ? '#ef4444' : '#10b989', 
+                        padding: '0.8rem', 
+                        borderRadius: '8px', 
+                        fontSize: '0.9rem', 
+                        fontWeight: 'bold',
+                        marginBottom: '1.5rem',
+                        textAlign: 'center',
+                        border: `1px solid ${isError ? '#ef4444' : '#10b989'}`
+                      }}>
+                        {statusText}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button 
+                          className="pos-btn" 
+                          style={{ flex: 1, padding: '1rem' }} 
+                          disabled={!canSubmit}
+                          onClick={async () => {
+                            try {
+                              if (remaining > 0.01 && payIsDeferred && payCustomerId) {
+                                const customer = customers.find(c => c.id === payCustomerId);
+                                const currentDebt = customer ? customer.total_debt : 0;
+                                await db.updateCustomerDebt(payCustomerId, currentDebt + remaining);
+                              }
+
+                              let finalMethod: Order['payment_method'] = 'cash';
+                              const activeMethods = [
+                                cashVal > 0 && 'cash',
+                                visaVal > 0 && 'visa',
+                                walletVal > 0 && 'wallet',
+                                instapayVal > 0 && 'instapay',
+                                remaining > 0.01 && payIsDeferred && 'deferred'
+                              ].filter(Boolean) as string[];
+
+                              if (activeMethods.length > 1) {
+                                finalMethod = 'split';
+                              } else if (activeMethods.length === 1) {
+                                finalMethod = activeMethods[0] as Order['payment_method'];
+                              }
+
+                              const paymentDetails = {
+                                cash: cashVal,
+                                visa: visaVal,
+                                wallet: walletVal,
+                                instapay: instapayVal,
+                                deferred: remaining > 0.01 && payIsDeferred ? remaining : 0,
+                                customer_id: remaining > 0.01 && payIsDeferred ? payCustomerId : undefined
+                              };
+
+                              await db.updateOrder(collectPaymentOrder.id, {
+                                status: 'completed',
+                                payment_method: finalMethod,
+                                payment_details: paymentDetails,
+                                customer_id: payCustomerId || collectPaymentOrder.customer_id
+                              });
+
+                              setCollectPaymentOrder(null);
+                              loadData();
+                            } catch (e) {
+                              alert(language === 'ar' ? 'فشل تحصيل الدفع، يرجى المحاولة مرة أخرى' : 'Failed to collect payment, please try again.');
+                            }
+                          }}
+                        >
+                          {language === 'ar' ? 'تأكيد الدفع والإنهاء' : 'Confirm Payment & Complete'}
+                        </button>
+
+                        <button 
+                          className="pos-btn-outline" 
+                          style={{ flex: 1, padding: '1rem' }} 
+                          onClick={() => setCollectPaymentOrder(null)}
+                        >
+                          {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Transfer Item Modal */}
+          {transferItem && editingOrder && (
+            <motion.div 
+              key="transfer_item_modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.85)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 9999,
+                padding: '1rem',
+                backdropFilter: 'blur(8px)',
+                direction: language === 'ar' ? 'rtl' : 'ltr'
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                style={{
+                  background: '#18181b',
+                  border: '2px solid var(--gold-primary)',
+                  borderRadius: '20px',
+                  width: '100%',
+                  maxWidth: '450px',
+                  padding: '2rem',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, color: 'var(--gold-primary)', fontSize: '1.3rem', fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'نقل الصنف بين الطاولات' : 'Transfer Item Between Tables'}
+                  </h3>
+                  <button 
+                    onClick={() => setTransferItem(null)} 
+                    style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer' }}
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid #27272a' }}>
+                  <div style={{ color: 'var(--gold-primary)', fontWeight: 'bold', marginBottom: '0.4rem' }}>
+                    {language === 'ar' ? transferItem.name_ar : transferItem.name_en}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#a1a1aa' }}>
+                    {language === 'ar' ? `الكمية المتوفرة بالطلب الحالي: ${transferItem.quantity}` : `Available quantity in current order: ${transferItem.quantity}`}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginBottom: '1.5rem' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                      {language === 'ar' ? 'الكمية المراد نقلها:' : 'Quantity to Transfer:'}
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#000', padding: '6px 12px', borderRadius: '8px', width: 'fit-content' }}>
+                      <button 
+                        disabled={transferQty <= 1}
+                        onClick={() => setTransferQty(prev => Math.max(1, prev - 1))} 
+                        style={{ background: '#333', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <span style={{ fontWeight: 'bold', minWidth: '30px', textAlign: 'center', fontSize: '1.2rem' }}>{transferQty}</span>
+                      <button 
+                        disabled={transferQty >= transferItem.quantity}
+                        onClick={() => setTransferQty(prev => Math.min(transferItem.quantity, prev + 1))} 
+                        style={{ background: 'var(--gold-primary)', border: 'none', color: '#000', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                      {language === 'ar' ? 'الطلب المستهدف (رقم الطاولة / اسم العميل):' : 'Target Order (Table / Customer):'}
+                    </label>
+                    {activeOrders.filter(o => o.id !== editingOrder.id).length === 0 ? (
+                      <div style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                        {language === 'ar' ? 'لا توجد طلبات نشطة أخرى لنقل الصنف إليها!' : 'No other active orders to transfer to!'}
+                      </div>
+                    ) : (
+                      <select
+                        className="pos-input"
+                        value={transferTargetOrderId}
+                        onChange={(e) => setTransferTargetOrderId(e.target.value)}
+                      >
+                        {activeOrders.filter(o => o.id !== editingOrder.id).map(o => (
+                          <option key={o.id} value={o.id}>
+                            #{o.id.slice(0, 6)} - {o.customer_name} {o.table_number && o.table_number !== '-' ? `(Table ${o.table_number})` : ''} - {o.total_price.toFixed(2)} EGP
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <button 
+                    className="pos-btn" 
+                    style={{ flex: 1, padding: '1rem' }} 
+                    disabled={activeOrders.filter(o => o.id !== editingOrder.id).length === 0 || !transferTargetOrderId}
+                    onClick={handleTransferSubmit}
+                  >
+                    {language === 'ar' ? 'تأكيد النقل' : 'Confirm Transfer'}
+                  </button>
+
+                  <button 
+                    className="pos-btn-outline" 
+                    style={{ flex: 1, padding: '1rem' }} 
+                    onClick={() => setTransferItem(null)}
+                  >
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
           )}
 

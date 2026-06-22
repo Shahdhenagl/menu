@@ -56,7 +56,7 @@ export interface Order {
   order_type?: 'takeaway' | 'talabat' | 'dine_in' | 'delivery';
   waiter_id?: string;
   waiter_name?: string;
-  payment_method?: 'cash' | 'visa' | 'wallet' | 'split' | 'deferred'; // Added deferred (آجل)
+  payment_method?: 'cash' | 'visa' | 'wallet' | 'instapay' | 'split' | 'deferred'; // Added deferred (آجل) & instapay
   payment_details?: any; // JSON representation of split payments
   inventory_deducted?: boolean;
   created_at: string;
@@ -92,6 +92,8 @@ export interface RestaurantSettings {
   location_url?: string;
   tax_percent?: number;
   service_percent?: number;
+  telegram_bot_token?: string;
+  telegram_chat_id?: string;
 }
 
 export interface Expense {

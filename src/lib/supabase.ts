@@ -38,7 +38,9 @@ const initialSettings: RestaurantSettings = {
   snapchat_url: 'https://snapchat.com/add/meridien',
   talabat_url: 'https://www.talabat.com/egypt',
   tax_percent: 0,
-  service_percent: 0
+  service_percent: 0,
+  telegram_bot_token: '',
+  telegram_chat_id: ''
 };
 
 const initialOrders: Order[] = [

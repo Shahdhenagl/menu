@@ -99,6 +99,9 @@ export default function AdminDashboard({
   const [setLocationUrl, setSetLocationUrl] = useState((settings as any).location_url || '');
   const [taxPercent, setTaxPercent] = useState<number>(settings.tax_percent || 0);
   const [servicePercent, setServicePercent] = useState<number>(settings.service_percent || 0);
+  const [telegramBotToken, setTelegramBotToken] = useState(settings.telegram_bot_token || '');
+  const [telegramChatId, setTelegramChatId] = useState(settings.telegram_chat_id || '');
+
 
   // --- DEBT CUSTOMERS STATE ---
   const [debtCustomers, setDebtCustomers] = useState<Customer[]>([]);
@@ -797,6 +800,8 @@ export default function AdminDashboard({
     setServicePercent(settings.service_percent || 0);
     setPromos(settings.promo_codes || {});
     setOffers(settings.offers || []);
+    setTelegramBotToken(settings.telegram_bot_token || '');
+    setTelegramChatId(settings.telegram_chat_id || '');
   }, [settings]);
 
   // Passcode gate validation
@@ -1220,7 +1225,9 @@ export default function AdminDashboard({
         talabat_url: setTalabat,
         location_url: setLocationUrl,
         tax_percent: taxPercent,
-        service_percent: servicePercent
+        service_percent: servicePercent,
+        telegram_bot_token: telegramBotToken,
+        telegram_chat_id: telegramChatId
       });
       await refreshData();
       alert(language === 'ar' ? 'تم حفظ إعدادات النظام بنجاح!' : 'System settings saved successfully!');
@@ -3575,6 +3582,34 @@ export default function AdminDashboard({
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     {language === 'ar' ? 'القيمة الافتراضية 0% (تُحسب على المجموع الفرعي الصافي)' : 'Default is 0% (calculated on net subtotal)'}
                   </span>
+                </div>
+              </div>
+
+              {/* Telegram Bot Settings */}
+              <h3 style={{ color: 'var(--gold-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span>🤖</span>
+                <span>{language === 'ar' ? 'إعدادات إشعارات التليجرام (حذف/إلغاء الفواتير)' : 'Telegram Notification Settings'}</span>
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'رمز البوت (Telegram Bot Token)' : 'Telegram Bot Token'}</label>
+                  <input 
+                    type="text" 
+                    className="input-gold" 
+                    value={telegramBotToken} 
+                    onChange={(e) => setTelegramBotToken(e.target.value)} 
+                    placeholder="8722542358:AAF_..."
+                  />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'معرف المحادثة (Telegram Chat ID)' : 'Telegram Chat ID'}</label>
+                  <input 
+                    type="text" 
+                    className="input-gold" 
+                    value={telegramChatId} 
+                    onChange={(e) => setTelegramChatId(e.target.value)} 
+                    placeholder="-100..."
+                  />
                 </div>
               </div>
 
