@@ -758,7 +758,20 @@ export const db = {
         console.warn("Supabase getInventoryItems failed", err);
       }
     }
-    return getLocalData('meridien_inventory_items', initialInventoryItems);
+    const defaultInventoryItems: InventoryItem[] = [
+      ...initialInventoryItems,
+      ...initialProducts.map(p => ({
+        id: p.id,
+        name: p.name_ar,
+        unit: 'وجبة',
+        stock_main: 0,
+        stock_factory: 0,
+        stock_distribution: 10,
+        last_purchase_price: 0,
+        avg_purchase_price: 0
+      }))
+    ];
+    return getLocalData('meridien_inventory_items', defaultInventoryItems);
   },
   async addInventoryItem(item: Omit<InventoryItem, 'id'>): Promise<InventoryItem> {
     if (supabase) {
@@ -1244,6 +1257,7 @@ export const db = {
     try {
       if (supabase) {
         for (const item of order.items) {
+          // 1. Deduct recipe ingredients
           const { data: recipes, error } = await supabase
             .from('product_recipes')
             .select('inventory_item_id, quantity')
@@ -1268,6 +1282,21 @@ export const db = {
               }
             }
           }
+
+          // 2. Also deduct the product itself if it exists in inventory_items
+          const { data: prodItem } = await supabase
+            .from('inventory_items')
+            .select('stock_distribution')
+            .eq('id', item.id)
+            .single();
+
+          if (prodItem) {
+            const newStockDist = Math.max(0, (Number(prodItem.stock_distribution) || 0) - item.quantity);
+            await supabase
+              .from('inventory_items')
+              .update({ stock_distribution: newStockDist })
+              .eq('id', item.id);
+          }
         }
       } else {
         const items = await this.getInventoryItems();
@@ -1275,6 +1304,7 @@ export const db = {
         let updated = false;
 
         for (const item of order.items) {
+          // 1. Deduct recipe ingredients
           const productRecipes = allRecipes.filter(r => r.product_id === item.id);
           for (const rec of productRecipes) {
             const deductQty = rec.quantity * item.quantity;
@@ -1283,6 +1313,13 @@ export const db = {
               items[itemIdx].stock_distribution = Math.max(0, (items[itemIdx].stock_distribution || 0) - deductQty);
               updated = true;
             }
+          }
+
+          // 2. Deduct product itself
+          const prodItemIdx = items.findIndex(i => i.id === item.id);
+          if (prodItemIdx > -1) {
+            items[prodItemIdx].stock_distribution = Math.max(0, (items[prodItemIdx].stock_distribution || 0) - item.quantity);
+            updated = true;
           }
         }
 

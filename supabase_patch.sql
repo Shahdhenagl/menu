@@ -1247,3 +1247,18 @@ INSERT INTO product_recipes (id, product_id, inventory_item_id, quantity) VALUES
 INSERT INTO product_recipes (id, product_id, inventory_item_id, quantity) VALUES ('12360f63-4863-8b5a-1b53-b65892d89cd8', '79fc573b-bb13-2fe4-eab2-675deec06972', '19d91a11-8ddf-5c49-a775-f0dda75c902c', 1) ON CONFLICT (product_id, inventory_item_id) DO UPDATE SET quantity = 1;
 INSERT INTO product_recipes (id, product_id, inventory_item_id, quantity) VALUES ('ca725971-1ee2-a4d8-bc83-9941dcdc09de', '79fc573b-bb13-2fe4-eab2-675deec06972', '9aa15944-a610-6968-9b7f-9277614febc3', 1) ON CONFLICT (product_id, inventory_item_id) DO UPDATE SET quantity = 1;
 INSERT INTO product_recipes (id, product_id, inventory_item_id, quantity) VALUES ('ea934491-7c9a-2766-3e2d-40002ddbd591', '79fc573b-bb13-2fe4-eab2-675deec06972', '0423722f-52eb-0c7b-f285-05dd288d2993', 1) ON CONFLICT (product_id, inventory_item_id) DO UPDATE SET quantity = 1;
+
+-- 10. Register all Products as Inventory Items in the Distribution Warehouse
+INSERT INTO inventory_items (id, name, unit, stock_main, stock_factory, stock_distribution, last_purchase_price, avg_purchase_price)
+SELECT 
+  id, 
+  name_ar, 
+  'وجبة', 
+  0, 
+  0, 
+  10, -- Initial default stock in distribution warehouse
+  0, 
+  0
+FROM products
+ON CONFLICT (id) DO UPDATE SET 
+  name = EXCLUDED.name;
