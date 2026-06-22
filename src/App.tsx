@@ -267,6 +267,7 @@ function App() {
           settings={settings}
           refreshData={fetchAllData}
           language={language}
+          setLanguage={setLanguage}
           theme={theme}
           toggleTheme={toggleTheme}
         />

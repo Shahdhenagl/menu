@@ -22,6 +22,7 @@ interface AdminDashboardProps {
   language: 'ar' | 'en';
   theme: 'light' | 'dark';
   toggleTheme: () => void;
+  setLanguage: (lang: 'ar' | 'en') => void;
 }
 
 type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'factory';
@@ -35,7 +36,8 @@ export default function AdminDashboard({
   refreshData,
   language,
   theme,
-  toggleTheme
+  toggleTheme,
+  setLanguage
 }: AdminDashboardProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('meridien_admin_auth') === 'true';
@@ -2131,7 +2133,17 @@ export default function AdminDashboard({
       {/* 2. Main content area */}
       <main className="admin-main">
         <div className="admin-top-header" style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', position: 'relative' }}>
-          <div className="notifications-wrapper" style={{ position: 'relative' }}>
+          <div className="notifications-wrapper" style={{ position: 'relative', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {/* Language Toggle Button */}
+            <button 
+              className="btn-icon" 
+              onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
+              title={language === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
+              style={{ background: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.4rem 0.8rem', cursor: 'pointer', color: 'var(--text-color)', fontSize: '0.9rem', fontWeight: 'bold' }}
+            >
+              {language === 'ar' ? 'EN' : 'عربي'}
+            </button>
+            
             <button 
               className="btn-icon" 
               onClick={() => setShowNotifications(!showNotifications)}
