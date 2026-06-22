@@ -253,6 +253,18 @@ DROP POLICY IF EXISTS "Allow all for everyone" ON product_recipes;
 CREATE POLICY "Allow all for everyone" ON product_recipes FOR ALL USING (true) WITH CHECK (true);
 
 
+-- Seeding Categories
+INSERT INTO categories (id, name_ar, name_en, sort_order) VALUES 
+  ('c1111111-1111-1111-1111-111111111111', 'المقبلات والشوربة', 'Appetizers & Soups', 1),
+  ('c2222222-2222-2222-2222-222222222222', 'الأطباق الرئيسية', 'Main Courses', 2),
+  ('c3333333-3333-3333-3333-333333333333', 'البيتزا والباستا', 'Pizza & Pasta', 3),
+  ('c4444444-4444-4444-4444-444444444444', 'الحلويات الفاخرة', 'Fine Desserts', 4),
+  ('c5555555-5555-5555-5555-555555555555', 'المشروبات والقهوة', 'Drinks & Coffee', 5)
+ON CONFLICT (id) DO UPDATE SET 
+  name_ar = EXCLUDED.name_ar, 
+  name_en = EXCLUDED.name_en, 
+  sort_order = EXCLUDED.sort_order;
+
 -- Seeding Suppliers
 
 INSERT INTO suppliers (id, name, phone) VALUES 
