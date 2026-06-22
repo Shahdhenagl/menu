@@ -54,6 +54,7 @@ export interface Order {
   waiter_name?: string;
   payment_method?: 'cash' | 'visa' | 'wallet' | 'split';
   payment_details?: any; // JSON representation of split payments
+  inventory_deducted?: boolean;
   created_at: string;
 }
 
@@ -198,3 +199,14 @@ export interface ProductionLog {
   recorded_by: string;
   created_at?: string;
 }
+
+export interface ProductRecipe {
+  id: string;
+  product_id: string;
+  inventory_item_id: string;
+  quantity: number;
+  created_at?: string;
+  inventory_item_name?: string; // resolved item name for convenience in UI
+  inventory_item_unit?: string; // resolved unit for convenience in UI
+}
+

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe } from '../types';
 import { db } from '../lib/supabase';
 import { printOrderTickets } from '../utils/printUtils';
 import { 
@@ -73,6 +73,11 @@ export default function AdminDashboard({
   const [prodRecipeAr, setProdRecipeAr] = useState('');
   const [prodRecipeEn, setProdRecipeEn] = useState('');
   const [prodAvailable, setProdAvailable] = useState(true);
+
+  // Product Recipes states
+  const [prodRecipes, setProdRecipes] = useState<ProductRecipe[]>([]);
+  const [selectedInvItemId, setSelectedInvItemId] = useState('');
+  const [recipeItemQty, setRecipeItemQty] = useState<number | ''>('');
 
   // Products filtering
   const [adminProdSearch, setAdminProdSearch] = useState('');
@@ -777,7 +782,9 @@ export default function AdminDashboard({
   };
 
   // --- PRODUCTS CRUD ACTIONS ---
-  const handleOpenProdModal = (prod: Product | null = null) => {
+  const handleOpenProdModal = async (prod: Product | null = null) => {
+    setSelectedInvItemId('');
+    setRecipeItemQty('');
     if (prod) {
       setEditingProduct(prod);
       setProdCatId(prod.category_id);
@@ -791,6 +798,14 @@ export default function AdminDashboard({
       setProdRecipeAr(prod.recipe_ar || '');
       setProdRecipeEn(prod.recipe_en || '');
       setProdAvailable(prod.is_available);
+      
+      try {
+        const recipes = await db.getProductRecipes(prod.id);
+        setProdRecipes(recipes);
+      } catch (err) {
+        console.error("Error fetching recipes:", err);
+        setProdRecipes([]);
+      }
     } else {
       setEditingProduct(null);
       setProdCatId(categories[0]?.id || '');
@@ -804,8 +819,41 @@ export default function AdminDashboard({
       setProdRecipeAr('');
       setProdRecipeEn('');
       setProdAvailable(true);
+      setProdRecipes([]);
     }
     setProdModalOpen(true);
+  };
+
+  const handleAddRecipeItem = () => {
+    if (!selectedInvItemId || !recipeItemQty || Number(recipeItemQty) <= 0) {
+      alert(language === 'ar' ? 'يرجى اختيار مكون وكمية صحيحة أكبر من صفر.' : 'Please select an item and a valid quantity greater than zero.');
+      return;
+    }
+
+    const item = inventoryItems.find(i => i.id === selectedInvItemId);
+    if (!item) return;
+
+    if (prodRecipes.some(r => r.inventory_item_id === selectedInvItemId)) {
+      alert(language === 'ar' ? 'هذا المكون موجود بالفعل في الوصفة.' : 'This ingredient is already in the recipe.');
+      return;
+    }
+
+    const newRecipeItem: ProductRecipe = {
+      id: crypto.randomUUID(),
+      product_id: editingProduct?.id || '',
+      inventory_item_id: selectedInvItemId,
+      quantity: Number(recipeItemQty),
+      inventory_item_name: item.name,
+      inventory_item_unit: item.unit
+    };
+
+    setProdRecipes([...prodRecipes, newRecipeItem]);
+    setSelectedInvItemId('');
+    setRecipeItemQty('');
+  };
+
+  const handleRemoveRecipeItem = (invItemId: string) => {
+    setProdRecipes(prodRecipes.filter(r => r.inventory_item_id !== invItemId));
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -831,11 +879,20 @@ export default function AdminDashboard({
         is_available: prodAvailable
       };
 
+      let savedProd: Product | null = null;
       if (editingProduct) {
-        await db.updateProduct(editingProduct.id, prodData);
+        savedProd = await db.updateProduct(editingProduct.id, prodData);
       } else {
-        await db.addProduct(prodData);
+        savedProd = await db.addProduct(prodData);
       }
+
+      if (savedProd && savedProd.id) {
+        await db.updateProductRecipe(
+          savedProd.id, 
+          prodRecipes.map(r => ({ inventory_item_id: r.inventory_item_id, quantity: r.quantity }))
+        );
+      }
+      
       await refreshData();
       setProdModalOpen(false);
     } catch (err: any) {
@@ -4211,8 +4268,94 @@ export default function AdminDashboard({
                   <textarea className="input-gold" rows={4} placeholder="Cooking details..." value={prodRecipeEn} onChange={(e) => setProdRecipeEn(e.target.value)} />
                 </div>
 
+                {/* Product Recipe Ingredients Section */}
+                <div className="form-group" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: '1.5rem' }}>
+                  <h3 style={{ color: 'var(--gold-primary)', marginBottom: '1rem', fontSize: '1.1rem', fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'مكونات الوصفة الدفترية (خصم المخزن التلقائي)' : 'Recipe Ingredients (Automatic Stock Deduction)'}
+                  </h3>
+                  
+                  {/* Select component & quantity */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1rem' }}>
+                    <div>
+                      <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.25rem' }}>{language === 'ar' ? 'اختر مادة خام من المخزن' : 'Select Raw Material'}</label>
+                      <select 
+                        className="input-gold" 
+                        value={selectedInvItemId} 
+                        onChange={(e) => setSelectedInvItemId(e.target.value)}
+                        style={{ height: '42px', width: '100%', background: '#000', border: '1px solid var(--gold-secondary)' }}
+                      >
+                        <option value="">{language === 'ar' ? '-- اختر مكون --' : '-- Select Ingredient --'}</option>
+                        {inventoryItems.map(item => (
+                          <option key={item.id} value={item.id} style={{ background: '#121212' }}>
+                            {item.name} ({item.unit})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.25rem' }}>{language === 'ar' ? 'الكمية المطلوبة' : 'Required Qty'}</label>
+                      <input 
+                        type="number" 
+                        step="0.001" 
+                        className="input-gold" 
+                        value={recipeItemQty} 
+                        onChange={(e) => setRecipeItemQty(e.target.value === '' ? '' : Number(e.target.value))} 
+                        placeholder="0.200"
+                        style={{ height: '42px', width: '100%' }}
+                      />
+                    </div>
+                    <button 
+                      type="button" 
+                      className="btn-gold" 
+                      onClick={handleAddRecipeItem}
+                      style={{ height: '42px', padding: '0 1rem', display: 'flex', alignItems: 'center', gap: '0.25rem', margin: 0 }}
+                    >
+                      <Plus size={16} />
+                      <span>{language === 'ar' ? 'إضافة' : 'Add'}</span>
+                    </button>
+                  </div>
+
+                  {/* Components List */}
+                  {prodRecipes.length === 0 ? (
+                    <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', padding: '1rem', border: '1px dashed var(--border-color)', borderRadius: '8px' }}>
+                      {language === 'ar' ? 'لا توجد مكونات لهذه الوصفة بعد.' : 'No components in this recipe yet.'}
+                    </p>
+                  ) : (
+                    <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                        <thead>
+                          <tr style={{ background: 'rgba(212, 175, 55, 0.05)', borderBottom: '1px solid var(--border-color)' }}>
+                            <th style={{ textAlign: language === 'ar' ? 'right' : 'left', padding: '0.5rem 1rem', color: 'var(--gold-secondary)' }}>{language === 'ar' ? 'اسم المكون' : 'Ingredient'}</th>
+                            <th style={{ textAlign: 'center', padding: '0.5rem 1rem', color: 'var(--gold-secondary)', width: '120px' }}>{language === 'ar' ? 'الكمية' : 'Quantity'}</th>
+                            <th style={{ textAlign: 'center', padding: '0.5rem 1rem', color: 'var(--gold-secondary)', width: '100px' }}>{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
+                            <th style={{ textAlign: 'center', padding: '0.5rem 1rem', color: 'var(--gold-secondary)', width: '80px' }}>{language === 'ar' ? 'حذف' : 'Remove'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {prodRecipes.map(r => (
+                            <tr key={r.inventory_item_id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '0.5rem 1rem', fontWeight: 'bold', textAlign: language === 'ar' ? 'right' : 'left' }}>{r.inventory_item_name}</td>
+                              <td style={{ padding: '0.5rem 1rem', textAlign: 'center' }}>{r.quantity}</td>
+                              <td style={{ padding: '0.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>{r.inventory_item_unit}</td>
+                              <td style={{ padding: '0.5rem 1rem', textAlign: 'center' }}>
+                                <button 
+                                  type="button" 
+                                  onClick={() => handleRemoveRecipeItem(r.inventory_item_id)}
+                                  style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer', padding: '0.2rem' }}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
                 {/* Availability checkbox */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1.5rem' }}>
                   <input type="checkbox" id="avail-check" checked={prodAvailable} onChange={(e) => setProdAvailable(e.target.checked)} style={{ width: '18px', height: '18px', accentColor: 'var(--gold-primary)' }} />
                   <label htmlFor="avail-check" style={{ fontSize: '0.9rem', color: 'var(--gold-secondary)', fontWeight: 'bold', cursor: 'pointer' }}>المنتج متوفر للطلب حالياً</label>
                 </div>

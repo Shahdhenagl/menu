@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe } from '../types';
+import { initialCategories, initialProducts, initialInventoryItems, initialProductRecipes } from './seedData';
 
 // Load credentials from environment
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -19,144 +20,6 @@ export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey) 
   : null;
 
-// Initial Local Seed Data
-const initialCategories: Category[] = [
-  { id: 'c1111111-1111-1111-1111-111111111111', name_ar: 'المقبلات والشوربة', name_en: 'Appetizers & Soups', sort_order: 1 },
-  { id: 'c2222222-2222-2222-2222-222222222222', name_ar: 'الأطباق الرئيسية', name_en: 'Main Courses', sort_order: 2 },
-  { id: 'c3333333-3333-3333-3333-333333333333', name_ar: 'البيتزا والباستا', name_en: 'Pizza & Pasta', sort_order: 3 },
-  { id: 'c4444444-4444-4444-4444-444444444444', name_ar: 'الحلويات الفاخرة', name_en: 'Fine Desserts', sort_order: 4 },
-  { id: 'c5555555-5555-5555-5555-555555555555', name_ar: 'المشروبات والقهوة', name_en: 'Drinks & Coffee', sort_order: 5 }
-];
-
-const initialProducts: Product[] = [
-  // Appetizers
-  {
-    id: 'p1',
-    category_id: 'c1111111-1111-1111-1111-111111111111',
-    name_ar: 'شوربة لسان عصفور بالدجاج',
-    name_en: 'Orzo Chicken Soup',
-    price: 65,
-    description_ar: 'شوربة لسان عصفور تقليدية غنية بقطع الدجاج اللذيذة والليمون',
-    description_en: 'Traditional orzo soup rich with delicious chicken pieces and lemon',
-    image_url: 'https://images.unsplash.com/photo-1547592165-e1d17fed6006?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  },
-  {
-    id: 'p2',
-    category_id: 'c1111111-1111-1111-1111-111111111111',
-    name_ar: 'سمبوسك جبنة مشكلة',
-    name_en: 'Mixed Cheese Sambousek',
-    price: 80,
-    description_ar: 'رقائق سمبوسك مقرمشة محشوة بمزيج من الجبن الأبيض والموتزاريلا والأعشاب (4 قطع)',
-    description_en: 'Crispy sambousek sheets stuffed with a blend of white cheese, mozzarella and herbs (4 pcs)',
-    image_url: 'https://images.unsplash.com/photo-1601050690597-df056fb4ce78?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  },
-  {
-    id: 'p3',
-    category_id: 'c1111111-1111-1111-1111-111111111111',
-    name_ar: 'سلطة سيزر بالدجاج المشوي',
-    name_en: 'Grilled Chicken Caesar Salad',
-    price: 120,
-    description_ar: 'خس كابوتشا طازج، دجاج مشوي، خبز محمص، مغطى بجبنة البارميزان ودريسنج السيزر الخاص',
-    description_en: 'Fresh lettuce, grilled chicken, croutons, topped with parmesan and signature Caesar dressing',
-    image_url: 'https://images.unsplash.com/photo-1550304943-4f24f54ddde9?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  },
-  // Main Courses
-  {
-    id: 'p4',
-    category_id: 'c2222222-2222-2222-2222-222222222222',
-    name_ar: 'نصف دجاجة مسحبة مشوية',
-    name_en: 'Grilled Boneless Half Chicken',
-    price: 190,
-    description_ar: 'نصف دجاجة مشوية على الفحم متبلة بخلطة مريديان السرية، تقدم مع أرز بسمتي وثومية',
-    description_en: 'Charcoal-grilled half chicken marinated in Meridien secret blend, served with basmati rice and garlic dip',
-    image_url: 'https://images.unsplash.com/photo-1598515214211-89d3e73ae83b?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  },
-  {
-    id: 'p5',
-    category_id: 'c2222222-2222-2222-2222-222222222222',
-    name_ar: 'طبق كباب وكفتة مشكل',
-    name_en: 'Mixed Kebab & Kofta Platter',
-    price: 280,
-    description_ar: 'كباب لحم بقري وكفتة مشوية على الفحم، يقدم مع أرز مبهر، سلطة خضراء وطحينة',
-    description_en: 'Beef kebab and charcoal kofta, served with spiced rice, green salad and tahini dip',
-    image_url: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  },
-  // Pizza & Pasta
-  {
-    id: 'p6',
-    category_id: 'c3333333-3333-3333-3333-333333333333',
-    name_ar: 'بيتزا مارجريتا كلاسيك',
-    name_en: 'Classic Margherita Pizza',
-    price: 130,
-    description_ar: 'صلصة طماطم إيطالية، موتزاريلا طبيعية، ريحان طازج وزيت زيتون بكر',
-    description_en: 'Italian tomato sauce, natural mozzarella cheese, fresh basil, and virgin olive oil',
-    image_url: 'https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  },
-  {
-    id: 'p7',
-    category_id: 'c3333333-3333-3333-3333-333333333333',
-    name_ar: 'بيتزا سوبر سوبريم',
-    name_en: 'Super Supreme Pizza',
-    price: 170,
-    description_ar: 'صلصة طماطم، موتزاريلا، سلامي، لحم مفروم، فلفل ألوان، زيتون، فطر وبصل',
-    description_en: 'Tomato sauce, mozzarella, salami, minced beef, bell peppers, olives, mushrooms and onions',
-    image_url: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  },
-  {
-    id: 'p8',
-    category_id: 'c3333333-3333-3333-3333-333333333333',
-    name_ar: 'باستا الفريدو بالدجاج',
-    name_en: 'Chicken Alfredo Fettuccine',
-    price: 140,
-    description_ar: 'مكرونة فوتشيني بصوص الكريمة الغني، شرائح الدجاج المشوي والمشروم والبارميزان',
-    description_en: 'Fettuccine pasta in rich cream sauce, grilled chicken strips, fresh mushrooms and parmesan cheese',
-    image_url: 'https://images.unsplash.com/photo-1645112411341-6c4fd023714a?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  },
-  // Fine Desserts
-  {
-    id: 'p9',
-    category_id: 'c4444444-4444-4444-4444-444444444444',
-    name_ar: 'مولتن كيك الشوكولاتة',
-    name_en: 'Chocolate Molten Lava Cake',
-    price: 85,
-    description_ar: 'كيك شوكولاتة غني بقلب شوكولاتة ذائب ودافئ، يقدم مع بولة آيس كريم فانيليا',
-    description_en: 'Rich chocolate cake with a warm melting chocolate core, served with a scoop of vanilla ice cream',
-    image_url: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  },
-  // Drinks & Coffee
-  {
-    id: 'p10',
-    category_id: 'c5555555-5555-5555-5555-555555555555',
-    name_ar: 'عصير مانجو طازج',
-    name_en: 'Fresh Mango Juice',
-    price: 60,
-    description_ar: 'عصير مانجو طبيعي بارد ومنعش بدون مواد حافظة',
-    description_en: 'Cold, refreshing natural mango juice with no preservatives',
-    image_url: 'https://images.unsplash.com/photo-1534353436294-0dbd4bdac845?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  },
-  {
-    id: 'p11',
-    category_id: 'c5555555-5555-5555-5555-555555555555',
-    name_ar: 'موهيتو نعناع بارد',
-    name_en: 'Mint Mojito',
-    price: 65,
-    description_ar: 'مشروب موهيتو فوار ومنعش بالليمون والنعناع الطازج ونكهة الصودا',
-    description_en: 'Sparkling and refreshing mojito drink with fresh lemon, mint and soda',
-    image_url: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=400&q=80',
-    is_available: true
-  }
-];
-
 const initialSettings: RestaurantSettings = {
   id: 'rs1',
   restaurant_name_ar: 'مريديان',
@@ -167,7 +30,7 @@ const initialSettings: RestaurantSettings = {
   offers: [
     'خصم 10% على جميع وجبات المشويات بمناسبة الصيف!',
     'العرض الذهبي: اطلب طبقين رئيسيين واحصل على الحلوى مجاناً!',
-    'استخدم كود WELCOME للحصول على 15% خصم على أول طلب لك!'
+    'استخدم كود WELCOME للحصول على 15% خصم على أول طبق لك!'
   ],
   facebook_url: 'https://facebook.com/meridien',
   instagram_url: 'https://instagram.com/meridien',
@@ -228,13 +91,8 @@ const initialSuppliers: Supplier[] = [
   { id: 'sup3', name: 'مورد لحوم البلد', phone: '01000000003' }
 ];
 
-const initialInventoryItems: InventoryItem[] = [
-  { id: 'inv1', name: 'لحم بقري مفروم', unit: 'كجم', stock_main: 50, stock_factory: 10, stock_distribution: 0, last_purchase_price: 350, avg_purchase_price: 340 },
-  { id: 'inv2', name: 'دجاج كامل', unit: 'حبة', stock_main: 100, stock_factory: 20, stock_distribution: 0, last_purchase_price: 120, avg_purchase_price: 115 },
-  { id: 'inv3', name: 'كفتة مجهزة (مصنع)', unit: 'كجم', stock_main: 0, stock_factory: 5, stock_distribution: 15, last_purchase_price: 0, avg_purchase_price: 360 }
-];
-
 const initialPurchaseInvoices: PurchaseInvoice[] = [];
+
 
 // Helper to get from localstorage or seed
 function getLocalData<T>(key: string, initial: T): T {
@@ -468,6 +326,10 @@ export const db = {
       }
     }
 
+    if (newOrder.status === 'completed') {
+      await this.deductInventoryForOrder(newOrder);
+    }
+
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -490,14 +352,21 @@ export const db = {
   async updateOrderStatus(id: string, status: Order['status']): Promise<Order> {
     if (supabase) {
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .update({ status })
-          .eq('id', id)
-          .select()
-          .single();
-        if (error) throw error;
-        return data;
+        const { data: currentOrder } = await supabase.from('orders').select('*').eq('id', id).single();
+        if (currentOrder) {
+          const updatedOrder = { ...currentOrder, status };
+          if (status === 'completed' && !currentOrder.inventory_deducted) {
+            await this.deductInventoryForOrder(updatedOrder);
+          }
+          const { data, error } = await supabase
+            .from('orders')
+            .update({ status, inventory_deducted: updatedOrder.inventory_deducted })
+            .eq('id', id)
+            .select()
+            .single();
+          if (error) throw error;
+          return data;
+        }
       } catch (err) {
         console.warn("Supabase update failed, falling back to mock database.", err);
       }
@@ -506,6 +375,9 @@ export const db = {
     const index = orders.findIndex(o => o.id === id);
     if (index === -1) throw new Error("Order not found");
     orders[index].status = status;
+    if (status === 'completed' && !orders[index].inventory_deducted) {
+      await this.deductInventoryForOrder(orders[index]);
+    }
     saveLocalData('meridien_orders', orders);
     return orders[index];
   },
@@ -513,14 +385,22 @@ export const db = {
   async updateOrder(id: string, updates: Partial<Order>): Promise<Order> {
     if (supabase) {
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .update(updates)
-          .eq('id', id)
-          .select()
-          .single();
-        if (error) throw error;
-        return data;
+        const { data: currentOrder } = await supabase.from('orders').select('*').eq('id', id).single();
+        if (currentOrder) {
+          const updatedOrder = { ...currentOrder, ...updates };
+          if (updatedOrder.status === 'completed' && !currentOrder.inventory_deducted) {
+            await this.deductInventoryForOrder(updatedOrder);
+            updates.inventory_deducted = true;
+          }
+          const { data, error } = await supabase
+            .from('orders')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+          if (error) throw error;
+          return data;
+        }
       } catch (err) {
         console.warn("Supabase update failed, falling back to mock database.", err);
       }
@@ -529,9 +409,13 @@ export const db = {
     const index = orders.findIndex(o => o.id === id);
     if (index === -1) throw new Error("Order not found");
     orders[index] = { ...orders[index], ...updates };
+    if (orders[index].status === 'completed' && !orders[index].inventory_deducted) {
+      await this.deductInventoryForOrder(orders[index]);
+    }
     saveLocalData('meridien_orders', orders);
     return orders[index];
   },
+
 
   async deleteOrder(id: string): Promise<void> {
     if (supabase) {
@@ -814,30 +698,100 @@ export const db = {
 
   // --- INVENTORY: SUPPLIERS ---
   async getSuppliers(): Promise<Supplier[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('suppliers')
+          .select('*')
+          .order('name', { ascending: true });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase getSuppliers failed", err);
+      }
+    }
     return getLocalData('meridien_suppliers', initialSuppliers);
   },
   async addSupplier(supplier: Omit<Supplier, 'id'>): Promise<Supplier> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('suppliers')
+          .insert([supplier])
+          .select()
+          .single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase addSupplier failed", err);
+      }
+    }
     const newSupplier = { ...supplier, id: crypto.randomUUID(), created_at: new Date().toISOString() };
     const suppliers = await this.getSuppliers();
     saveLocalData('meridien_suppliers', [...suppliers, newSupplier]);
     return newSupplier;
   },
   async deleteSupplier(id: string): Promise<void> {
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('suppliers')
+          .delete()
+          .eq('id', id);
+        if (!error) return;
+      } catch (err) {
+        console.warn("Supabase deleteSupplier failed", err);
+      }
+    }
     const suppliers = await this.getSuppliers();
     saveLocalData('meridien_suppliers', suppliers.filter(s => s.id !== id));
   },
 
   // --- INVENTORY: ITEMS ---
   async getInventoryItems(): Promise<InventoryItem[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('inventory_items')
+          .select('*')
+          .order('name', { ascending: true });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase getInventoryItems failed", err);
+      }
+    }
     return getLocalData('meridien_inventory_items', initialInventoryItems);
   },
   async addInventoryItem(item: Omit<InventoryItem, 'id'>): Promise<InventoryItem> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('inventory_items')
+          .insert([item])
+          .select()
+          .single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase addInventoryItem failed", err);
+      }
+    }
     const newItem = { ...item, id: crypto.randomUUID(), created_at: new Date().toISOString() };
     const items = await this.getInventoryItems();
     saveLocalData('meridien_inventory_items', [...items, newItem]);
     return newItem;
   },
   async updateInventoryItem(id: string, updates: Partial<InventoryItem>): Promise<InventoryItem> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('inventory_items')
+          .update(updates)
+          .eq('id', id)
+          .select()
+          .single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase updateInventoryItem failed", err);
+      }
+    }
     const items = await this.getInventoryItems();
     const index = items.findIndex(i => i.id === id);
     if (index === -1) throw new Error('Item not found');
@@ -847,15 +801,75 @@ export const db = {
     return updated;
   },
   async deleteInventoryItem(id: string): Promise<void> {
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('inventory_items')
+          .delete()
+          .eq('id', id);
+        if (!error) return;
+      } catch (err) {
+        console.warn("Supabase deleteInventoryItem failed", err);
+      }
+    }
     const items = await this.getInventoryItems();
     saveLocalData('meridien_inventory_items', items.filter(i => i.id !== id));
   },
 
   // --- INVENTORY: PURCHASE INVOICES ---
   async getPurchaseInvoices(): Promise<PurchaseInvoice[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('purchase_invoices')
+          .select('*')
+          .order('invoice_date', { ascending: false });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase getPurchaseInvoices failed", err);
+      }
+    }
     return getLocalData('meridien_purchase_invoices', initialPurchaseInvoices);
   },
   async addPurchaseInvoice(invoice: Omit<PurchaseInvoice, 'id'>): Promise<PurchaseInvoice> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('purchase_invoices')
+          .insert([invoice])
+          .select()
+          .single();
+        
+        if (!error && data) {
+          // Update inventory stock in Supabase as well
+          for (const invItem of invoice.items) {
+            const { data: itemData } = await supabase
+              .from('inventory_items')
+              .select('stock_main, avg_purchase_price')
+              .eq('id', invItem.item_id)
+              .single();
+            if (itemData) {
+              const oldStock = Number(itemData.stock_main) || 0;
+              const oldAvg = Number(itemData.avg_purchase_price) || 0;
+              const newStock = oldStock + invItem.quantity;
+              const newAvg = newStock > 0 ? ((oldStock * oldAvg) + (invItem.quantity * invItem.unit_price)) / newStock : 0;
+              
+              await supabase
+                .from('inventory_items')
+                .update({
+                  stock_main: newStock,
+                  last_purchase_price: invItem.unit_price,
+                  avg_purchase_price: newAvg
+                })
+                .eq('id', invItem.item_id);
+            }
+          }
+          return data;
+        }
+      } catch (err) {
+        console.warn("Supabase addPurchaseInvoice failed", err);
+      }
+    }
     const newInvoice: PurchaseInvoice = { ...invoice, id: crypto.randomUUID(), created_at: new Date().toISOString() };
     const invoices = await this.getPurchaseInvoices();
     saveLocalData('meridien_purchase_invoices', [...invoices, newInvoice]);
@@ -874,7 +888,6 @@ export const db = {
         const incomingPrice = invItem.unit_price;
         
         const newStock = oldStock + incomingQty;
-        // Avoid division by zero
         const newAvg = newStock > 0 ? ((oldStock * oldAvg) + (incomingQty * incomingPrice)) / newStock : 0;
         
         inventoryItems[itemIndex] = {
@@ -893,9 +906,39 @@ export const db = {
 
   // --- MANUFACTURING ORDERS ---
   async getManufacturingOrders(): Promise<ManufacturingOrder[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('manufacturing_orders')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase getManufacturingOrders failed", err);
+      }
+    }
     return getLocalData('meridien_mfg_orders', []);
   },
   async addManufacturingOrder(order: Omit<ManufacturingOrder, 'id'>): Promise<ManufacturingOrder> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('manufacturing_orders')
+          .insert([order])
+          .select()
+          .single();
+        if (!error && data) {
+          await this.addNotification({
+            title: 'طلب تصنيع / صرف جديد',
+            message: `تم طلب صرف مواد للمطبخ بواسطة ${order.requested_by}`,
+            target_role: 'inventory_manager'
+          });
+          return data;
+        }
+      } catch (err) {
+        console.warn("Supabase addManufacturingOrder failed", err);
+      }
+    }
     const newOrder: ManufacturingOrder = { ...order, id: crypto.randomUUID(), created_at: new Date().toISOString() };
     const orders = await this.getManufacturingOrders();
     saveLocalData('meridien_mfg_orders', [...orders, newOrder]);
@@ -910,6 +953,49 @@ export const db = {
     return newOrder;
   },
   async updateManufacturingOrderStatus(id: string, status: 'approved' | 'rejected', approved_by: string): Promise<void> {
+    if (supabase) {
+      try {
+        const { data: order, error } = await supabase
+          .from('manufacturing_orders')
+          .update({ status, approved_by })
+          .eq('id', id)
+          .select()
+          .single();
+        if (!error && order) {
+          if (status === 'approved') {
+            for (const itemReq of order.items) {
+              const { data: itemData } = await supabase
+                .from('inventory_items')
+                .select('stock_main, stock_factory')
+                .eq('id', itemReq.item_id)
+                .single();
+              if (itemData) {
+                const newStockMain = (Number(itemData.stock_main) || 0) - itemReq.calculated_main_quantity;
+                const newStockFactory = (Number(itemData.stock_factory) || 0) + itemReq.calculated_main_quantity;
+                await supabase
+                  .from('inventory_items')
+                  .update({ stock_main: newStockMain, stock_factory: newStockFactory })
+                  .eq('id', itemReq.item_id);
+              }
+            }
+            await this.addNotification({
+              title: 'تمت الموافقة على الطلب',
+              message: `تمت الموافقة على طلب الصرف من قبل ${approved_by}`,
+              target_role: 'kitchen_manager'
+            });
+          } else {
+            await this.addNotification({
+              title: 'تم رفض الطلب',
+              message: `تم رفض طلب الصرف من قبل ${approved_by}`,
+              target_role: 'kitchen_manager'
+            });
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn("Supabase updateManufacturingOrderStatus failed", err);
+      }
+    }
     const orders = await this.getManufacturingOrders();
     const orderIndex = orders.findIndex(o => o.id === id);
     if (orderIndex === -1) return;
@@ -970,10 +1056,64 @@ export const db = {
 
   // --- Production Logs (Factory to Distribution) ---
   async getProductionLogs(): Promise<ProductionLog[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('production_logs')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase getProductionLogs failed", err);
+      }
+    }
     return getLocalData('meridien_production_logs', []) as ProductionLog[];
   },
-  
   async addProductionLog(logData: Omit<ProductionLog, 'id' | 'created_at'>): Promise<void> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('production_logs')
+          .insert([logData])
+          .select()
+          .single();
+        if (!error && data) {
+          // Process consumed items (Decrease factory stock)
+          for (const consumed of logData.consumed_items) {
+            const { data: itemData } = await supabase
+              .from('inventory_items')
+              .select('stock_factory')
+              .eq('id', consumed.item_id)
+              .single();
+            if (itemData) {
+              const newStockFactory = Math.max(0, (Number(itemData.stock_factory) || 0) - consumed.quantity);
+              await supabase
+                .from('inventory_items')
+                .update({ stock_factory: newStockFactory })
+                .eq('id', consumed.item_id);
+            }
+          }
+          // Process produced items (Increase distribution stock)
+          for (const produced of logData.produced_items) {
+            const { data: itemData } = await supabase
+              .from('inventory_items')
+              .select('stock_distribution')
+              .eq('id', produced.item_id)
+              .single();
+            if (itemData) {
+              const newStockDist = (Number(itemData.stock_distribution) || 0) + produced.quantity;
+              await supabase
+                .from('inventory_items')
+                .update({ stock_distribution: newStockDist })
+                .eq('id', produced.item_id);
+            }
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn("Supabase addProductionLog failed", err);
+      }
+    }
     const all = getLocalData('meridien_production_logs', []) as ProductionLog[];
     const newLog: ProductionLog = {
       ...logData,
@@ -1006,6 +1146,154 @@ export const db = {
 
     if (updated) {
       saveLocalData('meridien_inventory_items', items);
+    }
+  },
+
+  // --- PRODUCT RECIPES ---
+  async getProductRecipes(productId: string): Promise<ProductRecipe[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('product_recipes')
+          .select(`
+            id,
+            product_id,
+            inventory_item_id,
+            quantity,
+            created_at,
+            inventory_items (
+              name,
+              unit
+            )
+          `)
+          .eq('product_id', productId);
+        if (!error && data) {
+          return data.map((d: any) => ({
+            id: d.id,
+            product_id: d.product_id,
+            inventory_item_id: d.inventory_item_id,
+            quantity: Number(d.quantity),
+            created_at: d.created_at,
+            inventory_item_name: d.inventory_items?.name,
+            inventory_item_unit: d.inventory_items?.unit
+          }));
+        }
+      } catch (err) {
+        console.warn("Supabase getProductRecipes failed", err);
+      }
+    }
+    const allRecipes = getLocalData('meridien_product_recipes', initialProductRecipes);
+    const filtered = allRecipes.filter(r => r.product_id === productId);
+    const items = await this.getInventoryItems();
+    return filtered.map(r => {
+      const item = items.find(i => i.id === r.inventory_item_id);
+      return {
+        ...r,
+        inventory_item_name: item?.name || 'مكون غير معروف',
+        inventory_item_unit: item?.unit || ''
+      };
+    });
+  },
+
+  async updateProductRecipe(productId: string, recipeItems: Array<{ inventory_item_id: string, quantity: number }>): Promise<ProductRecipe[]> {
+    if (supabase) {
+      try {
+        await supabase
+          .from('product_recipes')
+          .delete()
+          .eq('product_id', productId);
+        
+        if (recipeItems.length > 0) {
+          const insertData = recipeItems.map(item => ({
+            product_id: productId,
+            inventory_item_id: item.inventory_item_id,
+            quantity: item.quantity
+          }));
+          const { error } = await supabase
+            .from('product_recipes')
+            .insert(insertData);
+          if (error) throw error;
+        }
+        return this.getProductRecipes(productId);
+      } catch (err) {
+        console.warn("Supabase updateProductRecipe failed", err);
+      }
+    }
+    let allRecipes = getLocalData('meridien_product_recipes', initialProductRecipes);
+    allRecipes = allRecipes.filter(r => r.product_id !== productId);
+    
+    const newRecipes = recipeItems.map(item => ({
+      id: crypto.randomUUID(),
+      product_id: productId,
+      inventory_item_id: item.inventory_item_id,
+      quantity: item.quantity,
+      created_at: new Date().toISOString()
+    }));
+    
+    allRecipes.push(...newRecipes);
+    saveLocalData('meridien_product_recipes', allRecipes);
+    return this.getProductRecipes(productId);
+  },
+
+  // --- AUTOMATIC CASHIER STOCK DEDUCTION ---
+  async deductInventoryForOrder(order: Order): Promise<void> {
+    if (order.status !== 'completed' || order.inventory_deducted) {
+      return;
+    }
+
+    try {
+      if (supabase) {
+        for (const item of order.items) {
+          const { data: recipes, error } = await supabase
+            .from('product_recipes')
+            .select('inventory_item_id, quantity')
+            .eq('product_id', item.id);
+          
+          if (!error && recipes) {
+            for (const rec of recipes) {
+              const deductQty = rec.quantity * item.quantity;
+              
+              const { data: itemData } = await supabase
+                .from('inventory_items')
+                .select('stock_distribution')
+                .eq('id', rec.inventory_item_id)
+                .single();
+              
+              if (itemData) {
+                const newStockDist = Math.max(0, (Number(itemData.stock_distribution) || 0) - deductQty);
+                await supabase
+                  .from('inventory_items')
+                  .update({ stock_distribution: newStockDist })
+                  .eq('id', rec.inventory_item_id);
+              }
+            }
+          }
+        }
+      } else {
+        const items = await this.getInventoryItems();
+        const allRecipes = getLocalData('meridien_product_recipes', initialProductRecipes);
+        let updated = false;
+
+        for (const item of order.items) {
+          const productRecipes = allRecipes.filter(r => r.product_id === item.id);
+          for (const rec of productRecipes) {
+            const deductQty = rec.quantity * item.quantity;
+            const itemIdx = items.findIndex(i => i.id === rec.inventory_item_id);
+            if (itemIdx > -1) {
+              items[itemIdx].stock_distribution = Math.max(0, (items[itemIdx].stock_distribution || 0) - deductQty);
+              updated = true;
+            }
+          }
+        }
+
+        if (updated) {
+          saveLocalData('meridien_inventory_items', items);
+        }
+      }
+
+      order.inventory_deducted = true;
+    } catch (err) {
+      console.error("Error in deductInventoryForOrder:", err);
     }
   }
 };
