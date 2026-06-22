@@ -60,6 +60,36 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [payIsDeferred, setPayIsDeferred] = useState(false);
   const [payCustomerId, setPayCustomerId] = useState('');
 
+  // OTP States for Deletions/Cancellations
+  const [otpCode, setOtpCode] = useState('');
+  const [otpInput, setOtpInput] = useState('');
+  const [otpModalOpen, setOtpModalOpen] = useState(false);
+  const [otpAction, setOtpAction] = useState<(() => Promise<void>) | null>(null);
+  const [otpActionName, setOtpActionName] = useState('');
+
+  const triggerOtpProtectedAction = async (actionName: string, actionNameEn: string, action: () => Promise<void>, orderIdForLog?: string) => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setOtpCode(code);
+    setOtpInput('');
+    setOtpActionName(language === 'ar' ? actionName : actionNameEn);
+    setOtpAction(() => action);
+    setOtpModalOpen(true);
+
+    if (settings?.telegram_chat_id) {
+      const text = `🔑 <b>رمز التحقق (OTP) لإجراء حساس</b>\n\n` +
+        `• <b>الإجراء:</b> ${language === 'ar' ? actionName : actionNameEn}\n` +
+        `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
+        `• <b>الطلب:</b> <code>#${orderIdForLog ? orderIdForLog.slice(0, 6) : 'N/A'}</code>\n\n` +
+        `• <b>رمز OTP:</b> <code>${code}</code>`;
+      
+      import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+        sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
+      });
+    } else {
+      alert(`OTP Code (Dev Fallback): ${code}`);
+    }
+  };
+
   // Item transfer state
   const [transferItem, setTransferItem] = useState<OrderItem | null>(null);
   const [transferTargetOrderId, setTransferTargetOrderId] = useState<string>('');
@@ -260,6 +290,23 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     setView('success');
     loadData();
     
+    // Send Telegram Notification immediately for any placed order
+    if (settings?.telegram_chat_id) {
+      const itemsText = placedOrder.items.map(item => `- ${item.quantity}x ${language === 'ar' ? item.name_ar : item.name_en}`).join('\n');
+      const text = `📥 <b>طلب جديد!</b>\n\n` +
+        `• <b>رقم الطلب:</b> <code>#${placedOrder.id.slice(0, 6)}</code>\n` +
+        `• <b>العميل:</b> ${placedOrder.customer_name || 'غير معروف'}\n` +
+        `• <b>النوع:</b> ${placedOrder.order_type || 'takeaway'}\n` +
+        `• <b>الطاولة:</b> ${placedOrder.table_number || '-'}\n` +
+        `• <b>الكابتن:</b> ${placedOrder.waiter_name || 'غير معروف'}\n` +
+        `• <b>الأصناف:</b>\n${itemsText}\n\n` +
+        `• <b>الإجمالي:</b> ${placedOrder.total_price.toFixed(2)} EGP`;
+      
+      import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+        sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
+      });
+    }
+
     // Auto-print tickets for kitchen/bar
     printOrderTickets(placedOrder, categories, products, printers, language);
   };
@@ -895,9 +942,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                         }}>{language === 'ar' ? 'تم التسليم' : 'Mark Delivered'}</button>
                       )}
                       
-                      <button className="pos-btn-outline" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={async () => {
-                        // Cancel
-                        if(confirm(language === 'ar' ? 'هل أنت متأكد من إلغاء هذا الطلب؟' : 'Are you sure you want to cancel?')) {
+                      <button className="pos-btn-outline" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={() => {
+                        triggerOtpProtectedAction('إلغاء الطلب', 'Cancel Order', async () => {
                           await db.updateOrderStatus(order.id, 'cancelled');
                           if (settings?.telegram_chat_id) {
                             const text = `⚠️ <b>تنبيه إلغاء طلب نشط</b>\n\n` +
@@ -911,7 +957,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                             });
                           }
                           loadData();
-                        }
+                        }, order.id);
                       }}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
                     </div>
                   </div>
@@ -1034,14 +1080,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   {language === 'ar' ? 'حفظ التعديلات' : 'Save Changes'}
                 </button>
 
-                <button className="pos-btn-outline" style={{ width: '100%', padding: '1rem', borderColor: '#ef4444', color: '#ef4444' }} onClick={async () => {
-                  if(confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذا الطلب؟' : 'Are you sure you want to delete this order?')) {
+                <button className="pos-btn-outline" style={{ width: '100%', padding: '1rem', borderColor: '#ef4444', color: '#ef4444' }} onClick={() => {
+                  triggerOtpProtectedAction('حذف الطلب نهائياً', 'Delete Order permanently', async () => {
                     await db.deleteOrder(editingOrder.id);
                     setEditingOrder(null);
                     setEditOrderId(null);
                     setView('waiter_dashboard');
                     loadData();
-                  }
+                  }, editingOrder.id);
                 }}>
                   <Trash2 size={16} style={{ display: 'inline', marginRight: '4px' }} />
                   {language === 'ar' ? 'حذف الطلب نهائياً' : 'Delete Order'}
@@ -1457,6 +1503,95 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                     className="pos-btn-outline" 
                     style={{ flex: 1, padding: '1rem' }} 
                     onClick={() => setTransferItem(null)}
+                  >
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* OTP verification Modal */}
+          {otpModalOpen && (
+            <motion.div 
+              key="otp_modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.85)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10000,
+                padding: '1rem',
+                backdropFilter: 'blur(8px)',
+                direction: language === 'ar' ? 'rtl' : 'ltr'
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                style={{
+                  background: '#18181b',
+                  border: '2px solid var(--gold-primary)',
+                  borderRadius: '20px',
+                  width: '100%',
+                  maxWidth: '400px',
+                  padding: '2rem',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                  textAlign: 'center'
+                }}
+              >
+                <h3 style={{ color: 'var(--gold-primary)', fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+                  {language === 'ar' ? 'تأكيد رمز الأمان (OTP)' : 'OTP Security Verification'}
+                </h3>
+                <p style={{ color: '#a1a1aa', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                  {language === 'ar' 
+                    ? `يرجى إدخال رمز التحقق المرسل إلى تليجرام لإتمام إجراء: ${otpActionName}` 
+                    : `Please enter the verification code sent to Telegram to complete: ${otpActionName}`}
+                </p>
+
+                <input 
+                  type="text"
+                  className="pos-input"
+                  style={{ fontSize: '1.8rem', letterSpacing: '4px', textAlign: 'center', fontWeight: 'bold', color: 'var(--gold-primary)', marginBottom: '1.5rem' }}
+                  placeholder="------"
+                  maxLength={6}
+                  value={otpInput}
+                  onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
+                />
+
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <button 
+                    className="pos-btn" 
+                    style={{ flex: 1, padding: '0.8rem' }}
+                    onClick={async () => {
+                      if (otpInput === otpCode) {
+                        setOtpModalOpen(false);
+                        if (otpAction) {
+                          await otpAction();
+                        }
+                      } else {
+                        alert(language === 'ar' ? 'رمز OTP غير صحيح!' : 'Incorrect OTP Code!');
+                      }
+                    }}
+                  >
+                    {language === 'ar' ? 'تأكيد' : 'Verify'}
+                  </button>
+                  <button 
+                    className="pos-btn-outline" 
+                    style={{ flex: 1, padding: '0.8rem' }}
+                    onClick={() => {
+                      setOtpModalOpen(false);
+                      setOtpAction(null);
+                    }}
                   >
                     {language === 'ar' ? 'إلغاء' : 'Cancel'}
                   </button>

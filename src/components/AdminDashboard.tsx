@@ -39,6 +39,36 @@ export default function AdminDashboard({
   toggleTheme,
   setLanguage
 }: AdminDashboardProps) {
+  // OTP States
+  const [otpCode, setOtpCode] = useState('');
+  const [otpInput, setOtpInput] = useState('');
+  const [otpModalOpen, setOtpModalOpen] = useState(false);
+  const [otpAction, setOtpAction] = useState<(() => Promise<void>) | null>(null);
+  const [otpActionName, setOtpActionName] = useState('');
+
+  const triggerOtpProtectedAction = async (actionName: string, actionNameEn: string, action: () => Promise<void>, orderIdForLog?: string) => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setOtpCode(code);
+    setOtpInput('');
+    setOtpActionName(language === 'ar' ? actionName : actionNameEn);
+    setOtpAction(() => action);
+    setOtpModalOpen(true);
+
+    if (settings?.telegram_chat_id) {
+      const text = `🔑 <b>رمز التحقق (OTP) لإجراء حساس (المدير)</b>\n\n` +
+        `• <b>الإجراء:</b> ${language === 'ar' ? actionName : actionNameEn}\n` +
+        `• <b>المسؤول:</b> مدير النظام\n` +
+        `• <b>الطلب:</b> <code>#${orderIdForLog ? orderIdForLog.slice(0, 6) : 'N/A'}</code>\n\n` +
+        `• <b>رمز OTP:</b> <code>${code}</code>`;
+      
+      import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+        sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
+      });
+    } else {
+      alert(`OTP Code (Dev Fallback): ${code}`);
+    }
+  };
+
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('meridien_admin_auth') === 'true';
   });
@@ -3385,11 +3415,11 @@ export default function AdminDashboard({
                                     </button>
                                     <button
                                       style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)', padding: '0.3rem 0.5rem', fontSize: '0.75rem', borderRadius: '8px', cursor: 'pointer' }}
-                                      onClick={async () => {
-                                        if (confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذه الفاتورة؟' : 'Are you sure you want to delete this invoice?')) {
+                                      onClick={() => {
+                                        triggerOtpProtectedAction('حذف الفاتورة نهائياً', 'Delete Invoice permanently', async () => {
                                           await db.deleteOrder(inv.id);
                                           await refreshData();
-                                        }
+                                        }, inv.id);
                                       }}
                                     >
                                       <Trash2 size={12} />
@@ -6307,6 +6337,87 @@ export default function AdminDashboard({
                 <button type="submit" className="btn-gold" disabled={loading}>{language === 'ar' ? 'سداد الآن' : 'Pay Now'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* OTP verification Modal for Admin deletions */}
+      {otpModalOpen && (
+        <div className="admin-modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          padding: '1rem',
+          backdropFilter: 'blur(8px)',
+          direction: language === 'ar' ? 'rtl' : 'ltr'
+        }}>
+          <div className="admin-modal-content" style={{
+            background: '#18181b',
+            border: '2px solid var(--gold-primary)',
+            borderRadius: '20px',
+            width: '100%',
+            maxWidth: '400px',
+            padding: '2rem',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            textAlign: 'center',
+            color: '#fff'
+          }}>
+            <h3 style={{ color: 'var(--gold-primary)', fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+              {language === 'ar' ? 'تأكيد رمز الأمان (OTP)' : 'OTP Security Verification'}
+            </h3>
+            <p style={{ color: 'var(--text-gray)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+              {language === 'ar' 
+                ? `يرجى إدخال رمز التحقق المرسل إلى تليجرام لإتمام إجراء: ${otpActionName}` 
+                : `Please enter the verification code sent to Telegram to complete: ${otpActionName}`}
+            </p>
+
+            <input 
+              type="text"
+              className="input-gold"
+              style={{ fontSize: '1.8rem', letterSpacing: '4px', textAlign: 'center', fontWeight: 'bold', color: 'var(--gold-primary)', marginBottom: '1.5rem', background: '#000', border: '1px solid var(--gold-secondary)' }}
+              placeholder="------"
+              maxLength={6}
+              value={otpInput}
+              onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
+            />
+
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button 
+                type="button"
+                className="btn-gold" 
+                style={{ flex: 1, padding: '0.8rem', borderRadius: '12px' }}
+                onClick={async () => {
+                  if (otpInput === otpCode) {
+                    setOtpModalOpen(false);
+                    if (otpAction) {
+                      await otpAction();
+                    }
+                  } else {
+                    alert(language === 'ar' ? 'رمز OTP غير صحيح!' : 'Incorrect OTP Code!');
+                  }
+                }}
+              >
+                {language === 'ar' ? 'تأكيد' : 'Verify'}
+              </button>
+              <button 
+                type="button"
+                className="btn-outline-gold" 
+                style={{ flex: 1, padding: '0.8rem', borderRadius: '12px' }}
+                onClick={() => {
+                  setOtpModalOpen(false);
+                  setOtpAction(null);
+                }}
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+            </div>
           </div>
         </div>
       )}
