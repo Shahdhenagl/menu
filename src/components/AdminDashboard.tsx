@@ -788,9 +788,10 @@ export default function AdminDashboard({
       }
       await refreshData();
       setCatModalOpen(false);
-    } catch (err) {
-      console.error(err);
-      alert(language === 'ar' ? 'حدث خطأ أثناء حفظ التصنيف. تأكد من تشغيل supabase_patch_v3.sql في قاعدة البيانات.' : 'Error saving category. Make sure supabase_patch_v3.sql has been executed.');
+    } catch (err: any) {
+      console.error('Category save error:', err);
+      const msg = err?.message || err?.details || JSON.stringify(err);
+      alert((language === 'ar' ? 'خطأ في حفظ التصنيف: ' : 'Error saving category: ') + msg);
     } finally {
       setLoading(false);
     }
