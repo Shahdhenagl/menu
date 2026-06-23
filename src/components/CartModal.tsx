@@ -232,7 +232,15 @@ export default function CartModal({
         status: 'pending' as const
       };
 
-      await db.addOrder(orderData);
+      const newOrder = await db.addOrder(orderData);
+
+      import('../utils/telegramUtils').then(({ notifyAction }) => {
+        const details = `• <b>رقم الطلب:</b> <code>#${newOrder.id.slice(0, 6)}</code>\n` +
+                        `• <b>العميل:</b> ${name || 'غير معروف'}\n` +
+                        `• <b>الإجمالي:</b> ${finalTotal.toFixed(2)} EGP\n` +
+                        `• <b>طاولة:</b> ${table || 'Takeaway'}`;
+        notifyAction('إضافة طلب جديد (عميل)', 'New Order (Customer)', details, settings, 'عميل (Customer)');
+      });
 
       // 2. Play celebratory gold/champagne confetti!
       triggerGoldConfetti();

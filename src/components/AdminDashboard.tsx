@@ -11,6 +11,7 @@ import {
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
   Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle, Eye
 } from 'lucide-react';
+import { playClickSound, playNewOrderSound } from '../utils/audioUtils';
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -169,6 +170,27 @@ export default function AdminDashboard({
   const [manualTableNum, setManualTableNum] = useState('');
   const [manualStatus, setManualStatus] = useState<'pending' | 'preparing' | 'delivered' | 'completed' | 'cancelled'>('preparing');
   const [manualItems, setManualItems] = useState<Record<string, number>>({}); // productId -> quantity
+
+  const previousPendingCount = useRef(0);
+
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button') || target.closest('.admin-btn')) {
+        playClickSound();
+      }
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, []);
+
+  useEffect(() => {
+    const currentPending = orders.filter(o => o.status === 'pending').length;
+    if (currentPending > previousPendingCount.current) {
+      playNewOrderSound();
+    }
+    previousPendingCount.current = currentPending;
+  }, [orders]);
 
   // Customers tab active profile view state
   const [selectedCustPhone, setSelectedCustPhone] = useState<string | null>(null);

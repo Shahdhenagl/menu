@@ -56,7 +56,7 @@ export interface Order {
   order_type?: 'takeaway' | 'talabat' | 'dine_in' | 'delivery';
   waiter_id?: string;
   waiter_name?: string;
-  payment_method?: 'cash' | 'visa' | 'wallet' | 'instapay' | 'split' | 'deferred'; // Added deferred (آجل) & instapay
+  payment_method?: 'cash' | 'visa' | 'wallet' | 'instapay' | 'split' | 'deferred' | 'hospitality'; // Added hospitality (ضيافة)
   payment_details?: any; // JSON representation of split payments
   inventory_deducted?: boolean;
   created_at: string;

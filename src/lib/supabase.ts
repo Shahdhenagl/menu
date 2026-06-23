@@ -20,6 +20,16 @@ export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey) 
   : null;
 
+const triggerTelegramLog = async (actionAr: string, actionEn: string, details: string) => {
+  try {
+    const { notifyAction } = await import('../utils/telegramUtils');
+    const settings = await db.getSettings();
+    await notifyAction(actionAr, actionEn, details, settings);
+  } catch(err) {
+    console.error("Failed to log to Telegram:", err);
+  }
+};
+
 const initialSettings: RestaurantSettings = {
   id: 'rs1',
   restaurant_name_ar: 'مريديان',
@@ -136,6 +146,7 @@ export const db = {
   },
 
   async addCategory(category: Omit<Category, 'id'>): Promise<Category> {
+    await triggerTelegramLog('إضافة تصنيف', 'Add Category', `تم إضافة التصنيف: ${category.name_ar}`);
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -157,6 +168,7 @@ export const db = {
   },
 
   async updateCategory(id: string, category: Partial<Category>): Promise<Category> {
+    await triggerTelegramLog('تعديل تصنيف', 'Update Category', `تم تعديل التصنيف (ID: ${id})`);
     if (supabase) {
       const { data, error } = await supabase
         .from('categories')
@@ -176,6 +188,7 @@ export const db = {
   },
 
   async deleteCategory(id: string): Promise<boolean> {
+    await triggerTelegramLog('حذف تصنيف', 'Delete Category', `تم حذف التصنيف (ID: ${id})`);
     if (supabase) {
       try {
         const { error } = await supabase
@@ -211,6 +224,7 @@ export const db = {
   },
 
   async addProduct(product: Omit<Product, 'id'>): Promise<Product> {
+    await triggerTelegramLog('إضافة منتج', 'Add Product', `تم إضافة المنتج: ${product.name_ar}`);
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -232,6 +246,7 @@ export const db = {
   },
 
   async updateProduct(id: string, product: Partial<Product>): Promise<Product> {
+    await triggerTelegramLog('تعديل منتج', 'Update Product', `تم تعديل المنتج: ${product.name_ar || '(ID: '+id+')'}`);
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -255,6 +270,7 @@ export const db = {
   },
 
   async deleteProduct(id: string): Promise<boolean> {
+    await triggerTelegramLog('حذف منتج', 'Delete Product', `تم حذف المنتج (ID: ${id})`);
     if (supabase) {
       try {
         const { error } = await supabase
@@ -349,6 +365,7 @@ export const db = {
   },
 
   async updateOrderStatus(id: string, status: Order['status']): Promise<Order> {
+    await triggerTelegramLog('تحديث حالة طلب', 'Update Order Status', `تغيرت حالة الطلب ${id.slice(0, 6)} إلى ${status}`);
     if (supabase) {
       try {
         const { data: currentOrder } = await supabase.from('orders').select('*').eq('id', id).single();
@@ -419,6 +436,7 @@ export const db = {
 
 
   async deleteOrder(id: string): Promise<void> {
+    await triggerTelegramLog('حذف الطلب', 'Delete Order', `تم حذف الطلب رقم ${id.slice(0, 6)} نهائياً من النظام`);
     if (supabase) {
       try {
         const { error } = await supabase.from('orders').delete().eq('id', id);
@@ -501,6 +519,7 @@ export const db = {
   },
 
   async addExpense(expense: Omit<Expense, 'id'>): Promise<Expense> {
+    await triggerTelegramLog('تسجيل مصروف', 'Add Expense', `تم تسجيل مصروف جديد: ${expense.cost_name} بقيمة ${expense.amount}`);
     const newExpense: Expense = {
       ...expense,
       id: crypto.randomUUID(),
@@ -526,6 +545,7 @@ export const db = {
   },
 
   async deleteExpense(id: string): Promise<boolean> {
+    await triggerTelegramLog('حذف مصروف', 'Delete Expense', `تم حذف مصروف (ID: ${id})`);
     if (supabase) {
       try {
         const { error } = await supabase
@@ -713,6 +733,7 @@ export const db = {
     return getLocalData('meridien_suppliers', initialSuppliers);
   },
   async addSupplier(supplier: Omit<Supplier, 'id'>): Promise<Supplier> {
+    await triggerTelegramLog('إضافة مورد', 'Add Supplier', `تم إضافة المورد: ${supplier.name}`);
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -846,6 +867,7 @@ export const db = {
     return getLocalData('meridien_purchase_invoices', initialPurchaseInvoices);
   },
   async addPurchaseInvoice(invoice: Omit<PurchaseInvoice, 'id'>): Promise<PurchaseInvoice> {
+    await triggerTelegramLog('إضافة فاتورة مشتريات', 'Add Purchase Invoice', `تم إضافة فاتورة مورد (${invoice.supplier_id}) بقيمة ${invoice.total_amount}`);
     if (supabase) {
       try {
         const { data, error } = await supabase

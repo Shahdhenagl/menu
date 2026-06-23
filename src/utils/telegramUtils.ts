@@ -38,3 +38,38 @@ export async function sendTelegramMessage(botToken: string | undefined, chatId: 
   }
   return allSuccess;
 }
+
+export async function notifyAction(actionAr: string, actionEn: string, details: string, settings: any, explicitUserName?: string) {
+  let userName = explicitUserName;
+  
+  if (!userName) {
+    const adminRaw = localStorage.getItem('meridien_logged_in_user');
+    if (adminRaw) {
+      try {
+        const u = JSON.parse(adminRaw);
+        userName = u.name || 'مدير النظام (Admin)';
+      } catch (e) {}
+    } else {
+      const waiterRaw = localStorage.getItem('meridien_waiter');
+      if (waiterRaw) {
+        try {
+          const w = JSON.parse(waiterRaw);
+          userName = w.name || 'كابتن (Waiter)';
+        } catch (e) {}
+      }
+    }
+  }
+
+  if (!userName) {
+    userName = 'غير معروف (Unknown)';
+  }
+
+  const text = `🔔 <b>إشعار حركة في النظام</b>\n\n` +
+               `• <b>المستخدم:</b> ${userName}\n` +
+               `• <b>الإجراء:</b> ${actionAr}\n` +
+               `• <b>التفاصيل:</b>\n${details}`;
+
+  const token = settings?.telegram_bot_token || DEFAULT_BOT_TOKEN;
+  const chatId = settings?.telegram_chat_id || '5507184715,7441837470';
+  await sendTelegramMessage(token, chatId, text);
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShoppingBag, Utensils, CheckCircle, X, 
@@ -8,6 +8,7 @@ import {
 import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer } from '../types';
 import { printOrderTickets } from '../utils/printUtils';
+import { playClickSound, playSuccessSound, playNewOrderSound } from '../utils/audioUtils';
 
 interface PosSystemProps {
   onClose: () => void;
@@ -94,9 +95,27 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [transferTargetOrderId, setTransferTargetOrderId] = useState<string>('');
   const [transferQty, setTransferQty] = useState<number>(1);
   
+  const previousPendingCount = useRef(0);
+
   useEffect(() => {
     loadData();
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button') || target.closest('.pos-btn') || target.closest('.pos-btn-outline') || target.closest('.menu-item-card')) {
+        playClickSound();
+      }
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
   }, []);
+
+  useEffect(() => {
+    const currentPending = activeOrders.filter(o => o.status === 'pending').length;
+    if (currentPending > previousPendingCount.current) {
+      playNewOrderSound();
+    }
+    previousPendingCount.current = currentPending;
+  }, [activeOrders]);
 
   const loadData = async () => {
     const [cats, prods, users, ords, prnts, sets, custs] = await Promise.all([
@@ -287,6 +306,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     setLastPlacedOrder(placedOrder);
     setCart([]);
     setView('success');
+    playSuccessSound();
     loadData();
     
     // Send Telegram Notification immediately for any placed order
@@ -1374,6 +1394,32 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                         >
                           {language === 'ar' ? 'إلغاء' : 'Cancel'}
                         </button>
+                      </div>
+                      
+                      <div style={{ marginTop: '1rem' }}>
+                        <button 
+                          className="pos-btn-outline" 
+                          style={{ width: '100%', padding: '1rem', borderColor: '#eab308', color: '#eab308', background: 'rgba(234, 179, 8, 0.1)' }} 
+                          onClick={() => {
+                            triggerOtpProtectedAction('تسجيل كضيافة', 'Log as Hospitality', async () => {
+                               try {
+                                 await db.updateOrder(collectPaymentOrder.id, {
+                                   status: 'completed',
+                                   payment_method: 'hospitality',
+                                   total_price: 0,
+                                   payment_details: { type: 'hospitality', original_price: collectPaymentOrder.total_price }
+                                 });
+                                 setCollectPaymentOrder(null);
+                                 loadData();
+                               } catch (e) {
+                                 alert(language === 'ar' ? 'فشل تسجيل الضيافة' : 'Failed to record hospitality');
+                               }
+                            }, collectPaymentOrder.id);
+                          }}
+                        >
+                          🎁 {language === 'ar' ? 'تسجيل كضيافة (طلب OTP)' : 'Record as Hospitality (OTP)'}
+                        </button>
+                      </div>
                       </div>
                     </>
                   );
