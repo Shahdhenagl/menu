@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct } from '../types';
 import { initialCategories, initialProducts, initialInventoryItems, initialProductRecipes } from './seedData';
 
 // Load credentials from environment
@@ -1329,6 +1329,164 @@ export const db = {
     }
   },
 
+  // --- TRANSFER REQUESTS (Kitchen → Distribution, requires approval) ---
+  async getTransferRequests(): Promise<TransferRequest[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('transfer_requests')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase getTransferRequests failed", err);
+      }
+    }
+    return getLocalData('meridien_transfer_requests', []) as TransferRequest[];
+  },
+
+  async addTransferRequest(reqData: Omit<TransferRequest, 'id' | 'created_at'>): Promise<TransferRequest> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('transfer_requests')
+          .insert([reqData])
+          .select()
+          .single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase addTransferRequest failed", err);
+      }
+    }
+    const newReq: TransferRequest = { ...reqData, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    const all = await this.getTransferRequests();
+    saveLocalData('meridien_transfer_requests', [newReq, ...all]);
+    return newReq;
+  },
+
+  async updateTransferRequestStatus(
+    id: string,
+    status: 'approved' | 'rejected',
+    approved_by: string,
+    rejection_reason?: string
+  ): Promise<void> {
+    const updateData: any = { status, approved_by };
+    if (rejection_reason) updateData.rejection_reason = rejection_reason;
+
+    if (supabase) {
+      try {
+        const { data: req, error } = await supabase
+          .from('transfer_requests')
+          .update(updateData)
+          .eq('id', id)
+          .select()
+          .single();
+        if (!error && req && status === 'approved') {
+          // Increase stock_distribution for each item in the transfer
+          for (const item of req.items) {
+            const { data: itemData } = await supabase
+              .from('inventory_items')
+              .select('stock_factory, stock_distribution')
+              .eq('id', item.item_id)
+              .single();
+            if (itemData) {
+              await supabase
+                .from('inventory_items')
+                .update({
+                  stock_factory: Math.max(0, (Number(itemData.stock_factory) || 0) - item.quantity),
+                  stock_distribution: (Number(itemData.stock_distribution) || 0) + item.quantity
+                })
+                .eq('id', item.item_id);
+            }
+          }
+          return;
+        }
+        if (!error) return;
+      } catch (err) {
+        console.warn("Supabase updateTransferRequestStatus failed", err);
+      }
+    }
+    // Local fallback
+    const all = await this.getTransferRequests();
+    const idx = all.findIndex(r => r.id === id);
+    if (idx === -1) return;
+    all[idx] = { ...all[idx], ...updateData };
+    if (status === 'approved') {
+      const items = getLocalData('meridien_inventory_items', []) as InventoryItem[];
+      for (const item of all[idx].items) {
+        const itemIdx = items.findIndex(i => i.id === item.item_id);
+        if (itemIdx > -1) {
+          items[itemIdx].stock_factory = Math.max(0, (items[itemIdx].stock_factory || 0) - item.quantity);
+          items[itemIdx].stock_distribution = (items[itemIdx].stock_distribution || 0) + item.quantity;
+        }
+      }
+      saveLocalData('meridien_inventory_items', items);
+    }
+    saveLocalData('meridien_transfer_requests', all);
+  },
+
+  // --- DISTRIBUTION PRODUCTS CATALOG ---
+  async getDistributionProducts(): Promise<DistributionProduct[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('distribution_products')
+          .select('*')
+          .order('name', { ascending: true });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase getDistributionProducts failed", err);
+      }
+    }
+    return getLocalData('meridien_distribution_products', []) as DistributionProduct[];
+  },
+
+  async addDistributionProduct(prod: Omit<DistributionProduct, 'id' | 'created_at'>): Promise<DistributionProduct> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('distribution_products')
+          .insert([prod])
+          .select()
+          .single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase addDistributionProduct failed", err);
+      }
+    }
+    const newProd: DistributionProduct = { ...prod, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    const all = await this.getDistributionProducts();
+    saveLocalData('meridien_distribution_products', [...all, newProd]);
+    return newProd;
+  },
+
+  async updateDistributionProduct(id: string, updates: Partial<DistributionProduct>): Promise<void> {
+    if (supabase) {
+      try {
+        await supabase.from('distribution_products').update(updates).eq('id', id);
+        return;
+      } catch (err) {
+        console.warn("Supabase updateDistributionProduct failed", err);
+      }
+    }
+    const all = await this.getDistributionProducts();
+    const idx = all.findIndex(p => p.id === id);
+    if (idx > -1) { all[idx] = { ...all[idx], ...updates }; saveLocalData('meridien_distribution_products', all); }
+  },
+
+  async deleteDistributionProduct(id: string): Promise<void> {
+    if (supabase) {
+      try {
+        await supabase.from('distribution_products').delete().eq('id', id);
+        return;
+      } catch (err) {
+        console.warn("Supabase deleteDistributionProduct failed", err);
+      }
+    }
+    const all = await this.getDistributionProducts();
+    saveLocalData('meridien_distribution_products', all.filter(p => p.id !== id));
+  },
+
   // --- PRODUCT RECIPES ---
   async getProductRecipes(productId: string): Promise<ProductRecipe[]> {
     if (supabase) {
@@ -1627,6 +1785,25 @@ export const db = {
     employees.push(newEmp);
     saveLocalData('meridien_employees', employees);
     return newEmp;
+  },
+
+  async updateEmployee(id: string, updates: Partial<Omit<Employee, 'id' | 'created_at'>>): Promise<Employee> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('employees').update(updates).eq('id', id).select().single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase update employee failed", err);
+      }
+    }
+    const employees = getLocalData('meridien_employees', [] as Employee[]);
+    const idx = employees.findIndex(e => e.id === id);
+    if (idx > -1) {
+      employees[idx] = { ...employees[idx], ...updates };
+      saveLocalData('meridien_employees', employees);
+      return employees[idx];
+    }
+    throw new Error("Employee not found in local data");
   },
 
   async deleteEmployee(id: string): Promise<boolean> {

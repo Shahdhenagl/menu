@@ -27,9 +27,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [settings, setSettings] = useState<RestaurantSettings | null>(null);
   const [lastPlacedOrder, setLastPlacedOrder] = useState<Order | null>(null);
 
-  // POS State
   const [view, setView] = useState<PosView>('role_select');
   const [role, setRole] = useState<'waiter' | 'customer' | null>(null);
+  const [mobileShowCart, setMobileShowCart] = useState(false);
   
   // Waiter Auth & Dashboard
   const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(null);
@@ -130,6 +130,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     }
     previousPendingCount.current = currentPending;
   }, [activeOrders]);
+
+  useEffect(() => {
+    setMobileShowCart(false);
+  }, [view]);
 
   const loadData = async () => {
     const [cats, prods, users, ords, prnts, sets, custs, emps, atts] = await Promise.all([
@@ -289,9 +293,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
         const workingHours = Number((diffMs / (1000 * 60 * 60)).toFixed(2));
 
         let penaltyApplied = 0;
-        if (workingHours < 9) {
-          const hourlyRate = employee.salary / 30 / 9;
-          penaltyApplied = Number(((9 - workingHours) * hourlyRate).toFixed(2));
+        const requiredHours = employee.working_hours || 9;
+        if (workingHours < requiredHours) {
+          const hourlyRate = employee.salary / 30 / requiredHours;
+          penaltyApplied = Number(((requiredHours - workingHours) * hourlyRate).toFixed(2));
           
           await db.addEmployeeTransaction({
             employee_id: employee.id,
@@ -299,8 +304,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
             amount: penaltyApplied,
             date: todayStr,
             notes: language === 'ar' 
-              ? `خصم تلقائي لتأخير ساعات العمل (ساعات العمل: ${workingHours} من 9 ساعات)` 
-              : `Auto deduction for short hours (hours: ${workingHours}/9)`
+              ? `خصم تلقائي لتأخير ساعات العمل (ساعات العمل: ${workingHours} من ${requiredHours} ساعات)` 
+              : `Auto deduction for short hours (hours: ${workingHours}/${requiredHours})`
           });
         }
 
@@ -700,6 +705,134 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
           width: 350px; background: #111; border-left: 1px solid #333;
           display: flex; flex-direction: column;
         }
+
+        /* Responsive Mobile Styles */
+        @media (max-width: 768px) {
+          .pos-header {
+            padding: 1rem;
+          }
+          .pos-header h1 {
+            font-size: 1.5rem !important;
+          }
+          .grid-options {
+            grid-template-columns: 1fr !important;
+            gap: 1rem !important;
+            max-width: 100% !important;
+            padding: 1rem !important;
+          }
+          .option-card {
+            padding: 1.5rem !important;
+          }
+          .pos-content {
+            flex-direction: column;
+          }
+          
+          /* Menu View on Mobile */
+          .pos-menu-sidebar {
+            width: 100% !important;
+            height: auto !important;
+            max-height: 60px !important;
+            display: flex !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            border-right: none !important;
+            border-bottom: 1px solid #333 !important;
+            white-space: nowrap !important;
+            flex-direction: row !important;
+            flex-shrink: 0 !important;
+            scrollbar-width: none !important;
+          }
+          .pos-menu-sidebar::-webkit-scrollbar {
+            display: none !important;
+          }
+          .pos-cat-item {
+            padding: 0.8rem 1.2rem !important;
+            border-bottom: none !important;
+            border-right: 1px solid #222 !important;
+            flex-shrink: 0 !important;
+            font-size: 0.95rem !important;
+            display: flex !important;
+            align-items: center !important;
+          }
+          
+          .pos-products {
+            padding: 1rem !important;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+            gap: 1rem !important;
+          }
+          .pos-product-card {
+            border-radius: 12px !important;
+          }
+          .pos-product-img {
+            height: 100px !important;
+          }
+          .pos-product-card h4 {
+            font-size: 0.95rem !important;
+          }
+          
+          .pos-cart-panel {
+            width: 100% !important;
+            height: 100% !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            z-index: 100 !important;
+            border-left: none !important;
+            display: none;
+          }
+          
+          /* Show cart panel when active on mobile */
+          .pos-content.show-mobile-cart .pos-cart-panel {
+            display: flex !important;
+          }
+          .pos-content.show-mobile-cart .pos-menu-sidebar,
+          .pos-content.show-mobile-cart .pos-products {
+            display: none !important;
+          }
+          
+          .mobile-cart-bar {
+            display: flex !important;
+          }
+          
+          /* Checkout buttons */
+          .pos-btn, .pos-btn-outline {
+            width: 90% !important;
+            max-width: 320px !important;
+            margin: 0.5rem auto !important;
+            padding: 0.8rem 1.5rem !important;
+            font-size: 1.1rem !important;
+          }
+          
+          .mobile-only-btn {
+            display: block !important;
+          }
+        }
+        
+        /* Floating mobile cart bar styles */
+        .mobile-cart-bar {
+          display: none;
+          position: absolute;
+          bottom: 1.5rem;
+          left: 5%;
+          width: 90%;
+          background: linear-gradient(45deg, var(--gold-dark), var(--gold-primary));
+          color: #000;
+          padding: 1rem 1.5rem;
+          border-radius: 50px;
+          justify-content: space-between;
+          align-items: center;
+          font-weight: bold;
+          font-size: 1.1rem;
+          box-shadow: 0 10px 25px rgba(212,175,55,0.4);
+          cursor: pointer;
+          z-index: 90;
+          animation: bounceIn 0.3s ease-out;
+        }
+        @keyframes bounceIn {
+          0% { transform: scale(0.9); opacity: 0; }
+          70% { transform: scale(1.05); }
+          100% { transform: scale(1); opacity: 1; }
+        }
       `}</style>
 
       <div className="pos-header">
@@ -709,7 +842,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
         </button>
       </div>
 
-      <div className="pos-content" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      <div className={`pos-content ${mobileShowCart && view === 'menu' ? 'show-mobile-cart' : ''}`} dir={language === 'ar' ? 'rtl' : 'ltr'}>
         <AnimatePresence mode="wait">
           
           {view === 'role_select' && (
@@ -980,11 +1113,20 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                 ))}
               </div>
               <div className="pos-cart-panel">
-                <div style={{ padding: '1.5rem', borderBottom: '1px solid #333' }}>
-                  <h2 style={{ margin: 0, color: 'var(--gold-primary)' }}>{t.cart}</h2>
-                  <p style={{ margin: '0.5rem 0 0 0', color: '#aaa', fontSize: '0.9rem' }}>
-                    {orderType?.toUpperCase()} {tableNumber && `- Table ${tableNumber}`}
-                  </p>
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h2 style={{ margin: 0, color: 'var(--gold-primary)' }}>{t.cart}</h2>
+                    <p style={{ margin: '0.5rem 0 0 0', color: '#aaa', fontSize: '0.9rem' }}>
+                      {orderType?.toUpperCase()} {tableNumber && `- Table ${tableNumber}`}
+                    </p>
+                  </div>
+                  <button 
+                    className="mobile-only-btn pos-btn-outline" 
+                    style={{ display: 'none', padding: '0.5rem 1rem', fontSize: '0.9rem', borderRadius: '8px' }} 
+                    onClick={() => setMobileShowCart(false)}
+                  >
+                    {language === 'ar' ? 'المنيو' : 'Menu'}
+                  </button>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
                   {cart.length === 0 && <p style={{ textAlign: 'center', color: '#666', marginTop: '2rem' }}>Empty</p>}
@@ -1041,11 +1183,28 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                     <span style={{ color: 'var(--gold-primary)' }}>{cartTotal.toFixed(2)} EGP</span>
                   </div>
                   <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button className="pos-btn-outline" style={{ flex: 1, padding: '1rem' }} onClick={() => setView('order_type')}>{t.back}</button>
+                    <button className="pos-btn-outline" style={{ flex: 1, padding: '1rem' }} onClick={() => {
+                      if (window.innerWidth <= 768) {
+                        setMobileShowCart(false);
+                      } else {
+                        setView('order_type');
+                      }
+                    }}>{t.back}</button>
                     <button className="pos-btn" style={{ flex: 2 }} disabled={cart.length === 0} onClick={() => setView('checkout')}>{t.checkout}</button>
                   </div>
                 </div>
               </div>
+              {cart.length > 0 && !mobileShowCart && (
+                <div className="mobile-cart-bar" onClick={() => setMobileShowCart(true)}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    🛒 {language === 'ar' ? 'عرض السلة' : 'View Cart'} 
+                    <span style={{ background: '#000', color: 'var(--gold-primary)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.9rem' }}>
+                      {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                    </span>
+                  </span>
+                  <span>{cartTotal.toFixed(2)} EGP</span>
+                </div>
+              )}
             </motion.div>
           )}
 

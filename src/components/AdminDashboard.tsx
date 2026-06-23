@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct } from '../types';
 import { db } from '../lib/supabase';
 import { printOrderTickets } from '../utils/printUtils';
 import { 
@@ -256,6 +256,8 @@ export default function AdminDashboard({
   const [empPhone, setEmpPhone] = useState('');
   const [empSalary, setEmpSalary] = useState<number | ''>('');
   const [empAllowedVacations, setEmpAllowedVacations] = useState<number>(4);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [empWorkingHours, setEmpWorkingHours] = useState<number | ''>(9);
 
   // Transaction Inputs
   const [txModalOpen, setTxModalOpen] = useState(false);
@@ -457,7 +459,7 @@ export default function AdminDashboard({
 
   // --- INVENTORY STATES ---
   const [inventorySubTab, setInventorySubTab] = useState<'suppliers' | 'items' | 'invoices' | 'mfg_orders'>('items');
-  const [factorySubTab, setFactorySubTab] = useState<'mfg_requests' | 'production'>('mfg_requests');
+  const [factorySubTab, setFactorySubTab] = useState<'mfg_requests' | 'production' | 'transfer_requests' | 'distribution'>('mfg_requests');
   const [productionLogs, setProductionLogs] = useState<ProductionLog[]>([]);
   const [producedItemId, setProducedItemId] = useState('');
   const [producedQuantity, setProducedQuantity] = useState(1);
@@ -505,6 +507,23 @@ export default function AdminDashboard({
   const [mfgModalOpen, setMfgModalOpen] = useState(false);
   const [mfgCart, setMfgCart] = useState<{item_id: string, item_name: string, quantity: number, unit: string, calculated_main_quantity: number}[]>([]);
 
+  // Transfer Requests (Kitchen → Distribution)
+  const [transferRequests, setTransferRequests] = useState<TransferRequest[]>([]);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [transferCart, setTransferCart] = useState<{item_id: string, item_name: string, quantity: number, unit: string}[]>([]);
+  const [transferNotes, setTransferNotes] = useState('');
+
+  // Distribution Products Catalog
+  const [distributionProducts, setDistributionProducts] = useState<DistributionProduct[]>([]);
+  const [distProdModalOpen, setDistProdModalOpen] = useState(false);
+  const [distProdEditId, setDistProdEditId] = useState<string | null>(null);
+  const [distProdName, setDistProdName] = useState('');
+  const [distProdUnit, setDistProdUnit] = useState('كجم');
+  const [distProdCategory, setDistProdCategory] = useState('');
+  const [distProdStock, setDistProdStock] = useState<number | ''>('');
+  const [distProdPrice, setDistProdPrice] = useState<number | ''>('');
+  const [distProdNotes, setDistProdNotes] = useState('');
+
   const fetchInventoryData = async () => {
     try {
       const sups = await db.getSuppliers();
@@ -517,6 +536,10 @@ export default function AdminDashboard({
       setPurchaseInvoices(invs);
       setManufacturingOrders(mfg);
       setProductionLogs(prodLogs);
+      const transferReqs = await db.getTransferRequests();
+      const distProds = await db.getDistributionProducts();
+      setTransferRequests(transferReqs);
+      setDistributionProducts(distProds);
       
       if (loggedInUser) {
         const notifs = await db.getNotifications(loggedInUser.role);
@@ -797,6 +820,102 @@ export default function AdminDashboard({
     }
   };
 
+  // --- TRANSFER REQUEST HANDLERS ---
+  const handleSaveTransferRequest = async () => {
+    if (transferCart.length === 0) return;
+    setLoading(true);
+    try {
+      await db.addTransferRequest({
+        status: 'pending',
+        items: transferCart,
+        requested_by: loggedInUser ? loggedInUser.name : 'Unknown',
+        notes: transferNotes
+      });
+      await fetchInventoryData();
+      setTransferModalOpen(false);
+      setTransferCart([]);
+      setTransferNotes('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveTransferRequest = async (id: string, isApprove: boolean) => {
+    const reason = isApprove ? undefined : (prompt(language === 'ar' ? 'سبب الرفض (اختياري):' : 'Rejection reason (optional):') || undefined);
+    setLoading(true);
+    try {
+      await db.updateTransferRequestStatus(id, isApprove ? 'approved' : 'rejected', loggedInUser ? loggedInUser.name : 'Unknown', reason);
+      await fetchInventoryData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- DISTRIBUTION PRODUCTS HANDLERS ---
+  const openDistProdModal = (prod?: DistributionProduct) => {
+    if (prod) {
+      setDistProdEditId(prod.id);
+      setDistProdName(prod.name);
+      setDistProdUnit(prod.unit);
+      setDistProdCategory(prod.category || '');
+      setDistProdStock(prod.stock_quantity);
+      setDistProdPrice(prod.unit_price);
+      setDistProdNotes(prod.notes || '');
+    } else {
+      setDistProdEditId(null);
+      setDistProdName('');
+      setDistProdUnit('كجم');
+      setDistProdCategory('');
+      setDistProdStock('');
+      setDistProdPrice('');
+      setDistProdNotes('');
+    }
+    setDistProdModalOpen(true);
+  };
+
+  const handleSaveDistributionProduct = async () => {
+    if (!distProdName.trim() || distProdStock === '' || distProdPrice === '') return;
+    setLoading(true);
+    try {
+      const prodData = {
+        name: distProdName.trim(),
+        unit: distProdUnit,
+        category: distProdCategory.trim() || undefined,
+        stock_quantity: Number(distProdStock),
+        unit_price: Number(distProdPrice),
+        notes: distProdNotes.trim() || undefined
+      };
+      if (distProdEditId) {
+        await db.updateDistributionProduct(distProdEditId, prodData);
+      } else {
+        await db.addDistributionProduct(prodData);
+      }
+      await fetchInventoryData();
+      setDistProdModalOpen(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteDistributionProduct = async (id: string) => {
+    if (!confirm(language === 'ar' ? 'هل أنت متأكد من الحذف؟' : 'Are you sure you want to delete?')) return;
+    setLoading(true);
+    try {
+      await db.deleteDistributionProduct(id);
+      await fetchInventoryData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const markNotificationAsRead = async (id: string) => {
     await db.markNotificationRead(id);
     await fetchInventoryData();
@@ -973,22 +1092,33 @@ export default function AdminDashboard({
     }
     setLoading(true);
     try {
-      await db.addEmployee({
+      const dataToSave = {
         name: empName.trim(),
         phone: empPhone.trim(),
         salary: Number(empSalary),
-        allowed_vacations: empAllowedVacations
-      });
+        allowed_vacations: empAllowedVacations,
+        working_hours: empWorkingHours === '' ? 9 : Number(empWorkingHours)
+      };
+
+      if (editingEmployee) {
+        await db.updateEmployee(editingEmployee.id, dataToSave);
+        alert(language === 'ar' ? 'تم تعديل بيانات الموظف بنجاح!' : 'Employee updated successfully!');
+      } else {
+        await db.addEmployee(dataToSave);
+        alert(language === 'ar' ? 'تم إضافة الموظف بنجاح!' : 'Employee added successfully!');
+      }
+
       setEmpModalOpen(false);
+      setEditingEmployee(null);
       setEmpName('');
       setEmpPhone('');
       setEmpSalary('');
       setEmpAllowedVacations(4);
+      setEmpWorkingHours(9);
       await fetchEmployees();
-      alert(language === 'ar' ? 'تم إضافة الموظف بنجاح!' : 'Employee added successfully!');
     } catch (err) {
       console.error(err);
-      alert(language === 'ar' ? 'حدث خطأ أثناء إضافة الموظف.' : 'An error occurred.');
+      alert(language === 'ar' ? 'حدث خطأ أثناء حفظ بيانات الموظف.' : 'An error occurred.');
     } finally {
       setLoading(false);
     }
@@ -4820,35 +4950,84 @@ export default function AdminDashboard({
           <div className="admin-section">
             <div className="section-header" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
               <div>
-                <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>{language === 'ar' ? 'المصنع والمطبخ' : 'Factory & Kitchen'}</h1>
+                <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>{language === 'ar' ? '🏭 المصنع والمخازن' : 'Factory & Warehouses'}</h1>
                 <p style={{ color: 'var(--text-gray)' }}>
-                  {language === 'ar' ? 'إدارة الإنتاج، الصرف الدفتري، وتحويل المنتجات' : 'Manage production, material requests, and product transfers'}
+                  {language === 'ar' ? 'مخزن الخامات ← مطبخ/مصنع ← مخزن التوزيع | سير عمل متكامل بالموافقات' : 'Raw Stock → Kitchen/Factory → Distribution | Full workflow with approvals'}
                 </p>
               </div>
             </div>
 
+            {/* Warehouse Flow Banner */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem', background: 'rgba(212,175,55,0.1)', borderRadius: '12px', marginBottom: '1.5rem', flexWrap: 'wrap', border: '1px solid rgba(212,175,55,0.2)' }}>
+              <div style={{ textAlign: 'center', padding: '0.5rem 1rem', background: 'rgba(212,175,55,0.2)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '1.5rem' }}>📦</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'مخزن الخامات' : 'Main Stock'}</div>
+                <div style={{ fontWeight: 'bold', color: 'var(--gold-primary)' }}>{inventoryItems.reduce((s, i) => s + (i.stock_main * i.avg_purchase_price), 0).toFixed(0)} EGP</div>
+              </div>
+              <div style={{ fontSize: '1.5rem', color: 'var(--gold-primary)' }}>→</div>
+              <div style={{ textAlign: 'center', padding: '0.5rem 1rem', background: 'rgba(212,175,55,0.2)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '1.5rem' }}>🍳</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'المطبخ/المصنع' : 'Kitchen/Factory'}</div>
+                <div style={{ fontWeight: 'bold', color: 'var(--gold-primary)' }}>{inventoryItems.reduce((s, i) => s + (i.stock_factory * i.avg_purchase_price), 0).toFixed(0)} EGP</div>
+              </div>
+              <div style={{ fontSize: '1.5rem', color: 'var(--gold-primary)' }}>→</div>
+              <div style={{ textAlign: 'center', padding: '0.5rem 1rem', background: 'rgba(16,185,129,0.2)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '1.5rem' }}>🚚</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'مخزن التوزيع' : 'Distribution'}</div>
+                <div style={{ fontWeight: 'bold', color: '#10b981' }}>{inventoryItems.reduce((s, i) => s + (i.stock_distribution * i.avg_purchase_price), 0).toFixed(0)} EGP</div>
+              </div>
+              <div style={{ marginInlineStart: 'auto' }}>
+                <span style={{ background: 'rgba(245,158,11,0.2)', color: 'orange', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                  ⏳ {transferRequests.filter(r => r.status === 'pending').length} {language === 'ar' ? 'طلب تحويل معلق' : 'Pending Transfers'}
+                </span>
+              </div>
+            </div>
+
             {/* Factory Sub Navigation */}
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid #333', paddingBottom: '1rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '1px solid #333', paddingBottom: '1rem', flexWrap: 'wrap' }}>
               <button 
                 className={`btn-outline-gold ${factorySubTab === 'mfg_requests' ? 'active' : ''}`}
                 onClick={() => setFactorySubTab('mfg_requests')}
                 style={{ background: factorySubTab === 'mfg_requests' ? 'var(--gold-primary)' : 'transparent', color: factorySubTab === 'mfg_requests' ? '#000' : 'var(--gold-primary)' }}
               >
-                {language === 'ar' ? 'أذون الصرف' : 'Material Requests'}
+                📦 {language === 'ar' ? 'أذون صرف الخامات' : 'Material Requests'}
+              </button>
+              <button 
+                className={`btn-outline-gold ${(factorySubTab as string) === 'transfer_requests' ? 'active' : ''}`}
+                onClick={() => setFactorySubTab('transfer_requests' as any)}
+                style={{ background: (factorySubTab as string) === 'transfer_requests' ? 'var(--gold-primary)' : 'transparent', color: (factorySubTab as string) === 'transfer_requests' ? '#000' : 'var(--gold-primary)', position: 'relative' }}
+              >
+                🚚 {language === 'ar' ? 'أذون التحويل للتوزيع' : 'Transfer Requests'}
+                {transferRequests.filter(r => r.status === 'pending').length > 0 && (
+                  <span style={{ background: 'orange', color: '#000', borderRadius: '50%', padding: '2px 6px', fontSize: '0.75rem', fontWeight: 'bold', marginInlineStart: '6px' }}>
+                    {transferRequests.filter(r => r.status === 'pending').length}
+                  </span>
+                )}
+              </button>
+              <button 
+                className={`btn-outline-gold ${(factorySubTab as string) === 'distribution' ? 'active' : ''}`}
+                onClick={() => setFactorySubTab('distribution' as any)}
+                style={{ background: (factorySubTab as string) === 'distribution' ? 'var(--gold-primary)' : 'transparent', color: (factorySubTab as string) === 'distribution' ? '#000' : 'var(--gold-primary)' }}
+              >
+                🎪 {language === 'ar' ? 'كتالوج التوزيع' : 'Distribution Catalog'}
               </button>
               <button 
                 className={`btn-outline-gold ${factorySubTab === 'production' ? 'active' : ''}`}
                 onClick={() => setFactorySubTab('production')}
                 style={{ background: factorySubTab === 'production' ? 'var(--gold-primary)' : 'transparent', color: factorySubTab === 'production' ? '#000' : 'var(--gold-primary)' }}
               >
-                {language === 'ar' ? 'الإنتاج والتوزيع' : 'Production & Distribution'}
+                📋 {language === 'ar' ? 'سجل الإنتاج' : 'Production Logs'}
               </button>
             </div>
 
+            {/* SUB-TAB: MATERIAL REQUESTS (Main → Kitchen) */}
             {factorySubTab === 'mfg_requests' && (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                  <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'طلبات صرف الخامات' : 'Raw Material Requests'}</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center' }}>
+                  <div>
+                    <h2 style={{ color: 'var(--gold-primary)', marginBottom: '0.25rem' }}>{language === 'ar' ? '📦 طلبات صرف الخامات' : '📦 Raw Material Requests'}</h2>
+                    <p style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'نقل خامات من المخزن الأساسي إلى المطبخ' : 'Transfer from main stock to kitchen'}</p>
+                  </div>
                   <button className="btn-gold" onClick={() => setMfgModalOpen(true)}>
                     <Plus size={18} /> {language === 'ar' ? 'طلب صرف خامات' : 'Request Materials'}
                   </button>
@@ -4858,10 +5037,11 @@ export default function AdminDashboard({
                     <thead>
                       <tr>
                         <th>{language === 'ar' ? 'رقم الطلب' : 'Order ID'}</th>
-                        <th>{language === 'ar' ? 'المستخدم (بواسطة)' : 'Requested By'}</th>
+                        <th>{language === 'ar' ? 'طُلب بواسطة' : 'Requested By'}</th>
                         <th>{language === 'ar' ? 'الأصناف' : 'Items'}</th>
-                        <th>{language === 'ar' ? 'تاريخ الطلب' : 'Date'}</th>
+                        <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
                         <th>{language === 'ar' ? 'الحالة' : 'Status'}</th>
+                        <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -4886,10 +5066,18 @@ export default function AdminDashboard({
                               {order.status === 'approved' ? (language === 'ar' ? 'مقبول' : 'Approved') : order.status === 'rejected' ? (language === 'ar' ? 'مرفوض' : 'Rejected') : (language === 'ar' ? 'قيد الانتظار' : 'Pending')}
                             </span>
                           </td>
+                          <td>
+                            {order.status === 'pending' && (
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button className="action-btn edit" title={language === 'ar' ? 'قبول' : 'Approve'} onClick={() => handleApproveManufacturingOrder(order.id, true)}>✓</button>
+                                <button className="action-btn delete" title={language === 'ar' ? 'رفض' : 'Reject'} onClick={() => handleApproveManufacturingOrder(order.id, false)}>✗</button>
+                              </div>
+                            )}
+                          </td>
                         </tr>
                       ))}
                       {manufacturingOrders.length === 0 && (
-                        <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
+                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد طلبات' : 'No requests'}</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -4897,10 +5085,171 @@ export default function AdminDashboard({
               </div>
             )}
 
+            {/* SUB-TAB: TRANSFER REQUESTS (Kitchen → Distribution) */}
+            {(factorySubTab as string) === 'transfer_requests' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center' }}>
+                  <div>
+                    <h2 style={{ color: 'var(--gold-primary)', marginBottom: '0.25rem' }}>{language === 'ar' ? '🚚 أذون التحويل للتوزيع' : '🚚 Transfer to Distribution'}</h2>
+                    <p style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'المطبخ يرسل إذن تحويل → مدير التوزيع يوافق → يُخصم من المطبخ ويضاف للتوزيع' : 'Kitchen sends request → Distribution manager approves → Stock transferred'}</p>
+                  </div>
+                  <button className="btn-gold" onClick={() => setTransferModalOpen(true)}>
+                    <Plus size={18} /> {language === 'ar' ? 'طلب تحويل للتوزيع' : 'Request Transfer'}
+                  </button>
+                </div>
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'رقم الطلب' : 'ID'}</th>
+                        <th>{language === 'ar' ? 'طُلب بواسطة' : 'From'}</th>
+                        <th>{language === 'ar' ? 'الأصناف المحولة' : 'Items'}</th>
+                        <th>{language === 'ar' ? 'ملاحظات' : 'Notes'}</th>
+                        <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                        <th>{language === 'ar' ? 'الحالة' : 'Status'}</th>
+                        <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transferRequests.map(req => (
+                        <tr key={req.id}>
+                          <td className="font-en">#{req.id.slice(0, 8)}</td>
+                          <td>{req.requested_by}</td>
+                          <td>
+                            {req.items.map((i, idx) => (
+                              <div key={idx} style={{ fontSize: '0.85rem', color: 'var(--gold-primary)' }}>
+                                {i.quantity} {i.unit} {i.item_name}
+                              </div>
+                            ))}
+                          </td>
+                          <td style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{req.notes || '-'}</td>
+                          <td className="font-en">{new Date(req.created_at || '').toLocaleDateString()}</td>
+                          <td>
+                            <div>
+                              <span style={{ 
+                                padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold',
+                                background: req.status === 'approved' ? 'rgba(16,185,129,0.2)' : req.status === 'rejected' ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)',
+                                color: req.status === 'approved' ? 'var(--success)' : req.status === 'rejected' ? 'var(--danger)' : 'orange'
+                              }}>
+                                {req.status === 'approved' ? (language === 'ar' ? '✓ مقبول' : '✓ Approved') : req.status === 'rejected' ? (language === 'ar' ? '✗ مرفوض' : '✗ Rejected') : (language === 'ar' ? '⏳ قيد الانتظار' : '⏳ Pending')}
+                              </span>
+                              {req.status === 'approved' && req.approved_by && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-gray)', marginTop: '2px' }}>{language === 'ar' ? 'بواسطة: ' : 'By: '}{req.approved_by}</div>
+                              )}
+                              {req.status === 'rejected' && req.rejection_reason && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--danger)', marginTop: '2px' }}>{language === 'ar' ? 'سبب: ' : 'Reason: '}{req.rejection_reason}</div>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            {req.status === 'pending' && (
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button className="action-btn edit" title={language === 'ar' ? 'موافقة - نقل للتوزيع' : 'Approve'} onClick={() => handleApproveTransferRequest(req.id, true)}>✓</button>
+                                <button className="action-btn delete" title={language === 'ar' ? 'رفض' : 'Reject'} onClick={() => handleApproveTransferRequest(req.id, false)}>✗</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {transferRequests.length === 0 && (
+                        <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-gray)' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🚚</div>
+                          {language === 'ar' ? 'لا توجد أذون تحويل حتى الآن' : 'No transfer requests yet'}
+                        </td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-TAB: DISTRIBUTION CATALOG */}
+            {(factorySubTab as string) === 'distribution' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div>
+                    <h2 style={{ color: 'var(--gold-primary)', marginBottom: '0.25rem' }}>{language === 'ar' ? '🎪 كتالوج مخزن التوزيع' : '🎪 Distribution Warehouse Catalog'}</h2>
+                    <p style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'المنتجات النهائية الجاهزة للتوزيع والبيع' : 'Finished products ready for distribution and sale'}</p>
+                  </div>
+                  <button className="btn-gold" onClick={() => openDistProdModal()}>
+                    <Plus size={18} /> {language === 'ar' ? 'إضافة منتج توزيع' : 'Add Distribution Product'}
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div className="stat-card">
+                    <div className="stat-icon"><Package color="#000" size={24} /></div>
+                    <div className="stat-info">
+                      <h3>{language === 'ar' ? 'إجمالي الأصناف' : 'Total Products'}</h3>
+                      <p className="stat-value">{distributionProducts.length}</p>
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-icon"><Package color="#000" size={24} /></div>
+                    <div className="stat-info">
+                      <h3>{language === 'ar' ? 'قيمة الكتالوج' : 'Catalog Value'}</h3>
+                      <p className="stat-value">{distributionProducts.reduce((s, p) => s + (p.stock_quantity * p.unit_price), 0).toFixed(0)} EGP</p>
+                    </div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-icon"><Package color="#000" size={24} /></div>
+                    <div className="stat-info">
+                      <h3>{language === 'ar' ? 'قيمة خام التوزيع' : 'Raw Dist. Value'}</h3>
+                      <p className="stat-value">{inventoryItems.reduce((s, i) => s + (i.stock_distribution * i.avg_purchase_price), 0).toFixed(0)} EGP</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'المنتج' : 'Product'}</th>
+                        <th>{language === 'ar' ? 'الفئة' : 'Category'}</th>
+                        <th>{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
+                        <th>{language === 'ar' ? 'المخزون' : 'Stock'}</th>
+                        <th>{language === 'ar' ? 'سعر الوحدة' : 'Unit Price'}</th>
+                        <th>{language === 'ar' ? 'القيمة' : 'Value'}</th>
+                        <th>{language === 'ar' ? 'ملاحظات' : 'Notes'}</th>
+                        <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {distributionProducts.map(prod => (
+                        <tr key={prod.id}>
+                          <td style={{ fontWeight: 'bold' }}>{prod.name}</td>
+                          <td><span style={{ background: 'rgba(212,175,55,0.15)', color: 'var(--gold-primary)', padding: '2px 8px', borderRadius: '10px', fontSize: '0.8rem' }}>{prod.category || '-'}</span></td>
+                          <td>{prod.unit}</td>
+                          <td style={{ color: prod.stock_quantity < 10 ? 'var(--danger)' : 'var(--gold-primary)', fontWeight: 'bold' }}>
+                            {prod.stock_quantity}
+                            {prod.stock_quantity < 10 && <span style={{ fontSize: '0.75rem', marginInlineStart: '4px' }}>⚠️</span>}
+                          </td>
+                          <td>{prod.unit_price.toFixed(2)} EGP</td>
+                          <td style={{ color: '#10b981', fontWeight: 'bold' }}>{(prod.stock_quantity * prod.unit_price).toFixed(2)} EGP</td>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{prod.notes || '-'}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <button className="action-btn edit" onClick={() => openDistProdModal(prod)}><Edit size={14} /></button>
+                              <button className="action-btn delete" onClick={() => handleDeleteDistributionProduct(prod.id)}><Trash2 size={14} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {distributionProducts.length === 0 && (
+                        <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-gray)' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🎪</div>
+                          {language === 'ar' ? 'لا توجد منتجات. أضف أول منتج توزيع!' : 'No products yet. Add your first!'}
+                        </td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* SUB-TAB: PRODUCTION LOGS */}
             {factorySubTab === 'production' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                  <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'سجل الإنتاج (التسليم للتوزيع)' : 'Production Logs'}</h2>
+                  <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? '📋 سجل الإنتاج (التسليم للتوزيع)' : '📋 Production Logs'}</h2>
                   <button className="btn-gold" onClick={() => setProductionModalOpen(true)}>
                     <Plus size={18} /> {language === 'ar' ? 'تسجيل إنتاج جديد' : 'Record New Production'}
                   </button>
@@ -4911,8 +5260,8 @@ export default function AdminDashboard({
                       <tr>
                         <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
                         <th>{language === 'ar' ? 'بواسطة' : 'Recorded By'}</th>
-                        <th>{language === 'ar' ? 'المنتجات الجاهزة (إلى التوزيع)' : 'Produced (To Dist)'}</th>
-                        <th>{language === 'ar' ? 'الخامات المستهلكة (من المصنع)' : 'Consumed (From Factory)'}</th>
+                        <th>{language === 'ar' ? 'المنتجات الجاهزة (+)' : 'Produced (+)'}</th>
+                        <th>{language === 'ar' ? 'الخامات المستهلكة (-)' : 'Consumed (-)'}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -5135,7 +5484,15 @@ export default function AdminDashboard({
                           />
                           <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--gold-primary)' }} />
                         </div>
-                        <button className="btn-gold" onClick={() => setEmpModalOpen(true)}>
+                        <button className="btn-gold" onClick={() => {
+                          setEditingEmployee(null);
+                          setEmpName('');
+                          setEmpPhone('');
+                          setEmpSalary('');
+                          setEmpAllowedVacations(4);
+                          setEmpWorkingHours(9);
+                          setEmpModalOpen(true);
+                        }}>
                           <Plus size={18} /> {language === 'ar' ? 'إضافة موظف جديد' : 'Add Employee'}
                         </button>
                       </div>
@@ -5150,6 +5507,7 @@ export default function AdminDashboard({
                               <th>{language === 'ar' ? 'رقم الهاتف' : 'Phone'}</th>
                               <th>{language === 'ar' ? 'الراتب الأساسي' : 'Base Salary'}</th>
                               <th>{language === 'ar' ? 'الإجازات المسموحة شهرياً' : 'Allowed Leaves/Month'}</th>
+                              <th>{language === 'ar' ? 'ساعات العمل اليومية' : 'Daily Working Hours'}</th>
                               <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
                             </tr>
                           </thead>
@@ -5162,6 +5520,7 @@ export default function AdminDashboard({
                                   <td className="font-en">{emp.phone || '-'}</td>
                                   <td className="font-en">{emp.salary.toFixed(2)} EGP</td>
                                   <td className="font-en">{emp.allowed_vacations} {language === 'ar' ? 'أيام' : 'days'}</td>
+                                  <td className="font-en">{emp.working_hours || 9} {language === 'ar' ? 'ساعة' : 'hours'}</td>
                                   <td>
                                     <div style={{ display: 'flex', gap: '0.8rem' }}>
                                       <button className="btn-gold" style={{ padding: '0.3rem 0.8rem', fontSize: '0.85rem' }} onClick={() => {
@@ -5169,6 +5528,17 @@ export default function AdminDashboard({
                                         setSelectedEmployee(emp);
                                       }}>
                                         👤 {language === 'ar' ? 'كشف الحساب والبروفايل' : 'View Profile'}
+                                      </button>
+                                      <button className="btn-outline-gold" style={{ padding: '0.3rem 0.8rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} onClick={() => {
+                                        setEditingEmployee(emp);
+                                        setEmpName(emp.name);
+                                        setEmpPhone(emp.phone || '');
+                                        setEmpSalary(emp.salary);
+                                        setEmpAllowedVacations(emp.allowed_vacations);
+                                        setEmpWorkingHours(emp.working_hours !== undefined ? emp.working_hours : 9);
+                                        setEmpModalOpen(true);
+                                      }}>
+                                        <Edit size={14} /> {language === 'ar' ? 'تعديل' : 'Edit'}
                                       </button>
                                       <button className="btn-delete" onClick={() => handleDeleteEmployee(emp.id)}>
                                         <Trash2 size={16} />
@@ -5178,7 +5548,7 @@ export default function AdminDashboard({
                                 </tr>
                               ))}
                             {employees.length === 0 && (
-                              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem' }}>{language === 'ar' ? 'لا يوجد موظفون مسجلون في النظام حالياً' : 'No employees registered yet'}</td></tr>
+                              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '1.5rem' }}>{language === 'ar' ? 'لا يوجد موظفون مسجلون في النظام حالياً' : 'No employees registered yet'}</td></tr>
                             )}
                           </tbody>
                         </table>
@@ -6893,6 +7263,141 @@ export default function AdminDashboard({
         </div>
       )}
 
+      {/* TRANSFER REQUEST MODAL */}
+      {transferModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setTransferModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="admin-modal-header">
+              <h2>🚚 {language === 'ar' ? 'طلب تحويل من المطبخ للتوزيع' : 'Transfer Request: Kitchen → Distribution'}</h2>
+              <button className="btn-close" onClick={() => setTransferModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="admin-modal-body">
+              <p style={{ color: 'var(--text-gray)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                {language === 'ar' ? 'أضف الأصناف المراد تحويلها من مخزن المطبخ إلى مخزن التوزيع. يتطلب موافقة مدير التوزيع.' : 'Add items to transfer from kitchen stock to distribution. Requires distribution manager approval.'}
+              </p>
+
+              {/* Add item row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 80px auto', gap: '0.5rem', marginBottom: '1rem', alignItems: 'end' }}>
+                <div>
+                  <label className="label-gold">{language === 'ar' ? 'الصنف' : 'Item'}</label>
+                  <select id="transfer-item-select" className="input-gold">
+                    <option value="">{language === 'ar' ? 'اختر صنف...' : 'Select item...'}</option>
+                    {inventoryItems.filter(i => (i.stock_factory || 0) > 0).map(item => (
+                      <option key={item.id} value={item.id}>{item.name} ({language === 'ar' ? 'في المطبخ: ' : 'In kitchen: '}{item.stock_factory} {item.unit})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label-gold">{language === 'ar' ? 'الكمية' : 'Qty'}</label>
+                  <input type="number" id="transfer-qty-input" className="input-gold" min="0.01" step="0.01" defaultValue={1} />
+                </div>
+                <div>
+                  <label className="label-gold">{language === 'ar' ? 'الوحدة' : 'Unit'}</label>
+                  <input type="text" id="transfer-unit-input" className="input-gold" defaultValue="وحدة" />
+                </div>
+                <button type="button" className="btn-gold" style={{ height: '40px' }} onClick={() => {
+                  const sel = document.getElementById('transfer-item-select') as HTMLSelectElement;
+                  const qtyInp = document.getElementById('transfer-qty-input') as HTMLInputElement;
+                  const unitInp = document.getElementById('transfer-unit-input') as HTMLInputElement;
+                  if (!sel.value) return;
+                  const item = inventoryItems.find(i => i.id === sel.value);
+                  if (!item) return;
+                  const qty = parseFloat(qtyInp.value) || 0;
+                  if (qty <= 0) return;
+                  setTransferCart(prev => [...prev, { item_id: item.id, item_name: item.name, quantity: qty, unit: unitInp.value || item.unit }]);
+                  sel.value = '';
+                  qtyInp.value = '1';
+                }}>
+                  <Plus size={18} />
+                </button>
+              </div>
+
+              {/* Cart */}
+              {transferCart.length > 0 && (
+                <div style={{ border: '1px solid #333', borderRadius: '8px', marginBottom: '1rem' }}>
+                  {transferCart.map((c, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 1rem', borderBottom: idx < transferCart.length - 1 ? '1px solid #222' : 'none' }}>
+                      <span style={{ color: 'var(--gold-primary)' }}>{c.item_name}</span>
+                      <span style={{ color: 'var(--text-gray)' }}>{c.quantity} {c.unit}</span>
+                      <button type="button" className="action-btn delete" onClick={() => setTransferCart(prev => prev.filter((_, i) => i !== idx))}><Trash2 size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div>
+                <label className="label-gold">{language === 'ar' ? 'ملاحظات (اختياري)' : 'Notes (optional)'}</label>
+                <textarea className="input-gold" rows={2} value={transferNotes} onChange={e => setTransferNotes(e.target.value)} style={{ resize: 'vertical' }} />
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button type="button" className="btn-outline-gold" onClick={() => { setTransferModalOpen(false); setTransferCart([]); setTransferNotes(''); }}>{t.close}</button>
+              <button type="button" className="btn-gold" onClick={handleSaveTransferRequest} disabled={loading || transferCart.length === 0}>
+                🚚 {language === 'ar' ? 'إرسال طلب التحويل' : 'Send Transfer Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DISTRIBUTION PRODUCT MODAL */}
+      {distProdModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setDistProdModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="admin-modal-header">
+              <h2>🎪 {distProdEditId ? (language === 'ar' ? 'تعديل منتج التوزيع' : 'Edit Distribution Product') : (language === 'ar' ? 'إضافة منتج توزيع جديد' : 'Add New Distribution Product')}</h2>
+              <button className="btn-close" onClick={() => setDistProdModalOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="admin-modal-body">
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <div>
+                  <label className="label-gold">{language === 'ar' ? 'اسم المنتج *' : 'Product Name *'}</label>
+                  <input className="input-gold" value={distProdName} onChange={e => setDistProdName(e.target.value)} placeholder={language === 'ar' ? 'مثال: عسل طبيعي' : 'e.g. Natural Honey'} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="label-gold">{language === 'ar' ? 'الوحدة *' : 'Unit *'}</label>
+                    <select className="input-gold" value={distProdUnit} onChange={e => setDistProdUnit(e.target.value)}>
+                      <option value="كجم">كجم</option>
+                      <option value="جرام">جرام</option>
+                      <option value="لتر">لتر</option>
+                      <option value="وحدة">وحدة</option>
+                      <option value="كرتونة">كرتونة</option>
+                      <option value="علبة">علبة</option>
+                      <option value="زجاجة">زجاجة</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label-gold">{language === 'ar' ? 'الفئة' : 'Category'}</label>
+                    <input className="input-gold" value={distProdCategory} onChange={e => setDistProdCategory(e.target.value)} placeholder={language === 'ar' ? 'مثال: عسل، زيوت...' : 'e.g. Honey, Oils...'} />
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="label-gold">{language === 'ar' ? 'المخزون الحالي *' : 'Current Stock *'}</label>
+                    <input type="number" className="input-gold" value={distProdStock} onChange={e => setDistProdStock(e.target.value === '' ? '' : Number(e.target.value))} min="0" step="0.01" />
+                  </div>
+                  <div>
+                    <label className="label-gold">{language === 'ar' ? 'سعر الوحدة *' : 'Unit Price *'}</label>
+                    <input type="number" className="input-gold" value={distProdPrice} onChange={e => setDistProdPrice(e.target.value === '' ? '' : Number(e.target.value))} min="0" step="0.01" />
+                  </div>
+                </div>
+                <div>
+                  <label className="label-gold">{language === 'ar' ? 'ملاحظات' : 'Notes'}</label>
+                  <textarea className="input-gold" rows={2} value={distProdNotes} onChange={e => setDistProdNotes(e.target.value)} style={{ resize: 'vertical' }} />
+                </div>
+              </div>
+            </div>
+            <div className="admin-modal-footer">
+              <button type="button" className="btn-outline-gold" onClick={() => setDistProdModalOpen(false)}>{t.close}</button>
+              <button type="button" className="btn-gold" onClick={handleSaveDistributionProduct} disabled={loading || !distProdName.trim() || distProdStock === '' || distProdPrice === ''}>
+                {loading ? '...' : distProdEditId ? (language === 'ar' ? 'حفظ التعديلات' : 'Save Changes') : (language === 'ar' ? 'إضافة المنتج' : 'Add Product')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 6. Supplier Profile Modal */}
       {selectedSupplierProfile && (
         <div className="admin-modal-overlay" onClick={() => setSelectedSupplierProfile(null)}>
@@ -7134,7 +7639,7 @@ export default function AdminDashboard({
         <div className="admin-modal-overlay" onClick={() => setEmpModalOpen(false)}>
           <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <div className="admin-modal-header">
-              <h2>{language === 'ar' ? 'إضافة موظف جديد' : 'Add New Employee'}</h2>
+              <h2>{editingEmployee ? (language === 'ar' ? 'تعديل بيانات الموظف' : 'Edit Employee Details') : (language === 'ar' ? 'إضافة موظف جديد' : 'Add New Employee')}</h2>
               <button className="btn-close" onClick={() => setEmpModalOpen(false)}><X size={20} /></button>
             </div>
             <form onSubmit={handleSaveEmployee}>
@@ -7178,6 +7683,18 @@ export default function AdminDashboard({
                     onChange={(e) => setEmpAllowedVacations(Number(e.target.value))} 
                     required 
                     min="0"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'ساعات العمل اليومية المطلوبة (الافتراضي: 9) *' : 'Required Daily Working Hours (Default: 9) *'}</label>
+                  <input 
+                    type="number" 
+                    className="input-gold" 
+                    value={empWorkingHours} 
+                    onChange={(e) => setEmpWorkingHours(e.target.value === '' ? '' : Number(e.target.value))} 
+                    required 
+                    min="1"
+                    max="24"
                   />
                 </div>
               </div>

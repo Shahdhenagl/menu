@@ -221,6 +221,38 @@ export interface ProductionLog {
   produced_items: ProductionProducedItem[];
   consumed_items: ProductionConsumedItem[];
   recorded_by: string;
+  notes?: string;
+  created_at?: string;
+}
+
+// Transfer request: Kitchen → Distribution warehouse (requires approval)
+export interface TransferRequestItem {
+  item_id: string;
+  item_name: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface TransferRequest {
+  id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  items: TransferRequestItem[]; // Items being transferred from kitchen to distribution
+  requested_by: string; // Kitchen manager/user
+  approved_by?: string;  // Distribution manager/admin
+  notes?: string;
+  rejection_reason?: string;
+  created_at?: string;
+}
+
+// Distribution warehouse product catalog
+export interface DistributionProduct {
+  id: string;
+  name: string;
+  unit: string;
+  category?: string;
+  stock_quantity: number;
+  unit_price: number;
+  notes?: string;
   created_at?: string;
 }
 
@@ -240,6 +272,7 @@ export interface Employee {
   phone: string;
   salary: number;
   allowed_vacations: number;
+  working_hours?: number;
   created_at: string;
 }
 
