@@ -376,12 +376,19 @@ export const db = {
             cost = await this.deductInventoryForOrder(updatedOrder);
             updatedOrder.total_cost = cost;
           }
-          const { data, error } = await supabase
+          let { data, error } = await supabase
             .from('orders')
             .update({ status, inventory_deducted: updatedOrder.inventory_deducted, total_cost: cost })
             .eq('id', id)
             .select()
             .single();
+          
+          if (error) {
+            console.warn("Update with total_cost failed, retrying without new columns...", error);
+            const res = await supabase.from('orders').update({ status }).eq('id', id).select().single();
+            data = res.data; error = res.error;
+          }
+
           if (error) throw error;
           return data;
         }
@@ -410,12 +417,22 @@ export const db = {
             updates.total_cost = await this.deductInventoryForOrder(updatedOrder);
             updates.inventory_deducted = true;
           }
-          const { data, error } = await supabase
+          let { data, error } = await supabase
             .from('orders')
             .update(updates)
             .eq('id', id)
             .select()
             .single();
+          
+          if (error) {
+            console.warn("Update failed, retrying without new columns...", error);
+            const fallbackUpdates = { ...updates };
+            delete fallbackUpdates.inventory_deducted;
+            delete fallbackUpdates.total_cost;
+            const res = await supabase.from('orders').update(fallbackUpdates).eq('id', id).select().single();
+            data = res.data; error = res.error;
+          }
+
           if (error) throw error;
           return data;
         }
