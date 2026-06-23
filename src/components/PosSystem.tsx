@@ -272,7 +272,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
         customer_phone: customerPhone,
         table_number: tableNumber,
         order_type: orderType || editingOrder.order_type
-      });
+      }, selectedWaiter?.name);
       setLastPlacedOrder(updatedOrder);
       setCart([]);
       setEditOrderId(null);
@@ -373,12 +373,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
       await db.updateOrder(editingOrder.id, {
         items: sourceItems,
         total_price: sourceTotal
-      });
+      }, selectedWaiter?.name);
 
       await db.updateOrder(targetOrder.id, {
         items: targetItems,
         total_price: targetTotal
-      });
+      }, selectedWaiter?.name);
 
       // 4. Send Telegram Notification
       if (settings?.telegram_chat_id) {
@@ -960,14 +960,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                         }}>{language === 'ar' ? 'تحصيل الدفع' : 'Collect Payment'}</button>
                       ) : (
                         <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#f39c12', color: '#000' }} onClick={async () => {
-                          await db.updateOrderStatus(order.id, 'delivered');
+                          await db.updateOrderStatus(order.id, 'delivered', selectedWaiter?.name);
                           loadData();
                         }}>{language === 'ar' ? 'تم التسليم' : 'Mark Delivered'}</button>
                       )}
                       
                       <button className="pos-btn-outline" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={() => {
                         triggerOtpProtectedAction('إلغاء الطلب', 'Cancel Order', async () => {
-                          await db.updateOrderStatus(order.id, 'cancelled');
+                          await db.updateOrderStatus(order.id, 'cancelled', selectedWaiter?.name);
                           if (settings?.telegram_chat_id) {
                             const text = `⚠️ <b>تنبيه إلغاء طلب نشط</b>\n\n` +
                               `• <b>رقم الطلب:</b> <code>#${order.id.slice(0, 6)}</code>\n` +
@@ -1096,7 +1096,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                     status: editingOrder.status,
                     order_type: editingOrder.order_type,
                     table_number: editingOrder.table_number
-                  });
+                  }, selectedWaiter?.name);
                   setEditingOrder(null);
                   setEditOrderId(null);
                   setView('waiter_dashboard');
@@ -1107,7 +1107,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
 
                 <button className="pos-btn-outline" style={{ width: '100%', padding: '1rem', borderColor: '#ef4444', color: '#ef4444' }} onClick={() => {
                   triggerOtpProtectedAction('حذف الطلب نهائياً', 'Delete Order permanently', async () => {
-                    await db.deleteOrder(editingOrder.id);
+                    await db.deleteOrder(editingOrder.id, selectedWaiter?.name);
                     setEditingOrder(null);
                     setEditOrderId(null);
                     setView('waiter_dashboard');
@@ -1473,7 +1473,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                                 payment_method: finalMethod,
                                 payment_details: paymentDetails,
                                 customer_id: payCustomerId || collectPaymentOrder.customer_id
-                              });
+                              }, selectedWaiter?.name);
 
                               setCollectPaymentOrder(null);
                               loadData();
@@ -1506,7 +1506,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                                    payment_method: 'hospitality',
                                    total_price: 0,
                                    payment_details: { type: 'hospitality', original_price: collectPaymentOrder.total_price }
-                                 });
+                                 }, selectedWaiter?.name);
                                  setCollectPaymentOrder(null);
                                  loadData();
                                } catch (e) {

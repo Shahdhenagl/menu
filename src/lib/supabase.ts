@@ -20,11 +20,11 @@ export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey) 
   : null;
 
-const triggerTelegramLog = async (actionAr: string, actionEn: string, details: string) => {
+const triggerTelegramLog = async (actionAr: string, actionEn: string, details: string, explicitUserName?: string) => {
   try {
     const { notifyAction } = await import('../utils/telegramUtils');
     const settings = await db.getSettings();
-    await notifyAction(actionAr, actionEn, details, settings);
+    await notifyAction(actionAr, actionEn, details, settings, explicitUserName);
   } catch(err) {
     console.error("Failed to log to Telegram:", err);
   }
@@ -364,8 +364,8 @@ export const db = {
     return newOrder;
   },
 
-  async updateOrderStatus(id: string, status: Order['status']): Promise<Order> {
-    await triggerTelegramLog('تحديث حالة طلب', 'Update Order Status', `تغيرت حالة الطلب ${id.slice(0, 6)} إلى ${status}`);
+  async updateOrderStatus(id: string, status: Order['status'], userName?: string): Promise<Order> {
+    await triggerTelegramLog('تحديث حالة طلب', 'Update Order Status', `تغيرت حالة الطلب ${id.slice(0, 6)} إلى ${status}`, userName);
     if (supabase) {
       try {
         const { data: currentOrder } = await supabase.from('orders').select('*').eq('id', id).single();
@@ -407,7 +407,8 @@ export const db = {
     return orders[index];
   },
 
-  async updateOrder(id: string, updates: Partial<Order>): Promise<Order> {
+  async updateOrder(id: string, updates: Partial<Order>, userName?: string): Promise<Order> {
+    await triggerTelegramLog('تعديل طلب', 'Update Order', `تم تعديل الطلب رقم ${id.slice(0, 6)}`, userName);
     if (supabase) {
       try {
         const { data: currentOrder } = await supabase.from('orders').select('*').eq('id', id).single();
@@ -452,8 +453,8 @@ export const db = {
   },
 
 
-  async deleteOrder(id: string): Promise<void> {
-    await triggerTelegramLog('حذف الطلب', 'Delete Order', `تم حذف الطلب رقم ${id.slice(0, 6)} نهائياً من النظام`);
+  async deleteOrder(id: string, userName?: string): Promise<void> {
+    await triggerTelegramLog('حذف الطلب', 'Delete Order', `تم حذف الطلب رقم ${id.slice(0, 6)} نهائياً من النظام`, userName);
     if (supabase) {
       try {
         const { error } = await supabase.from('orders').delete().eq('id', id);
