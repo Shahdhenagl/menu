@@ -60,6 +60,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [payInstapay, setPayInstapay] = useState<number | ''>('');
   const [payIsDeferred, setPayIsDeferred] = useState(false);
   const [payCustomerId, setPayCustomerId] = useState('');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
 
   // OTP States for Deletions/Cancellations
   const [otpCode, setOtpCode] = useState('');
@@ -1264,18 +1268,108 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                         <label style={{ display: 'block', marginBottom: '0.4rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
                           👤 {language === 'ar' ? 'اختر العميل لتسجيل المديونية:' : 'Select Customer:'}
                         </label>
-                        <select
-                          className="pos-input"
-                          value={payCustomerId}
-                          onChange={(e) => setPayCustomerId(e.target.value)}
-                        >
-                          <option value="">{language === 'ar' ? '-- اختر العميل --' : '-- Select Customer --'}</option>
-                          {customers.map(c => (
-                            <option key={c.id} value={c.id}>
-                              {c.name} ({c.phone}) - {language === 'ar' ? 'الدين الحالي: ' : 'Current Debt: '}{c.total_debt.toFixed(2)} EGP
-                            </option>
-                          ))}
-                        </select>
+                        {!isCreatingCustomer ? (
+                          <div style={{ position: 'relative' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                              <input
+                                type="text"
+                                className="pos-input"
+                                placeholder={language === 'ar' ? 'بحث بالاسم أو رقم الهاتف...' : 'Search by name or phone...'}
+                                value={customerSearchQuery}
+                                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                                style={{ flex: 1 }}
+                              />
+                              <button
+                                className="pos-btn"
+                                style={{ padding: '0.5rem', fontSize: '0.9rem', flexShrink: 0 }}
+                                onClick={() => setIsCreatingCustomer(true)}
+                              >
+                                {language === 'ar' ? '+ جديد' : '+ New'}
+                              </button>
+                            </div>
+                            <div style={{ maxHeight: '150px', overflowY: 'auto', background: '#111', border: '1px solid #333', borderRadius: '8px' }}>
+                              {customers.filter(c => 
+                                c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) || 
+                                c.phone.includes(customerSearchQuery)
+                              ).map(c => (
+                                <div
+                                  key={c.id}
+                                  onClick={() => { setPayCustomerId(c.id); setCustomerSearchQuery(''); }}
+                                  style={{
+                                    padding: '0.8rem',
+                                    cursor: 'pointer',
+                                    borderBottom: '1px solid #222',
+                                    background: payCustomerId === c.id ? 'var(--gold-primary)' : 'transparent',
+                                    color: payCustomerId === c.id ? '#000' : '#fff',
+                                    fontWeight: payCustomerId === c.id ? 'bold' : 'normal'
+                                  }}
+                                >
+                                  {c.name} {c.phone ? `(${c.phone})` : ''} - {language === 'ar' ? 'دين: ' : 'Debt: '}{c.total_debt.toFixed(2)} EGP
+                                </div>
+                              ))}
+                              {customers.filter(c => 
+                                c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) || 
+                                c.phone.includes(customerSearchQuery)
+                              ).length === 0 && (
+                                <div style={{ padding: '0.8rem', textAlign: 'center', color: '#888' }}>
+                                  {language === 'ar' ? 'لا يوجد عملاء مطابقين' : 'No customers found'}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ background: '#111', padding: '1rem', borderRadius: '8px', border: '1px solid #333' }}>
+                            <h4 style={{ margin: '0 0 1rem 0', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'عميل جديد' : 'New Customer'}</h4>
+                            <input
+                              type="text"
+                              className="pos-input"
+                              placeholder={language === 'ar' ? 'اسم العميل' : 'Customer Name'}
+                              value={newCustomerName}
+                              onChange={(e) => setNewCustomerName(e.target.value)}
+                              style={{ marginBottom: '0.5rem' }}
+                            />
+                            <input
+                              type="text"
+                              className="pos-input"
+                              placeholder={language === 'ar' ? 'رقم الهاتف' : 'Phone Number'}
+                              value={newCustomerPhone}
+                              onChange={(e) => setNewCustomerPhone(e.target.value)}
+                              style={{ marginBottom: '1rem' }}
+                            />
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <button
+                                className="pos-btn"
+                                style={{ flex: 1, padding: '0.5rem' }}
+                                onClick={async () => {
+                                  if (!newCustomerName) {
+                                    alert(language === 'ar' ? 'يرجى إدخال اسم العميل' : 'Please enter customer name');
+                                    return;
+                                  }
+                                  try {
+                                    const newCust = await db.addCustomer({ name: newCustomerName, phone: newCustomerPhone, total_debt: 0 });
+                                    await loadData();
+                                    setPayCustomerId(newCust.id);
+                                    setIsCreatingCustomer(false);
+                                    setNewCustomerName('');
+                                    setNewCustomerPhone('');
+                                  } catch (err) {
+                                    console.error(err);
+                                    alert('Failed to add customer');
+                                  }
+                                }}
+                              >
+                                {language === 'ar' ? 'حفظ واختيار' : 'Save & Select'}
+                              </button>
+                              <button
+                                className="pos-btn-outline"
+                                style={{ flex: 1, padding: '0.5rem' }}
+                                onClick={() => setIsCreatingCustomer(false)}
+                              >
+                                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
