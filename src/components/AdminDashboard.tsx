@@ -10,9 +10,10 @@ import {
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
   Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle, Eye,
-  UserCheck, DollarSign
+  UserCheck, DollarSign, WalletCards
 } from 'lucide-react';
 import { playClickSound, playNewOrderSound } from '../utils/audioUtils';
+import FinancialsView from './FinancialsView';
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -27,7 +28,7 @@ interface AdminDashboardProps {
   setLanguage: (lang: 'ar' | 'en') => void;
 }
 
-type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'factory' | 'employees' | 'attendance';
+type TabType = 'analytics' | 'financials' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'factory' | 'employees' | 'attendance';
 
 export default function AdminDashboard({
   onClose,
@@ -82,6 +83,7 @@ export default function AdminDashboard({
   });
   
   const [activeTab, setActiveTab] = useState<TabType>('analytics');
+  const [financialsDateFilter, setFinancialsDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('today');
 
   // --- CRUD States ---
   // Categories modal / inputs
@@ -284,6 +286,7 @@ export default function AdminDashboard({
 
   const AVAILABLE_PERMISSIONS = [
     { id: 'analytics', ar: 'نظرة عامة والتحليلات', en: 'Overview & Analytics' },
+    { id: 'financials', ar: 'المعاملات المالية', en: 'Financial Transactions' },
     { id: 'categories', ar: 'إدارة التصنيفات', en: 'Categories' },
     { id: 'products', ar: 'إدارة المنتجات', en: 'Products' },
     { id: 'orders', ar: 'إدارة الطلبات', en: 'Orders' },
@@ -2497,6 +2500,16 @@ export default function AdminDashboard({
               <span>{t.overviewTab}</span>
             </button>
           )}
+
+          {hasPermission('financials') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'financials' ? 'active' : ''}`}
+              onClick={() => setActiveTab('financials')}
+            >
+              <WalletCards size={18} />
+              <span>{language === 'ar' ? 'المعاملات المالية' : 'Financials'}</span>
+            </button>
+          )}
           
           {hasPermission('categories') && (
             <button 
@@ -3105,6 +3118,17 @@ export default function AdminDashboard({
         )}
 
         {/* TAB 2: CATEGORIES MANAGEMENT */}
+        {activeTab === 'financials' && (
+          <FinancialsView 
+            orders={orders}
+            expenses={expenses}
+            inventoryItems={inventoryItems}
+            language={language}
+            dateFilter={financialsDateFilter}
+            setDateFilter={setFinancialsDateFilter}
+          />
+        )}
+
         {activeTab === 'categories' && (
           <div>
             <div className="table-panel">
