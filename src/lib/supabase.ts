@@ -519,7 +519,7 @@ export const db = {
   },
 
   async addExpense(expense: Omit<Expense, 'id'>): Promise<Expense> {
-    await triggerTelegramLog('تسجيل مصروف', 'Add Expense', `تم تسجيل مصروف جديد: ${expense.cost_name} بقيمة ${expense.amount}`);
+    await triggerTelegramLog('تسجيل مصروف', 'Add Expense', `تم تسجيل مصروف جديد: ${expense.name} بقيمة ${expense.amount}`);
     const newExpense: Expense = {
       ...expense,
       id: crypto.randomUUID(),

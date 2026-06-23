@@ -1424,7 +1424,6 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                           🎁 {language === 'ar' ? 'تسجيل كضيافة (طلب OTP)' : 'Record as Hospitality (OTP)'}
                         </button>
                       </div>
-                      </div>
                     </>
                   );
                 })()}

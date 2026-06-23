@@ -66,7 +66,7 @@ export async function notifyAction(actionAr: string, actionEn: string, details: 
 
   const text = `🔔 <b>إشعار حركة في النظام</b>\n\n` +
                `• <b>المستخدم:</b> ${userName}\n` +
-               `• <b>الإجراء:</b> ${actionAr}\n` +
+               `• <b>الإجراء:</b> ${actionAr} | ${actionEn}\n` +
                `• <b>التفاصيل:</b>\n${details}`;
 
   const token = settings?.telegram_bot_token || DEFAULT_BOT_TOKEN;
