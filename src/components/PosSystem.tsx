@@ -1007,6 +1007,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                     className="pos-input" 
                     value={editingOrder.status}
                     onChange={(e) => setEditingOrder({...editingOrder, status: e.target.value as Order['status']})}
+                    disabled
                   >
                     <option value="pending">{language === 'ar' ? 'قيد الانتظار' : 'Pending'}</option>
                     <option value="preparing">{language === 'ar' ? 'جاري التجهيز' : 'Preparing'}</option>
@@ -1023,6 +1024,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                       className="pos-input" 
                       value={editingOrder.order_type || 'takeaway'}
                       onChange={(e) => setEditingOrder({...editingOrder, order_type: e.target.value as any})}
+                      disabled
                     >
                       <option value="takeaway">{t.takeaway}</option>
                       <option value="dine_in">{t.dineIn}</option>
@@ -1037,7 +1039,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                       className="pos-input" 
                       value={editingOrder.table_number || ''}
                       onChange={(e) => setEditingOrder({...editingOrder, table_number: e.target.value})}
-                      disabled={editingOrder.order_type !== 'dine_in'}
+                      disabled
                     />
                   </div>
                 </div>
@@ -1115,7 +1117,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
               </div>
             </motion.div>
           )}
+        </AnimatePresence>
 
+        <AnimatePresence>
           {/* Collect Payment Modal */}
           {collectPaymentOrder && (
             <motion.div 
