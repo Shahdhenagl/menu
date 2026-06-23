@@ -389,6 +389,9 @@ export const db = {
     const orders = getLocalData('meridien_orders', initialOrders);
     orders.unshift(newOrder);
     saveLocalData('meridien_orders', orders);
+    // Notify admin of new order
+    const orderTypeLabel = newOrder.order_type === 'dine_in' ? 'داين إن' : newOrder.order_type === 'takeaway' ? 'تيك أوي' : newOrder.order_type === 'talabat' ? 'تلبات' : 'ديليفري';
+    await this.addNotification({ title: '🛝 طلب جديد', message: `طلب جديد من ${newOrder.customer_name || 'زبون'} (${orderTypeLabel}) - إجمالي: ${newOrder.total_price} EGP`, target_role: 'admin', notification_type: 'order_new' });
     return newOrder;
   },
 
@@ -536,6 +539,8 @@ export const db = {
       console.warn("Failed to retrieve waiter_name for telegram log:", e);
     }
     await triggerTelegramLog('حذف الطلب', 'Delete Order', `تم حذف الطلب رقم ${id.slice(0, 6)} نهائياً من النظام`, finalUser);
+    // Notify admin of deletion
+    await this.addNotification({ title: '🚫 تم حذف طلب', message: `تم حذف الطلب #${id.slice(0, 8)} بواسطة: ${finalUser || 'غير معروف'}`, target_role: 'admin', notification_type: 'order_delete' });
     if (supabase) {
       try {
         const { error } = await supabase.from('orders').delete().eq('id', id);
@@ -1109,9 +1114,10 @@ export const db = {
           .single();
         if (!error && data) {
           await this.addNotification({
-            title: 'طلب تصنيع / صرف جديد',
-            message: `تم طلب صرف مواد للمطبخ بواسطة ${order.requested_by}`,
-            target_role: 'inventory_manager'
+            title: '📦 طلب صرف جديد',
+            message: `المطبخ يطلب خامات بواسطة ${order.requested_by}`,
+            target_role: 'inventory_manager',
+            notification_type: 'mfg_request'
           });
           return data;
         }
@@ -1125,9 +1131,10 @@ export const db = {
     
     // Create Notification
     await this.addNotification({
-      title: 'طلب تصنيع / صرف جديد',
-      message: `تم طلب صرف مواد للمطبخ بواسطة ${newOrder.requested_by}`,
-      target_role: 'inventory_manager'
+      title: '📦 طلب صرف جديد',
+      message: `المطبخ يطلب خامات بواسطة ${newOrder.requested_by}`,
+      target_role: 'inventory_manager',
+      notification_type: 'mfg_request'
     });
     
     return newOrder;
@@ -1159,15 +1166,17 @@ export const db = {
               }
             }
             await this.addNotification({
-              title: 'تمت الموافقة على الطلب',
-              message: `تمت الموافقة على طلب الصرف من قبل ${approved_by}`,
-              target_role: 'kitchen_manager'
+              title: '✅ تمت الموافقة على الخامات',
+              message: `تمت الموافقة على طلب الصرف بواسطة ${approved_by} وتمت إضافتها للمطبخ.`,
+              target_role: 'kitchen_manager',
+              notification_type: 'mfg_approved'
             });
           } else {
             await this.addNotification({
-              title: 'تم رفض الطلب',
-              message: `تم رفض طلب الصرف من قبل ${approved_by}`,
-              target_role: 'kitchen_manager'
+              title: '❌ رُفض طلب الخامات',
+              message: `رُفض طلب الصرف بواسطة ${approved_by}`,
+              target_role: 'kitchen_manager',
+              notification_type: 'mfg_rejected'
             });
           }
           return;
@@ -1212,26 +1221,100 @@ export const db = {
 
   // --- NOTIFICATIONS ---
   async getNotifications(role: string): Promise<SystemNotification[]> {
+    // Support comma-separated roles e.g. "admin,inventory_manager"
+    const userRoles = role.split(',').map(r => r.trim());
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('system_notifications')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100);
+        if (!error && data) {
+          return data.filter((n: SystemNotification) => {
+            if (n.target_role === 'all') return true;
+            const targetRoles = n.target_role.split(',').map((r: string) => r.trim());
+            return targetRoles.some((tr: string) => userRoles.includes(tr));
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase getNotifications failed', err);
+      }
+    }
     const all = getLocalData('meridien_notifications', []) as SystemNotification[];
-    return all.filter(n => n.target_role === 'all' || n.target_role === role);
+    return all.filter(n => {
+      if (n.target_role === 'all') return true;
+      const targetRoles = n.target_role.split(',').map(r => r.trim());
+      return targetRoles.some(tr => userRoles.includes(tr));
+    });
   },
   async addNotification(notif: Omit<SystemNotification, 'id' | 'created_at' | 'is_read'>): Promise<void> {
-    const all = getLocalData('meridien_notifications', []) as SystemNotification[];
     const newNotif: SystemNotification = {
       ...notif,
       id: crypto.randomUUID(),
       created_at: new Date().toISOString(),
       is_read: false
     };
+    if (supabase) {
+      try {
+        await supabase.from('system_notifications').insert([newNotif]);
+        return;
+      } catch (err) {
+        console.warn('Supabase addNotification failed', err);
+      }
+    }
+    const all = getLocalData('meridien_notifications', []) as SystemNotification[];
     saveLocalData('meridien_notifications', [newNotif, ...all]);
   },
   async markNotificationRead(id: string): Promise<void> {
+    if (supabase) {
+      try {
+        await supabase.from('system_notifications').update({ is_read: true }).eq('id', id);
+        return;
+      } catch (err) {
+        console.warn('Supabase markNotificationRead failed', err);
+      }
+    }
     const all = getLocalData('meridien_notifications', []) as SystemNotification[];
     const idx = all.findIndex(n => n.id === id);
     if (idx > -1) {
       all[idx].is_read = true;
       saveLocalData('meridien_notifications', all);
     }
+  },
+  async markAllNotificationsRead(role: string): Promise<void> {
+    const userRoles = role.split(',').map(r => r.trim());
+    if (supabase) {
+      try {
+        // Mark all notifications for this role as read
+        await supabase.from('system_notifications').update({ is_read: true }).or(
+          `target_role.eq.all,target_role.in.(${userRoles.join(',')})`
+        );
+        return;
+      } catch (err) {
+        console.warn('Supabase markAllNotificationsRead failed', err);
+      }
+    }
+    const all = getLocalData('meridien_notifications', []) as SystemNotification[];
+    const updated = all.map(n => {
+      if (n.target_role === 'all') return { ...n, is_read: true };
+      const targetRoles = n.target_role.split(',').map(r => r.trim());
+      if (targetRoles.some(tr => userRoles.includes(tr))) return { ...n, is_read: true };
+      return n;
+    });
+    saveLocalData('meridien_notifications', updated);
+  },
+  async deleteNotification(id: string): Promise<void> {
+    if (supabase) {
+      try {
+        await supabase.from('system_notifications').delete().eq('id', id);
+        return;
+      } catch (err) {
+        console.warn('Supabase deleteNotification failed', err);
+      }
+    }
+    const all = getLocalData('meridien_notifications', []) as SystemNotification[];
+    saveLocalData('meridien_notifications', all.filter(n => n.id !== id));
   },
 
   // --- Production Logs (Factory to Distribution) ---
@@ -1353,7 +1436,15 @@ export const db = {
           .insert([reqData])
           .select()
           .single();
-        if (!error && data) return data;
+        if (!error && data) {
+          await this.addNotification({
+            title: '🚚 طلب تحويل جديد',
+            message: `المطبخ يطلب تحويل منتجات للتوزيع بواسطة ${reqData.requested_by}`,
+            target_role: 'admin',
+            notification_type: 'transfer_request'
+          });
+          return data;
+        }
       } catch (err) {
         console.warn("Supabase addTransferRequest failed", err);
       }
@@ -1361,6 +1452,13 @@ export const db = {
     const newReq: TransferRequest = { ...reqData, id: crypto.randomUUID(), created_at: new Date().toISOString() };
     const all = await this.getTransferRequests();
     saveLocalData('meridien_transfer_requests', [newReq, ...all]);
+    
+    await this.addNotification({
+      title: '🚚 طلب تحويل جديد',
+      message: `المطبخ يطلب تحويل منتجات للتوزيع بواسطة ${newReq.requested_by}`,
+      target_role: 'admin',
+      notification_type: 'transfer_request'
+    });
     return newReq;
   },
 
@@ -1399,9 +1497,23 @@ export const db = {
                 .eq('id', item.item_id);
             }
           }
+          await this.addNotification({
+            title: '✅ تمت الموافقة على التحويل',
+            message: `وافق ${approved_by} على تحويل المنتجات للتوزيع. تم الخصم من المطبخ.`,
+            target_role: 'kitchen_manager',
+            notification_type: 'transfer_approved'
+          });
           return;
         }
-        if (!error) return;
+        if (!error && status === 'rejected') {
+          await this.addNotification({
+            title: '❌ رُفض تحويل المنتجات',
+            message: `رُفض طلب التحويل بواسطة ${approved_by}. السبب: ${rejection_reason || 'غير محدد'}`,
+            target_role: 'kitchen_manager',
+            notification_type: 'transfer_rejected'
+          });
+          return;
+        }
       } catch (err) {
         console.warn("Supabase updateTransferRequestStatus failed", err);
       }
@@ -1420,8 +1532,23 @@ export const db = {
           items[itemIdx].stock_distribution = (items[itemIdx].stock_distribution || 0) + item.quantity;
         }
       }
-      saveLocalData('meridien_inventory_items', items);
+      saveLocalData('meridien_inventory', items);
+      
+      await this.addNotification({
+        title: '✅ تمت الموافقة على التحويل',
+        message: `وافق ${approved_by} على تحويل المنتجات للتوزيع. تم الخصم من المطبخ.`,
+        target_role: 'kitchen_manager',
+        notification_type: 'transfer_approved'
+      });
+    } else {
+      await this.addNotification({
+        title: '❌ رُفض تحويل المنتجات',
+        message: `رُفض طلب التحويل بواسطة ${approved_by}. السبب: ${rejection_reason || 'غير محدد'}`,
+        target_role: 'kitchen_manager',
+        notification_type: 'transfer_rejected'
+      });
     }
+
     saveLocalData('meridien_transfer_requests', all);
   },
 

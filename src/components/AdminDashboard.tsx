@@ -278,6 +278,7 @@ export default function AdminDashboard({
   const [sysPhone, setSysPhone] = useState('');
   const [sysUsername, setSysUsername] = useState('');
   const [sysPasscode, setSysPasscode] = useState('');
+  const [sysJobTitle, setSysJobTitle] = useState('');
   const [sysIsAdmin, setSysIsAdmin] = useState(false);
   const [sysPermissions, setSysPermissions] = useState<string[]>(['orders']);
 
@@ -389,7 +390,8 @@ export default function AdminDashboard({
         phone: sysPhone,
         username: sysUsername,
         passcode: sysPasscode,
-        role: sysIsAdmin ? 'admin' : sysPermissions.join(',')
+        role: sysIsAdmin ? 'admin' : sysPermissions.join(','),
+        job_title: sysJobTitle.trim() || undefined
       });
       await fetchSystemUsers();
       setSysUserModalOpen(false);
@@ -397,6 +399,7 @@ export default function AdminDashboard({
       setSysPhone('');
       setSysUsername('');
       setSysPasscode('');
+      setSysJobTitle('');
       setSysIsAdmin(false);
       setSysPermissions(['orders']);
     } catch (err) {
@@ -4537,7 +4540,12 @@ export default function AdminDashboard({
                   <tbody>
                     {systemUsers.filter(u => u.role !== 'waiter').map(user => (
                       <tr key={user.id}>
-                        <td style={{ fontWeight: 'bold' }}>{user.name}</td>
+                        <td style={{ fontWeight: 'bold' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span>{user.name}</span>
+                            {user.job_title && <span style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{user.job_title}</span>}
+                          </div>
+                        </td>
                         <td className="font-en">{user.phone || '-'}</td>
                         <td style={{ color: 'var(--gold-secondary)' }}>@{user.username}</td>
                         <td>
@@ -6796,6 +6804,10 @@ export default function AdminDashboard({
                   <label>{language === 'ar' ? 'الرمز السري' : 'Passcode'}</label>
                   <input type="password" className="input-gold" value={sysPasscode} onChange={e => setSysPasscode(e.target.value)} required />
                 </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'المسمى الوظيفي (اختياري)' : 'Job Title (Optional)'}</label>
+                  <input type="text" className="input-gold" placeholder={language === 'ar' ? 'مثال: أمين مخزن، مسؤول توزيع...' : 'e.g. Inventory Manager'} value={sysJobTitle} onChange={e => setSysJobTitle(e.target.value)} />
+                </div>
                 <div className="form-group" style={{ marginBottom: '0.5rem' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                     <input type="checkbox" checked={sysIsAdmin} onChange={e => setSysIsAdmin(e.target.checked)} />
@@ -7211,7 +7223,7 @@ export default function AdminDashboard({
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
                   <select id="prod-consumed-item" className="input-gold" style={{ padding: '0.5rem' }}>
                     <option value="">{language === 'ar' ? 'اختر الخامة...' : 'Select raw material...'}</option>
-                    {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name} ({i.stock_factory} {language === 'ar' ? 'بالمصنع' : 'in factory'})</option>)}
+                    {inventoryItems.filter(i => (i.stock_factory || 0) > 0).map(i => <option key={i.id} value={i.id}>{i.name} ({i.stock_factory} {language === 'ar' ? 'بالمصنع' : 'in factory'})</option>)}
                   </select>
                   <input type="number" id="prod-consumed-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية المستهلكة' : 'Consumed Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
                   <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
@@ -7276,50 +7288,61 @@ export default function AdminDashboard({
                 {language === 'ar' ? 'أضف الأصناف المراد تحويلها من مخزن المطبخ إلى مخزن التوزيع. يتطلب موافقة مدير التوزيع.' : 'Add items to transfer from kitchen stock to distribution. Requires distribution manager approval.'}
               </p>
 
-              {/* Add item row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 80px auto', gap: '0.5rem', marginBottom: '1rem', alignItems: 'end' }}>
-                <div>
-                  <label className="label-gold">{language === 'ar' ? 'الصنف' : 'Item'}</label>
-                  <select id="transfer-item-select" className="input-gold">
-                    <option value="">{language === 'ar' ? 'اختر صنف...' : 'Select item...'}</option>
-                    {inventoryItems.filter(i => (i.stock_factory || 0) > 0).map(item => (
-                      <option key={item.id} value={item.id}>{item.name} ({language === 'ar' ? 'في المطبخ: ' : 'In kitchen: '}{item.stock_factory} {item.unit})</option>
-                    ))}
-                  </select>
+              {/* Add item form */}
+              <div style={{ background: 'var(--bg-darker)', padding: '1.2rem', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="label-gold">{language === 'ar' ? 'صنف المطبخ' : 'Kitchen Item'}</label>
+                    <select id="transfer-item-select" className="input-gold" style={{ width: '100%', height: '45px', padding: '0 1rem' }}>
+                      <option value="">{language === 'ar' ? 'اختر صنف للتحويل...' : 'Select item to transfer...'}</option>
+                      {inventoryItems.filter(i => (i.stock_factory || 0) > 0).map(item => (
+                        <option key={item.id} value={item.id}>{item.name} ({language === 'ar' ? 'المتاح بالمطبخ: ' : 'Available in kitchen: '}{item.stock_factory} {item.unit})</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="label-gold">{language === 'ar' ? 'الكمية' : 'Quantity'}</label>
+                      <input type="number" id="transfer-qty-input" className="input-gold" style={{ height: '45px', padding: '0 1rem' }} min="0.01" step="0.01" defaultValue={1} />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="label-gold">{language === 'ar' ? 'الوحدة' : 'Unit'}</label>
+                      <input type="text" id="transfer-unit-input" className="input-gold" style={{ height: '45px', padding: '0 1rem' }} defaultValue="وحدة" />
+                    </div>
+                  </div>
+
+                  <button type="button" className="btn-gold" style={{ width: '100%', height: '45px', marginTop: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }} onClick={() => {
+                    const sel = document.getElementById('transfer-item-select') as HTMLSelectElement;
+                    const qtyInp = document.getElementById('transfer-qty-input') as HTMLInputElement;
+                    const unitInp = document.getElementById('transfer-unit-input') as HTMLInputElement;
+                    if (!sel.value) return;
+                    const item = inventoryItems.find(i => i.id === sel.value);
+                    if (!item) return;
+                    const qty = parseFloat(qtyInp.value) || 0;
+                    if (qty <= 0) return;
+                    setTransferCart(prev => [...prev, { item_id: item.id, item_name: item.name, quantity: qty, unit: unitInp.value || item.unit }]);
+                    sel.value = '';
+                    qtyInp.value = '1';
+                  }}>
+                    <Plus size={18} />
+                    {language === 'ar' ? 'إضافة للطلب' : 'Add to Request'}
+                  </button>
                 </div>
-                <div>
-                  <label className="label-gold">{language === 'ar' ? 'الكمية' : 'Qty'}</label>
-                  <input type="number" id="transfer-qty-input" className="input-gold" min="0.01" step="0.01" defaultValue={1} />
-                </div>
-                <div>
-                  <label className="label-gold">{language === 'ar' ? 'الوحدة' : 'Unit'}</label>
-                  <input type="text" id="transfer-unit-input" className="input-gold" defaultValue="وحدة" />
-                </div>
-                <button type="button" className="btn-gold" style={{ height: '40px' }} onClick={() => {
-                  const sel = document.getElementById('transfer-item-select') as HTMLSelectElement;
-                  const qtyInp = document.getElementById('transfer-qty-input') as HTMLInputElement;
-                  const unitInp = document.getElementById('transfer-unit-input') as HTMLInputElement;
-                  if (!sel.value) return;
-                  const item = inventoryItems.find(i => i.id === sel.value);
-                  if (!item) return;
-                  const qty = parseFloat(qtyInp.value) || 0;
-                  if (qty <= 0) return;
-                  setTransferCart(prev => [...prev, { item_id: item.id, item_name: item.name, quantity: qty, unit: unitInp.value || item.unit }]);
-                  sel.value = '';
-                  qtyInp.value = '1';
-                }}>
-                  <Plus size={18} />
-                </button>
               </div>
 
               {/* Cart */}
               {transferCart.length > 0 && (
-                <div style={{ border: '1px solid #333', borderRadius: '8px', marginBottom: '1rem' }}>
+                <div style={{ background: 'var(--bg-darker)', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.5rem', overflow: 'hidden' }}>
                   {transferCart.map((c, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 1rem', borderBottom: idx < transferCart.length - 1 ? '1px solid #222' : 'none' }}>
-                      <span style={{ color: 'var(--gold-primary)' }}>{c.item_name}</span>
-                      <span style={{ color: 'var(--text-gray)' }}>{c.quantity} {c.unit}</span>
-                      <button type="button" className="action-btn delete" onClick={() => setTransferCart(prev => prev.filter((_, i) => i !== idx))}><Trash2 size={14} /></button>
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', borderBottom: idx < transferCart.length - 1 ? '1px solid var(--border-color)' : 'none', background: 'rgba(255, 255, 255, 0.02)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                        <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{c.item_name}</span>
+                        <span style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'الكمية:' : 'Qty:'} {c.quantity} {c.unit}</span>
+                      </div>
+                      <button type="button" className="action-btn delete" onClick={() => setTransferCart(prev => prev.filter((_, i) => i !== idx))} title={language === 'ar' ? 'حذف' : 'Remove'}>
+                        <Trash2 size={18} />
+                      </button>
                     </div>
                   ))}
                 </div>

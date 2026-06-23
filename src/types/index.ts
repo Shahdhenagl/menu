@@ -113,6 +113,7 @@ export interface SystemUser {
   username: string;
   passcode: string;
   role: string;
+  job_title?: string; // Custom job title e.g. 'أمين مخزن', 'مسؤول توزيع'
   created_at?: string;
   is_active?: boolean;
   last_active_at?: string;
@@ -200,6 +201,7 @@ export interface SystemNotification {
   title: string;
   message: string;
   target_role: string | 'all'; // e.g. 'inventory_manager', 'kitchen_manager', 'admin'
+  notification_type?: 'order_new' | 'order_update' | 'order_delete' | 'mfg_request' | 'mfg_approved' | 'mfg_rejected' | 'transfer_request' | 'transfer_approved' | 'transfer_rejected' | 'low_stock' | 'general';
   is_read: boolean;
   created_at: string;
 }
