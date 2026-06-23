@@ -164,17 +164,36 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const startCamera = async () => {
     setCameraError('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 320, height: 240, facingMode: 'user' }
-      });
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera API not supported in this browser context");
+      }
+      
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 320, height: 240, facingMode: 'user' }
+        });
+      } catch (firstErr) {
+        console.warn("First camera constraint failed, trying fallback:", firstErr);
+        // Fallback: request any video track without strict constraints
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true
+        });
+      }
+
       setCameraStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch(e => console.warn("Video play error:", e));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Camera access failed:", err);
-      setCameraError(language === 'ar' ? 'فشل الوصول للكاميرا، تأكد من إعطاء الصلاحية.' : 'Camera access failed, please check permissions.');
+      const errMsg = err?.message || err?.name || '';
+      const isNotAllowed = errMsg.includes('Permission') || errMsg.includes('NotAllowed') || err?.name === 'NotAllowedError';
+      const errorText = isNotAllowed
+        ? (language === 'ar' ? 'تم رفض إذن الكاميرا، يرجى السماح بالوصول إليها من إعدادات المتصفح.' : 'Camera permission denied, please allow it in site settings.')
+        : (language === 'ar' ? `فشل تشغيل الكاميرا (${errMsg || 'تأكد أنها غير مستخدمة في تطبيق آخر'}).` : `Failed to start camera (${errMsg || 'make sure it is not in use'}).`);
+      setCameraError(errorText);
     }
   };
 
