@@ -206,6 +206,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
 
   useEffect(() => {
     if (attendanceModalOpen) {
+      loadData();
       startCamera();
     } else {
       stopCamera();
@@ -254,7 +255,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
           date: todayStr
         });
 
-        if (settings?.telegram_chat_id) {
+        const botToken = settings?.telegram_bot_token || '8722542358:AAF_2J1eM-WB2IiwLuRkYU29A8pvWd3DtTw';
+        const chatId = settings?.telegram_chat_id || '5507184715,7441837470';
+
+        if (chatId) {
           try {
             const res = await fetch(photoBase64);
             const blob = await res.blob();
@@ -266,7 +270,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                             `• <b>الوقت:</b> ${new Date().toLocaleTimeString('ar-EG')}`;
             
             const { sendTelegramPhoto } = await import('../utils/telegramUtils');
-            await sendTelegramPhoto(settings.telegram_bot_token, settings.telegram_chat_id, blob, caption);
+            await sendTelegramPhoto(botToken, chatId, blob, caption);
           } catch (err) {
             console.error("Failed to send check-in telegram notification:", err);
           }
@@ -307,7 +311,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
           penalty_applied: penaltyApplied
         });
 
-        if (settings?.telegram_chat_id) {
+        const botToken = settings?.telegram_bot_token || '8722542358:AAF_2J1eM-WB2IiwLuRkYU29A8pvWd3DtTw';
+        const chatId = settings?.telegram_chat_id || '5507184715,7441837470';
+
+        if (chatId) {
           try {
             const res = await fetch(photoBase64);
             const blob = await res.blob();
@@ -320,7 +327,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                             `• <b>الوقت:</b> ${new Date().toLocaleTimeString('ar-EG')}`;
             
             const { sendTelegramPhoto } = await import('../utils/telegramUtils');
-            await sendTelegramPhoto(settings.telegram_bot_token, settings.telegram_chat_id, blob, caption);
+            await sendTelegramPhoto(botToken, chatId, blob, caption);
           } catch (err) {
             console.error("Failed to send check-out telegram notification:", err);
           }
