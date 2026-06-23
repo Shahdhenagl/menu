@@ -42,3 +42,17 @@ export const playNewOrderSound = () => {
   playTone(880, 'sine', 0.2, 0.2); // A5
   setTimeout(() => playTone(1108.73, 'sine', 0.4, 0.2), 200); // C#6
 };
+
+export const playCheckInSound = () => {
+  // Ascending notes for check-in
+  playTone(523.25, 'sine', 0.1, 0.1); // C5
+  setTimeout(() => playTone(659.25, 'sine', 0.1, 0.1), 100); // E5
+  setTimeout(() => playTone(783.99, 'sine', 0.2, 0.1), 200); // G5
+};
+
+export const playCheckOutSound = () => {
+  // Descending notes for check-out
+  playTone(783.99, 'sine', 0.1, 0.1); // G5
+  setTimeout(() => playTone(659.25, 'sine', 0.1, 0.1), 100); // E5
+  setTimeout(() => playTone(523.25, 'sine', 0.2, 0.1), 200); // C5
+};

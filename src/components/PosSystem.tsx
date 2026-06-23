@@ -3,12 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShoppingBag, Utensils, CheckCircle, X, 
   Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
-  Pizza, Coffee, ChefHat, Wine, Cake, MessageCircle
+  Pizza, Coffee, ChefHat, Wine, Cake, MessageCircle, Camera, Search
 } from 'lucide-react';
 import { db } from '../lib/supabase';
-import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer } from '../types';
+import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog } from '../types';
 import { printOrderTickets } from '../utils/printUtils';
-import { playClickSound, playSuccessSound, playNewOrderSound } from '../utils/audioUtils';
+import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
 
 interface PosSystemProps {
   onClose: () => void;
@@ -35,6 +35,16 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(null);
   const [waiterPasscode, setWaiterPasscode] = useState('');
   const [viewAllOrders, setViewAllOrders] = useState(false);
+
+  // Attendance System State
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
+  const [employeesList, setEmployeesList] = useState<Employee[]>([]);
+  const [attendanceLogsList, setAttendanceLogsList] = useState<AttendanceLog[]>([]);
+  const [searchEmployeeQuery, setSearchEmployeeQuery] = useState('');
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState('');
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   
   // Order Session Details
   const [editOrderId, setEditOrderId] = useState<string | null>(null);
@@ -122,14 +132,16 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
   }, [activeOrders]);
 
   const loadData = async () => {
-    const [cats, prods, users, ords, prnts, sets, custs] = await Promise.all([
+    const [cats, prods, users, ords, prnts, sets, custs, emps, atts] = await Promise.all([
       db.getCategories(),
       db.getProducts(),
       db.getSystemUsers(),
       db.getOrders(),
       db.getPrinters(),
       db.getSettings(),
-      db.getCustomers()
+      db.getCustomers(),
+      db.getEmployees(),
+      db.getAttendanceLogs()
     ]);
     setCategories(cats.sort((a, b) => {
       const aBar = a.department === 'bar';
@@ -144,13 +156,177 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     setPrinters(prnts);
     setSettings(sets);
     setCustomers(custs);
+    setEmployeesList(emps);
+    setAttendanceLogsList(atts);
     if (cats.length > 0) setActiveCategory(cats[0].id);
   };
 
-  const handleClose = () => {
+  const startCamera = async () => {
+    setCameraError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 320, height: 240, facingMode: 'user' }
+      });
+      setCameraStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(e => console.warn("Video play error:", e));
+      }
+    } catch (err) {
+      console.error("Camera access failed:", err);
+      setCameraError(language === 'ar' ? 'فشل الوصول للكاميرا، تأكد من إعطاء الصلاحية.' : 'Camera access failed, please check permissions.');
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+  };
+
+  useEffect(() => {
+    if (attendanceModalOpen) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+    return () => {
+      stopCamera();
+    };
+  }, [attendanceModalOpen]);
+
+  const handleAttendanceAction = async (employee: Employee, isCheckIn: boolean) => {
+    if (!canvasRef.current || !videoRef.current) {
+      alert(language === 'ar' ? 'الكاميرا غير جاهزة!' : 'Camera not ready!');
+      return;
+    }
+
+    try {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      canvas.width = video.videoWidth || 320;
+      canvas.height = video.videoHeight || 240;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      }
+      
+      const photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
+
+      if (isCheckIn) {
+        playCheckInSound();
+      } else {
+        playCheckOutSound();
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      if (isCheckIn) {
+        await db.addAttendanceLog({
+          employee_id: employee.id,
+          employee_name: employee.name,
+          check_in_time: new Date().toISOString(),
+          check_out_time: null,
+          check_in_photo: photoBase64,
+          check_out_photo: undefined,
+          working_hours: undefined,
+          penalty_applied: 0,
+          date: todayStr
+        });
+
+        if (settings?.telegram_chat_id) {
+          try {
+            const res = await fetch(photoBase64);
+            const blob = await res.blob();
+            
+            const caption = `🟢 <b>تسجيل حضور موظف (Check In)</b>\n\n` +
+                            `• <b>الموظف:</b> ${employee.name}\n` +
+                            `• <b>الهاتف:</b> ${employee.phone || '-'}\n` +
+                            `• <b>التاريخ:</b> ${todayStr}\n` +
+                            `• <b>الوقت:</b> ${new Date().toLocaleTimeString('ar-EG')}`;
+            
+            const { sendTelegramPhoto } = await import('../utils/telegramUtils');
+            await sendTelegramPhoto(settings.telegram_bot_token, settings.telegram_chat_id, blob, caption);
+          } catch (err) {
+            console.error("Failed to send check-in telegram notification:", err);
+          }
+        }
+      } else {
+        const activeLog = attendanceLogsList.find(l => l.employee_id === employee.id && l.date === todayStr && !l.check_out_time);
+        if (!activeLog) {
+          alert(language === 'ar' ? 'لم يتم العثور على تسجيل حضور مفتوح لليوم!' : 'No open check-in log found for today!');
+          return;
+        }
+
+        const checkOutTimeStr = new Date().toISOString();
+        const checkInTime = new Date(activeLog.check_in_time);
+        const checkOutTime = new Date(checkOutTimeStr);
+        const diffMs = checkOutTime.getTime() - checkInTime.getTime();
+        const workingHours = Number((diffMs / (1000 * 60 * 60)).toFixed(2));
+
+        let penaltyApplied = 0;
+        if (workingHours < 9) {
+          const hourlyRate = employee.salary / 30 / 9;
+          penaltyApplied = Number(((9 - workingHours) * hourlyRate).toFixed(2));
+          
+          await db.addEmployeeTransaction({
+            employee_id: employee.id,
+            type: 'discount',
+            amount: penaltyApplied,
+            date: todayStr,
+            notes: language === 'ar' 
+              ? `خصم تلقائي لتأخير ساعات العمل (ساعات العمل: ${workingHours} من 9 ساعات)` 
+              : `Auto deduction for short hours (hours: ${workingHours}/9)`
+          });
+        }
+
+        await db.updateAttendanceLog(activeLog.id, {
+          check_out_time: checkOutTimeStr,
+          check_out_photo: photoBase64,
+          working_hours: workingHours,
+          penalty_applied: penaltyApplied
+        });
+
+        if (settings?.telegram_chat_id) {
+          try {
+            const res = await fetch(photoBase64);
+            const blob = await res.blob();
+            
+            const caption = `🔴 <b>تسجيل انصراف موظف (Check Out)</b>\n\n` +
+                            `• <b>الموظف:</b> ${employee.name}\n` +
+                            `• <b>ساعات العمل:</b> ${workingHours} ساعة\n` +
+                            `• <b>الخصم التلقائي المطبق:</b> ${penaltyApplied.toFixed(2)} EGP\n` +
+                            `• <b>التاريخ:</b> ${todayStr}\n` +
+                            `• <b>الوقت:</b> ${new Date().toLocaleTimeString('ar-EG')}`;
+            
+            const { sendTelegramPhoto } = await import('../utils/telegramUtils');
+            await sendTelegramPhoto(settings.telegram_bot_token, settings.telegram_chat_id, blob, caption);
+          } catch (err) {
+            console.error("Failed to send check-out telegram notification:", err);
+          }
+        }
+      }
+
+      const updatedLogs = await db.getAttendanceLogs();
+      setAttendanceLogsList(updatedLogs);
+      alert(language === 'ar' ? 'تم تسجيل العملية بنجاح!' : 'Successfully recorded!');
+    } catch (e) {
+      console.error(e);
+      alert(language === 'ar' ? 'حدث خطأ أثناء حفظ العملية!' : 'An error occurred during operation!');
+    }
+  };
+
+  const handleClose = async () => {
     if (view === 'role_select') {
       onClose();
     } else {
+      if (selectedWaiter) {
+        try {
+          await db.updateWaiterActiveStatus(selectedWaiter.id, false);
+        } catch (e) {}
+      }
+      localStorage.removeItem('meridien_active_pos_waiter');
       setRole(null);
       setSelectedWaiter(null);
       setWaiterPasscode('');
@@ -164,8 +340,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
     }
   };
 
-  const handleWaiterLogin = () => {
+  const handleWaiterLogin = async () => {
     if (selectedWaiter && selectedWaiter.passcode === waiterPasscode) {
+      // Save active waiter to localStorage for auto-assignment
+      localStorage.setItem('meridien_active_pos_waiter', JSON.stringify({ id: selectedWaiter.id, name: selectedWaiter.name }));
+      try {
+        await db.updateWaiterActiveStatus(selectedWaiter.id, true);
+      } catch (e) {
+        console.error("Failed to set waiter active status in DB:", e);
+      }
       setView('waiter_dashboard');
     } else {
       alert(language === 'ar' ? 'كلمة المرور غير صحيحة' : 'Incorrect passcode');
@@ -584,6 +767,29 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   </p>
                 </motion.div>
               </div>
+                <div style={{ marginTop: '3.5rem', display: 'flex', justifyContent: 'center' }}>
+                  <motion.button 
+                    whileHover={{ scale: 1.05 }} 
+                    whileTap={{ scale: 0.95 }}
+                    className="pos-btn" 
+                    style={{ 
+                      padding: '1rem 2rem', 
+                      fontSize: '1.1rem', 
+                      borderRadius: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.8rem',
+                      boxShadow: '0 8px 24px rgba(212,175,55,0.2)'
+                    }} 
+                    onClick={() => {
+                      playClickSound();
+                      setAttendanceModalOpen(true);
+                    }}
+                  >
+                    <Camera size={22} />
+                    {language === 'ar' ? 'تسجيل الحضور والانصراف اليومي' : 'Register Daily Attendance/Departure'}
+                  </motion.button>
+                </div>
               </div>
             </motion.div>
           )}
@@ -905,7 +1111,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   <button className="pos-btn" onClick={() => { setCustomerPhone(''); setCustomerName(''); setTableNumber(''); setOrderType(null); setCart([]); setView('customer_info'); }}>
                     {t.newOrder}
                   </button>
-                  <button className="pos-btn-outline" onClick={() => { setSelectedWaiter(null); setWaiterPasscode(''); setRole('waiter'); setView('waiter_auth'); }}>
+                  <button className="pos-btn-outline" onClick={async () => {
+                    if (selectedWaiter) {
+                      try {
+                        await db.updateWaiterActiveStatus(selectedWaiter.id, false);
+                      } catch (e) {}
+                    }
+                    localStorage.removeItem('meridien_active_pos_waiter');
+                    setSelectedWaiter(null);
+                    setWaiterPasscode('');
+                    setRole('waiter');
+                    setView('waiter_auth');
+                  }}>
                     {language === 'ar' ? 'تسجيل خروج' : 'Logout'}
                   </button>
                 </div>
@@ -1648,6 +1865,170 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
                   >
                     {language === 'ar' ? 'إلغاء' : 'Cancel'}
                   </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Attendance Modal */}
+          {attendanceModalOpen && (
+            <motion.div 
+              key="attendance_modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.85)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10000,
+                padding: '1rem',
+                backdropFilter: 'blur(8px)',
+                direction: language === 'ar' ? 'rtl' : 'ltr'
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                style={{
+                  background: '#18181b',
+                  border: '2px solid var(--gold-primary)',
+                  borderRadius: '24px',
+                  width: '100%',
+                  maxWidth: '850px',
+                  maxHeight: '90vh',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                  overflow: 'hidden'
+                }}
+              >
+                {/* Modal Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', borderBottom: '1px solid #27272a' }}>
+                  <h3 style={{ color: 'var(--gold-primary)', fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
+                    {language === 'ar' ? 'سجل حضور وانصراف الموظفين' : 'Employee Attendance & Shift End'}
+                  </h3>
+                  <button 
+                    onClick={() => {
+                      playClickSound();
+                      setAttendanceModalOpen(false);
+                    }}
+                    style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', padding: '4px' }}
+                  >
+                    <X size={28} />
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '2rem', gap: '2rem', flexWrap: 'wrap' }}>
+                  {/* Left Column: Camera View */}
+                  <div style={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                    <div style={{ position: 'relative', width: '100%', maxWidth: '320px', height: '240px', background: '#09090b', borderRadius: '16px', overflow: 'hidden', border: '2px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {cameraError ? (
+                        <div style={{ padding: '1rem', textAlign: 'center', color: '#ef4444' }}>{cameraError}</div>
+                      ) : (
+                        <>
+                          <video 
+                            ref={videoRef} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            playsInline 
+                            muted 
+                          />
+                          <div style={{ position: 'absolute', bottom: '10px', left: '10px', background: 'rgba(0,0,0,0.6)', color: 'var(--gold-primary)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: 8, height: 8, background: '#22c55e', borderRadius: '50%' }} />
+                            {language === 'ar' ? 'البث المباشر نشط' : 'Live Camera Active'}
+                          </div>
+                        </>
+                      )}
+                      {/* Hidden Canvas for Frame Capture */}
+                      <canvas ref={canvasRef} style={{ display: 'none' }} />
+                    </div>
+                    <p style={{ color: '#71717a', fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
+                      {language === 'ar' 
+                        ? 'يرجى الوقوف أمام الكاميرا بوضوح قبل تسجيل الحضور أو الانصراف.' 
+                        : 'Please stand clearly in front of the camera before checking in or out.'}
+                    </p>
+                  </div>
+
+                  {/* Right Column: Employees List */}
+                  <div style={{ flex: '1.2 1 350px', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden' }}>
+                    {/* Search Bar */}
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type="text"
+                        className="pos-input"
+                        style={{ paddingLeft: '2.5rem', fontSize: '1rem' }}
+                        placeholder={language === 'ar' ? 'بحث باسم الموظف أو رقم الهاتف...' : 'Search employee by name or phone...'}
+                        value={searchEmployeeQuery}
+                        onChange={(e) => setSearchEmployeeQuery(e.target.value)}
+                      />
+                      <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#71717a' }} />
+                    </div>
+
+                    {/* Scrollable list */}
+                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem', paddingRight: '4px' }}>
+                      {employeesList
+                        .filter(emp => {
+                          const q = searchEmployeeQuery.toLowerCase();
+                          return emp.name.toLowerCase().includes(q) || (emp.phone && emp.phone.includes(q));
+                        })
+                        .map(emp => {
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          
+                          // Check if they are currently checked in (active)
+                          const activeLog = attendanceLogsList.find(l => l.employee_id === emp.id && l.date === todayStr && !l.check_out_time);
+                          
+                          // Check if they already completed a shift today
+                          const completedLog = attendanceLogsList.find(l => l.employee_id === emp.id && l.date === todayStr && l.check_out_time);
+
+                          return (
+                            <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#202023', border: '1px solid #27272a', padding: '1rem', borderRadius: '12px', transition: 'all 0.2s' }}>
+                              <div>
+                                <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#fff', fontWeight: 'bold' }}>{emp.name}</h4>
+                                <span style={{ color: '#71717a', fontSize: '0.85rem' }}>{emp.phone || '-'}</span>
+                              </div>
+
+                              <div>
+                                {activeLog ? (
+                                  <button 
+                                    className="pos-btn"
+                                    style={{ background: '#ef4444', borderColor: '#ef4444', color: '#fff', padding: '0.5rem 1rem', fontSize: '0.9rem', borderRadius: '8px' }}
+                                    onClick={() => handleAttendanceAction(emp, false)}
+                                  >
+                                    {language === 'ar' ? 'تسجيل انصراف 🔴' : 'Check Out 🔴'}
+                                  </button>
+                                ) : completedLog ? (
+                                  <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '0.9rem', background: 'rgba(34,197,94,0.1)', padding: '6px 12px', borderRadius: '8px' }}>
+                                    {language === 'ar' ? 'تم إنهاء الوردية ✓' : 'Shift Ended ✓'}
+                                  </span>
+                                ) : (
+                                  <button 
+                                    className="pos-btn"
+                                    style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', borderRadius: '8px' }}
+                                    onClick={() => handleAttendanceAction(emp, true)}
+                                  >
+                                    {language === 'ar' ? 'تسجيل حضور 🟢' : 'Check In 🟢'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                      {employeesList.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '2rem', color: '#71717a' }}>
+                          {language === 'ar' ? 'لا يوجد موظفون مسجلون في النظام حالياً.' : 'No employees registered in the system yet.'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             </motion.div>

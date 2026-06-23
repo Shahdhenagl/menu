@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction } from '../types';
 import { initialCategories, initialProducts, initialInventoryItems, initialProductRecipes } from './seedData';
 
 // Load credentials from environment
@@ -313,30 +313,58 @@ export const db = {
       created_at: new Date().toISOString()
     };
 
-    // Round-Robin Waiter Assignment if no waiter is assigned
+    // Auto-assign waiter: prefer the currently active POS waiter, fallback to round-robin among active database waiters, then fallback to round-robin among all waiters
     if (!newOrder.waiter_id) {
       try {
-        // We use db.getSystemUsers and db.getOrders to avoid 'this' context issues if destructured
-        const users = await db.getSystemUsers();
-        const waiters = users.filter(u => u.role === 'waiter');
-        
-        if (waiters.length > 0) {
-          const orders = await db.getOrders();
-          const lastAssignedOrder = orders.find(o => o.waiter_id);
-          
-          let nextWaiter = waiters[0];
-          if (lastAssignedOrder && lastAssignedOrder.waiter_id) {
-            const lastIndex = waiters.findIndex(w => w.id === lastAssignedOrder.waiter_id);
-            if (lastIndex !== -1 && lastIndex + 1 < waiters.length) {
-              nextWaiter = waiters[lastIndex + 1];
+        // Check if a waiter is currently logged into POS locally (e.g. if order placed from POS)
+        const activeWaiterRaw = typeof localStorage !== 'undefined' ? localStorage.getItem('meridien_active_pos_waiter') : null;
+        if (activeWaiterRaw) {
+          try {
+            const aw = JSON.parse(activeWaiterRaw);
+            if (aw.id && aw.name) {
+              newOrder.waiter_id = aw.id;
+              newOrder.waiter_name = aw.name;
             }
-          }
+          } catch (e) {}
+        }
+
+        // Fallback: check database for active/logged-in waiters (essential for website/customer orders)
+        if (!newOrder.waiter_id) {
+          const users = await db.getSystemUsers();
           
-          newOrder.waiter_id = nextWaiter.id;
-          newOrder.waiter_name = nextWaiter.name;
+          // Filter to waiters active in last 12 hours
+          const activeWaiters = users.filter(u => {
+            if (u.role !== 'waiter' || !u.is_active) return false;
+            if (u.last_active_at) {
+              const lastActive = new Date(u.last_active_at).getTime();
+              const twelveHoursAgo = Date.now() - 12 * 60 * 60 * 1000;
+              return lastActive > twelveHoursAgo;
+            }
+            return true;
+          });
+
+          // Use active waiters if any, otherwise fallback to all waiters
+          const waitersToAssign = activeWaiters.length > 0 ? activeWaiters : users.filter(u => u.role === 'waiter');
+          
+          if (waitersToAssign.length > 0) {
+            const orders = await db.getOrders();
+            // Find the last order assigned to one of these target waiters
+            const lastAssignedOrder = orders.find(o => o.waiter_id && waitersToAssign.some(w => w.id === o.waiter_id));
+            
+            let nextWaiter = waitersToAssign[0];
+            if (lastAssignedOrder && lastAssignedOrder.waiter_id) {
+              const lastIndex = waitersToAssign.findIndex(w => w.id === lastAssignedOrder.waiter_id);
+              if (lastIndex !== -1 && lastIndex + 1 < waitersToAssign.length) {
+                nextWaiter = waitersToAssign[lastIndex + 1];
+              }
+            }
+            
+            newOrder.waiter_id = nextWaiter.id;
+            newOrder.waiter_name = nextWaiter.name;
+          }
         }
       } catch (err) {
-        console.error("Error assigning round-robin waiter:", err);
+        console.error("Error assigning waiter:", err);
       }
     }
 
@@ -365,7 +393,24 @@ export const db = {
   },
 
   async updateOrderStatus(id: string, status: Order['status'], userName?: string): Promise<Order> {
-    await triggerTelegramLog('تحديث حالة طلب', 'Update Order Status', `تغيرت حالة الطلب ${id.slice(0, 6)} إلى ${status}`, userName);
+    let finalUser = userName;
+    try {
+      if (supabase) {
+        const { data: currentOrder } = await supabase.from('orders').select('waiter_name').eq('id', id).single();
+        if (currentOrder?.waiter_name) {
+          finalUser = currentOrder.waiter_name;
+        }
+      } else {
+        const orders = getLocalData('meridien_orders', initialOrders);
+        const currentOrder = orders.find(o => o.id === id);
+        if (currentOrder?.waiter_name) {
+          finalUser = currentOrder.waiter_name;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to retrieve waiter_name for telegram log:", e);
+    }
+    await triggerTelegramLog('تحديث حالة طلب', 'Update Order Status', `تغيرت حالة الطلب ${id.slice(0, 6)} إلى ${status}`, finalUser);
     if (supabase) {
       try {
         const { data: currentOrder } = await supabase.from('orders').select('*').eq('id', id).single();
@@ -408,7 +453,26 @@ export const db = {
   },
 
   async updateOrder(id: string, updates: Partial<Order>, userName?: string): Promise<Order> {
-    await triggerTelegramLog('تعديل طلب', 'Update Order', `تم تعديل الطلب رقم ${id.slice(0, 6)}`, userName);
+    let finalUser = userName || updates.waiter_name;
+    if (!finalUser) {
+      try {
+        if (supabase) {
+          const { data: currentOrder } = await supabase.from('orders').select('waiter_name').eq('id', id).single();
+          if (currentOrder?.waiter_name) {
+            finalUser = currentOrder.waiter_name;
+          }
+        } else {
+          const orders = getLocalData('meridien_orders', initialOrders);
+          const currentOrder = orders.find(o => o.id === id);
+          if (currentOrder?.waiter_name) {
+            finalUser = currentOrder.waiter_name;
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to retrieve waiter_name for telegram log:", e);
+      }
+    }
+    await triggerTelegramLog('تعديل طلب', 'Update Order', `تم تعديل الطلب رقم ${id.slice(0, 6)}`, finalUser);
     if (supabase) {
       try {
         const { data: currentOrder } = await supabase.from('orders').select('*').eq('id', id).single();
@@ -454,7 +518,24 @@ export const db = {
 
 
   async deleteOrder(id: string, userName?: string): Promise<void> {
-    await triggerTelegramLog('حذف الطلب', 'Delete Order', `تم حذف الطلب رقم ${id.slice(0, 6)} نهائياً من النظام`, userName);
+    let finalUser = userName;
+    try {
+      if (supabase) {
+        const { data: currentOrder } = await supabase.from('orders').select('waiter_name').eq('id', id).single();
+        if (currentOrder?.waiter_name) {
+          finalUser = currentOrder.waiter_name;
+        }
+      } else {
+        const orders = getLocalData('meridien_orders', initialOrders);
+        const currentOrder = orders.find(o => o.id === id);
+        if (currentOrder?.waiter_name) {
+          finalUser = currentOrder.waiter_name;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to retrieve waiter_name for telegram log:", e);
+    }
+    await triggerTelegramLog('حذف الطلب', 'Delete Order', `تم حذف الطلب رقم ${id.slice(0, 6)} نهائياً من النظام`, finalUser);
     if (supabase) {
       try {
         const { error } = await supabase.from('orders').delete().eq('id', id);
@@ -638,6 +719,26 @@ export const db = {
     const updated = users.filter(u => u.id !== id);
     saveLocalData('meridien_users', updated);
     return true;
+  },
+
+  async updateWaiterActiveStatus(userId: string, isActive: boolean): Promise<void> {
+    if (supabase) {
+      try {
+        await supabase
+          .from('system_users')
+          .update({ is_active: isActive, last_active_at: new Date().toISOString() })
+          .eq('id', userId);
+      } catch (err) {
+        console.warn("Failed to update active status in Supabase", err);
+      }
+    }
+    const users = getLocalData('meridien_users', [] as SystemUser[]);
+    const index = users.findIndex(u => u.id === userId);
+    if (index !== -1) {
+      users[index].is_active = isActive;
+      users[index].last_active_at = new Date().toISOString();
+      saveLocalData('meridien_users', users);
+    }
   },
 
   // --- RECIPE COMMENTS ---
@@ -1490,6 +1591,161 @@ export const db = {
       customers[idx].total_debt = newDebt;
       saveLocalData('meridien_customers', customers);
     }
+  },
+
+  // --- EMPLOYEES ---
+  async getEmployees(): Promise<Employee[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('employees')
+          .select('*')
+          .order('name', { ascending: true });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase fetch employees failed", err);
+      }
+    }
+    return getLocalData('meridien_employees', [] as Employee[]);
+  },
+
+  async addEmployee(employee: Omit<Employee, 'id' | 'created_at'>): Promise<Employee> {
+    const newEmp: Employee = {
+      ...employee,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('employees').insert([newEmp]).select().single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase insert employee failed", err);
+      }
+    }
+    const employees = getLocalData('meridien_employees', [] as Employee[]);
+    employees.push(newEmp);
+    saveLocalData('meridien_employees', employees);
+    return newEmp;
+  },
+
+  async deleteEmployee(id: string): Promise<boolean> {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('employees').delete().eq('id', id);
+        if (!error) return true;
+      } catch (err) {
+        console.warn("Supabase delete employee failed", err);
+      }
+    }
+    const employees = getLocalData('meridien_employees', [] as Employee[]);
+    const updated = employees.filter(e => e.id !== id);
+    saveLocalData('meridien_employees', updated);
+    return true;
+  },
+
+  // --- ATTENDANCE LOGS ---
+  async getAttendanceLogs(): Promise<AttendanceLog[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('attendance_logs')
+          .select('*')
+          .order('check_in_time', { ascending: false });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase fetch attendance failed", err);
+      }
+    }
+    return getLocalData('meridien_attendance_logs', [] as AttendanceLog[]);
+  },
+
+  async addAttendanceLog(log: Omit<AttendanceLog, 'id' | 'created_at'>): Promise<AttendanceLog> {
+    const newLog: AttendanceLog = {
+      ...log,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('attendance_logs').insert([newLog]).select().single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase insert attendance failed", err);
+      }
+    }
+    const logs = getLocalData('meridien_attendance_logs', [] as AttendanceLog[]);
+    logs.unshift(newLog);
+    saveLocalData('meridien_attendance_logs', logs);
+    return newLog;
+  },
+
+  async updateAttendanceLog(id: string, updates: Partial<AttendanceLog>): Promise<AttendanceLog> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('attendance_logs').update(updates).eq('id', id).select().single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase update attendance failed", err);
+      }
+    }
+    const logs = getLocalData('meridien_attendance_logs', [] as AttendanceLog[]);
+    const index = logs.findIndex(l => l.id === id);
+    if (index === -1) throw new Error("Attendance log not found");
+    logs[index] = { ...logs[index], ...updates };
+    saveLocalData('meridien_attendance_logs', logs);
+    return logs[index];
+  },
+
+  // --- EMPLOYEE TRANSACTIONS ---
+  async getEmployeeTransactions(): Promise<EmployeeTransaction[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('employee_transactions')
+          .select('*')
+          .order('date', { ascending: false });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase fetch transactions failed", err);
+      }
+    }
+    return getLocalData('meridien_employee_transactions', [] as EmployeeTransaction[]);
+  },
+
+  async addEmployeeTransaction(tx: Omit<EmployeeTransaction, 'id' | 'created_at'>): Promise<EmployeeTransaction> {
+    const newTx: EmployeeTransaction = {
+      ...tx,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('employee_transactions').insert([newTx]).select().single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase insert transaction failed", err);
+      }
+    }
+    const txs = getLocalData('meridien_employee_transactions', [] as EmployeeTransaction[]);
+    txs.unshift(newTx);
+    saveLocalData('meridien_employee_transactions', txs);
+    return newTx;
+  },
+
+  async deleteEmployeeTransaction(id: string): Promise<boolean> {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('employee_transactions').delete().eq('id', id);
+        if (!error) return true;
+      } catch (err) {
+        console.warn("Supabase delete transaction failed", err);
+      }
+    }
+    const txs = getLocalData('meridien_employee_transactions', [] as EmployeeTransaction[]);
+    const updated = txs.filter(t => t.id !== id);
+    saveLocalData('meridien_employee_transactions', updated);
+    return true;
   }
 };
 

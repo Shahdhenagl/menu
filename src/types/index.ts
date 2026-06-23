@@ -114,6 +114,8 @@ export interface SystemUser {
   passcode: string;
   role: string;
   created_at?: string;
+  is_active?: boolean;
+  last_active_at?: string;
 }
 
 export interface RecipeComment {
@@ -230,5 +232,38 @@ export interface ProductRecipe {
   created_at?: string;
   inventory_item_name?: string; // resolved item name for convenience in UI
   inventory_item_unit?: string; // resolved unit for convenience in UI
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  phone: string;
+  salary: number;
+  allowed_vacations: number;
+  created_at: string;
+}
+
+export interface AttendanceLog {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  check_in_time: string;
+  check_out_time?: string | null;
+  check_in_photo?: string;
+  check_out_photo?: string;
+  working_hours?: number;
+  penalty_applied?: number;
+  date: string; // YYYY-MM-DD
+  created_at: string;
+}
+
+export interface EmployeeTransaction {
+  id: string;
+  employee_id: string;
+  type: 'advance' | 'bonus' | 'discount' | 'vacation_paid' | 'vacation_unpaid';
+  amount: number;
+  date: string; // YYYY-MM-DD
+  notes?: string;
+  created_at: string;
 }
 

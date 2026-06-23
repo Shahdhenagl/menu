@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction } from '../types';
 import { db } from '../lib/supabase';
 import { printOrderTickets } from '../utils/printUtils';
 import { 
@@ -9,7 +9,8 @@ import {
 import {
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
-  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle, Eye
+  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle, Eye,
+  UserCheck, DollarSign
 } from 'lucide-react';
 import { playClickSound, playNewOrderSound } from '../utils/audioUtils';
 
@@ -26,7 +27,7 @@ interface AdminDashboardProps {
   setLanguage: (lang: 'ar' | 'en') => void;
 }
 
-type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'factory';
+type TabType = 'analytics' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'factory' | 'employees' | 'attendance';
 
 export default function AdminDashboard({
   onClose,
@@ -171,6 +172,15 @@ export default function AdminDashboard({
   const [manualStatus, setManualStatus] = useState<'pending' | 'preparing' | 'delivered' | 'completed' | 'cancelled'>('preparing');
   const [manualItems, setManualItems] = useState<Record<string, number>>({}); // productId -> quantity
 
+  // Invoice filter states
+  const [invFilterType, setInvFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
+  const [invFilterDay, setInvFilterDay] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [invFilterMonth, setInvFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [invFilterYear, setInvFilterYear] = useState<number>(() => new Date().getFullYear());
+  const [invOrderTypeFilter, setInvOrderTypeFilter] = useState<'all' | 'takeaway' | 'talabat' | 'dine_in' | 'delivery'>('all');
+  const [invPaymentFilter, setInvPaymentFilter] = useState<string>('all');
+  const [invSearchQuery, setInvSearchQuery] = useState('');
+
   const previousPendingCount = useRef(0);
 
   useEffect(() => {
@@ -234,6 +244,31 @@ export default function AdminDashboard({
     }
   };
 
+  // --- EMPLOYEE MODULE STATES ---
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+  const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  
+  // Modals & Inputs
+  const [empModalOpen, setEmpModalOpen] = useState(false);
+  const [empName, setEmpName] = useState('');
+  const [empPhone, setEmpPhone] = useState('');
+  const [empSalary, setEmpSalary] = useState<number | ''>('');
+  const [empAllowedVacations, setEmpAllowedVacations] = useState<number>(4);
+
+  // Transaction Inputs
+  const [txModalOpen, setTxModalOpen] = useState(false);
+  const [txType, setTxType] = useState<'advance' | 'bonus' | 'discount' | 'vacation_paid' | 'vacation_unpaid'>('advance');
+  const [txAmount, setTxAmount] = useState<number | ''>('');
+  const [txNotes, setTxNotes] = useState('');
+
+  // Filters
+  const [empSearchQuery, setEmpSearchQuery] = useState('');
+  const [attSearchQuery, setAttSearchQuery] = useState('');
+  const [attDateFilter, setAttDateFilter] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedProfileMonth, setSelectedProfileMonth] = useState(() => new Date().toISOString().slice(0, 7));
+
   // --- SYSTEM USERS MODULE STATES ---
   const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
   const [sysUserModalOpen, setSysUserModalOpen] = useState(false);
@@ -259,7 +294,9 @@ export default function AdminDashboard({
     { id: 'printers', ar: 'إعدادات الطابعات', en: 'Printers' },
     { id: 'inventory', ar: 'إدارة المخازن والموردين', en: 'Inventory & Suppliers' },
     { id: 'inventory_manager', ar: 'أمين المخزن', en: 'Inventory Manager' },
-    { id: 'kitchen_manager', ar: 'مسؤول المطبخ / التصنيع', en: 'Kitchen Manager' }
+    { id: 'kitchen_manager', ar: 'مسؤول المطبخ / التصنيع', en: 'Kitchen Manager' },
+    { id: 'employees', ar: 'إدارة الموظفين والرواتب', en: 'Employees & Payroll' },
+    { id: 'attendance', ar: 'سجل الحضور والانصراف اليومي', en: 'Daily Attendance Logs' }
   ];
 
   const hasPermission = (tabId: string) => {
@@ -274,6 +311,33 @@ export default function AdminDashboard({
       setSystemUsers(data);
     } catch (err) {
       console.error("Error loading system users:", err);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const data = await db.getEmployees();
+      setEmployees(data);
+    } catch (err) {
+      console.error("Error loading employees:", err);
+    }
+  };
+
+  const fetchAttendanceLogs = async () => {
+    try {
+      const data = await db.getAttendanceLogs();
+      setAttendanceLogs(data);
+    } catch (err) {
+      console.error("Error loading attendance:", err);
+    }
+  };
+
+  const fetchEmployeeTransactions = async () => {
+    try {
+      const data = await db.getEmployeeTransactions();
+      setEmployeeTransactions(data);
+    } catch (err) {
+      console.error("Error loading employee transactions:", err);
     }
   };
 
@@ -787,6 +851,9 @@ export default function AdminDashboard({
     fetchSystemUsers();
     fetchPrinters();
     fetchDebtCustomers();
+    fetchEmployees();
+    fetchAttendanceLogs();
+    fetchEmployeeTransactions();
   }, []);
 
   const handleSaveExpense = async (e: React.FormEvent) => {
@@ -896,6 +963,95 @@ export default function AdminDashboard({
       setCatDepartment('restaurant');
     }
     setCatModalOpen(true);
+  };
+
+  const handleSaveEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!empName.trim() || empSalary === '' || Number(empSalary) <= 0) {
+      alert(language === 'ar' ? 'يرجى إدخال اسم الموظف وراتب صحيح!' : 'Please enter employee name and a valid salary!');
+      return;
+    }
+    setLoading(true);
+    try {
+      await db.addEmployee({
+        name: empName.trim(),
+        phone: empPhone.trim(),
+        salary: Number(empSalary),
+        allowed_vacations: empAllowedVacations
+      });
+      setEmpModalOpen(false);
+      setEmpName('');
+      setEmpPhone('');
+      setEmpSalary('');
+      setEmpAllowedVacations(4);
+      await fetchEmployees();
+      alert(language === 'ar' ? 'تم إضافة الموظف بنجاح!' : 'Employee added successfully!');
+    } catch (err) {
+      console.error(err);
+      alert(language === 'ar' ? 'حدث خطأ أثناء إضافة الموظف.' : 'An error occurred.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteEmployee = async (id: string) => {
+    if (!window.confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذا الموظف نهائياً؟' : 'Are you sure you want to delete this employee?')) return;
+    setLoading(true);
+    try {
+      await db.deleteEmployee(id);
+      if (selectedEmployee?.id === id) {
+        setSelectedEmployee(null);
+      }
+      await fetchEmployees();
+      alert(language === 'ar' ? 'تم حذف الموظف بنجاح.' : 'Deleted successfully.');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEmployee) return;
+    const amount = Number(txAmount) || 0;
+    if (amount <= 0 && txType !== 'vacation_paid' && txType !== 'vacation_unpaid') {
+      alert(language === 'ar' ? 'يرجى إدخال مبلغ صحيح!' : 'Please enter a valid amount!');
+      return;
+    }
+    setLoading(true);
+    try {
+      await db.addEmployeeTransaction({
+        employee_id: selectedEmployee.id,
+        type: txType,
+        amount: amount,
+        date: new Date().toISOString().split('T')[0],
+        notes: txNotes.trim()
+      });
+      setTxModalOpen(false);
+      setTxAmount('');
+      setTxNotes('');
+      setTxType('advance');
+      await fetchEmployeeTransactions();
+      alert(language === 'ar' ? 'تم إضافة المعاملة بنجاح!' : 'Transaction recorded successfully!');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTransaction = async (id: string) => {
+    if (!window.confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذه المعاملة؟' : 'Are you sure you want to delete this transaction?')) return;
+    setLoading(true);
+    try {
+      await db.deleteEmployeeTransaction(id);
+      await fetchEmployeeTransactions();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSaveCategory = async (e: React.FormEvent) => {
@@ -1200,13 +1356,37 @@ export default function AdminDashboard({
     });
   };
 
+  const getShiftBoundaries = (dateStr: string) => {
+    const logsForDate = attendanceLogs.filter(l => l.date === dateStr);
+    if (logsForDate.length === 0) return null;
+
+    const checkInTimes = logsForDate.map(l => new Date(l.check_in_time).getTime());
+    const earliestCheckIn = new Date(Math.min(...checkInTimes));
+
+    const hasActiveShift = logsForDate.some(l => !l.check_out_time);
+    let latestCheckOut: Date;
+    if (hasActiveShift) {
+      latestCheckOut = new Date();
+    } else {
+      const checkOutTimes = logsForDate.map(l => l.check_out_time ? new Date(l.check_out_time).getTime() : 0);
+      latestCheckOut = new Date(Math.max(...checkOutTimes));
+    }
+
+    return { start: earliestCheckIn, end: latestCheckOut };
+  };
+
   const filteredOrders = orders.filter(order => {
     if (ordersDepartmentFilter !== 'all' && !orderHasDepartment(order, ordersDepartmentFilter)) return false;
     if (!order.created_at) return true;
     const orderDate = new Date(order.created_at);
     if (orderFilterType === 'day') {
-      const dayStr = orderDate.toISOString().split('T')[0];
-      return dayStr === selectedFilterDay;
+      const boundaries = getShiftBoundaries(selectedFilterDay);
+      if (boundaries) {
+        return orderDate >= boundaries.start && orderDate <= boundaries.end;
+      } else {
+        const dayStr = orderDate.toISOString().split('T')[0];
+        return dayStr === selectedFilterDay;
+      }
     }
     if (orderFilterType === 'month') {
       const monthStr = orderDate.toISOString().slice(0, 7);
@@ -1215,6 +1395,54 @@ export default function AdminDashboard({
     if (orderFilterType === 'year') {
       return orderDate.getFullYear() === selectedFilterYear;
     }
+    return true;
+  });
+
+  // --- INVOICE FILTERING ---
+  const filteredInvoices = orders.filter(o => {
+    // Only completed orders
+    if (o.status !== 'completed') return false;
+
+    // Time filter
+    if (invFilterType !== 'all' && o.created_at) {
+      const d = new Date(o.created_at);
+      if (invFilterType === 'day') {
+        const boundaries = getShiftBoundaries(invFilterDay);
+        if (boundaries) {
+          if (d < boundaries.start || d > boundaries.end) return false;
+        } else {
+          if (d.toISOString().split('T')[0] !== invFilterDay) return false;
+        }
+      } else if (invFilterType === 'month') {
+        if (d.toISOString().slice(0, 7) !== invFilterMonth) return false;
+      } else if (invFilterType === 'year') {
+        if (d.getFullYear() !== invFilterYear) return false;
+      }
+    }
+
+    // Order type filter
+    if (invOrderTypeFilter !== 'all' && o.order_type !== invOrderTypeFilter) return false;
+
+    // Payment method filter
+    if (invPaymentFilter !== 'all') {
+      if (invPaymentFilter === 'deferred') {
+        if (o.payment_method !== 'deferred' && !(o.payment_details?.deferred > 0)) return false;
+      } else if (invPaymentFilter === 'hospitality') {
+        if (o.payment_method !== 'hospitality') return false;
+      } else {
+        if (o.payment_method !== invPaymentFilter) return false;
+      }
+    }
+
+    // Search query
+    if (invSearchQuery.trim()) {
+      const q = invSearchQuery.trim().toLowerCase();
+      const matchName = o.customer_name?.toLowerCase().includes(q);
+      const matchPhone = o.customer_phone?.includes(q);
+      const matchId = o.id.toLowerCase().includes(q);
+      if (!matchName && !matchPhone && !matchId) return false;
+    }
+
     return true;
   });
 
@@ -2204,6 +2432,26 @@ export default function AdminDashboard({
             >
               <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>💰</span>
               <span>{language === 'ar' ? 'التكاليف والمصروفات' : 'Costs & Expenses'}</span>
+            </button>
+          )}
+
+          {hasPermission('employees') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'employees' ? 'active' : ''}`}
+              onClick={() => setActiveTab('employees')}
+            >
+              <DollarSign size={18} />
+              <span>{language === 'ar' ? 'الموظفين والرواتب' : 'Employees & Payroll'}</span>
+            </button>
+          )}
+
+          {hasPermission('attendance') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'attendance' ? 'active' : ''}`}
+              onClick={() => setActiveTab('attendance')}
+            >
+              <UserCheck size={18} />
+              <span>{language === 'ar' ? 'سجل الحضور والانصراف' : 'Daily Attendance'}</span>
             </button>
           )}
 
@@ -3365,37 +3613,107 @@ export default function AdminDashboard({
                 </div>
               </div>
 
+              {/* Filters Row */}
+              <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.5rem', padding: '1rem', background: 'rgba(212,175,55,0.03)', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                {/* Search */}
+                <div style={{ flex: '1 1 250px', position: 'relative' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-gray)' }} />
+                  <input
+                    type="text"
+                    className="input-gold"
+                    placeholder={language === 'ar' ? 'بحث بالاسم أو الهاتف أو رقم الفاتورة...' : 'Search name, phone, invoice #...'}
+                    value={invSearchQuery}
+                    onChange={(e) => setInvSearchQuery(e.target.value)}
+                    style={{ width: '100%', paddingLeft: '34px', borderRadius: '10px', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                {/* Time filter */}
+                <select value={invFilterType} onChange={(e) => setInvFilterType(e.target.value as any)} className="input-gold" style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}>
+                  <option value="all">{language === 'ar' ? 'كل الأوقات' : 'All Time'}</option>
+                  <option value="day">{language === 'ar' ? 'باليوم 📅' : 'By Day 📅'}</option>
+                  <option value="month">{language === 'ar' ? 'بالشهر 🗓️' : 'By Month 🗓️'}</option>
+                  <option value="year">{language === 'ar' ? 'بالسنة ⏳' : 'By Year ⏳'}</option>
+                </select>
+
+                {invFilterType === 'day' && (
+                  <input type="date" className="input-gold" value={invFilterDay} onChange={(e) => setInvFilterDay(e.target.value)} style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }} />
+                )}
+                {invFilterType === 'month' && (
+                  <input type="month" className="input-gold" value={invFilterMonth} onChange={(e) => setInvFilterMonth(e.target.value)} style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }} />
+                )}
+                {invFilterType === 'year' && (
+                  <select className="input-gold" value={invFilterYear} onChange={(e) => setInvFilterYear(Number(e.target.value))} style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}>
+                    {[2024, 2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                )}
+
+                {/* Order type filter */}
+                <select value={invOrderTypeFilter} onChange={(e) => setInvOrderTypeFilter(e.target.value as any)} className="input-gold" style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}>
+                  <option value="all">{language === 'ar' ? 'كل الأنواع' : 'All Types'}</option>
+                  <option value="dine_in">{language === 'ar' ? '🍽️ داين إن' : '🍽️ Dine In'}</option>
+                  <option value="takeaway">{language === 'ar' ? '🥡 تيك أواي' : '🥡 Takeaway'}</option>
+                  <option value="delivery">{language === 'ar' ? '🚗 توصيل' : '🚗 Delivery'}</option>
+                  <option value="talabat">{language === 'ar' ? '📱 طلبات' : '📱 Talabat'}</option>
+                </select>
+
+                {/* Payment method filter */}
+                <select value={invPaymentFilter} onChange={(e) => setInvPaymentFilter(e.target.value)} className="input-gold" style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}>
+                  <option value="all">{language === 'ar' ? 'كل طرق الدفع' : 'All Payments'}</option>
+                  <option value="cash">{language === 'ar' ? '💵 كاش' : '💵 Cash'}</option>
+                  <option value="visa">{language === 'ar' ? '💳 فيزا' : '💳 Visa'}</option>
+                  <option value="wallet">{language === 'ar' ? '📱 محفظة' : '📱 Wallet'}</option>
+                  <option value="instapay">{language === 'ar' ? '💸 انستاباي' : '💸 Instapay'}</option>
+                  <option value="split">{language === 'ar' ? '🔀 مقسم' : '🔀 Split'}</option>
+                  <option value="deferred">{language === 'ar' ? '📋 آجل' : '📋 Deferred'}</option>
+                  <option value="hospitality">{language === 'ar' ? '🎁 ضيافة' : '🎁 Hospitality'}</option>
+                </select>
+              </div>
+
               {/* Invoice Summary Cards */}
               {(() => {
-                const completedInvoices = orders.filter(o => o.status === 'completed' || o.status?.startsWith('completed'));
-                const totalSales = completedInvoices.reduce((s, o) => s + o.total_price, 0);
-                const totalCost = completedInvoices.reduce((s, o) => s + (o.total_cost || 0), 0);
+                const totalSales = filteredInvoices.reduce((s, o) => s + o.total_price, 0);
+                const totalCost = filteredInvoices.reduce((s, o) => s + (o.total_cost || 0), 0);
                 const totalProfit = totalSales - totalCost;
+                const deferredTotal = filteredInvoices.filter(o => o.payment_method === 'deferred' || o.payment_details?.deferred > 0).reduce((s, o) => s + (o.payment_details?.deferred || o.total_price), 0);
+                const hospitalityTotal = filteredInvoices.filter(o => o.payment_method === 'hospitality').reduce((s, o) => s + (o.payment_details?.original_price || 0), 0);
                 return (
                   <>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.8rem', marginBottom: '1.5rem' }}>
                       <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(16,185,129,0.2)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'إجمالي المبيعات' : 'Total Sales'}</div>
-                        <div className="font-en" style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--success)' }}>
-                          +{totalSales.toLocaleString()} <span style={{ fontSize: '0.8rem' }}>EGP</span>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'إجمالي المبيعات' : 'Total Sales'}</div>
+                        <div className="font-en" style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--success)' }}>
+                          +{totalSales.toLocaleString()} <span style={{ fontSize: '0.7rem' }}>EGP</span>
                         </div>
                       </div>
                       <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(239,68,68,0.2)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'إجمالي التكلفة (الخامات)' : 'Total COGS'}</div>
-                        <div className="font-en" style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--danger)' }}>
-                          -{totalCost.toLocaleString()} <span style={{ fontSize: '0.8rem' }}>EGP</span>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'التكلفة' : 'COGS'}</div>
+                        <div className="font-en" style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--danger)' }}>
+                          -{totalCost.toLocaleString()} <span style={{ fontSize: '0.7rem' }}>EGP</span>
                         </div>
                       </div>
                       <div style={{ background: 'rgba(212,175,55,0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(212,175,55,0.2)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'صافي الربح' : 'Net Profit'}</div>
-                        <div className="font-en" style={{ fontSize: '1.5rem', fontWeight: '800', color: totalProfit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                          {totalProfit >= 0 ? '+' : ''}{totalProfit.toLocaleString()} <span style={{ fontSize: '0.8rem' }}>EGP</span>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'صافي الربح' : 'Net Profit'}</div>
+                        <div className="font-en" style={{ fontSize: '1.3rem', fontWeight: '800', color: totalProfit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                          {totalProfit >= 0 ? '+' : ''}{totalProfit.toLocaleString()} <span style={{ fontSize: '0.7rem' }}>EGP</span>
                         </div>
                       </div>
                       <div style={{ background: 'rgba(212,175,55,0.03)', padding: '1rem', borderRadius: '14px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'عدد الفواتير' : 'Invoice Count'}</div>
-                        <div className="font-en" style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--gold-primary)' }}>
-                          {completedInvoices.length}
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'عدد الفواتير' : 'Invoices'}</div>
+                        <div className="font-en" style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--gold-primary)' }}>
+                          {filteredInvoices.length}
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(251,191,36,0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(251,191,36,0.2)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? '📋 آجل' : '📋 Deferred'}</div>
+                        <div className="font-en" style={{ fontSize: '1.3rem', fontWeight: '800', color: '#fbbf24' }}>
+                          {deferredTotal.toLocaleString()} <span style={{ fontSize: '0.7rem' }}>EGP</span>
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(168,85,247,0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(168,85,247,0.2)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? '🎁 ضيافة' : '🎁 Hospitality'}</div>
+                        <div className="font-en" style={{ fontSize: '1.3rem', fontWeight: '800', color: '#a855f7' }}>
+                          {hospitalityTotal.toLocaleString()} <span style={{ fontSize: '0.7rem' }}>EGP</span>
                         </div>
                       </div>
                     </div>
@@ -3407,6 +3725,7 @@ export default function AdminDashboard({
                             <th>{language === 'ar' ? 'رقم الفاتورة' : 'Invoice #'}</th>
                             <th>{language === 'ar' ? 'العميل' : 'Customer'}</th>
                             <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                            <th>{language === 'ar' ? 'النوع' : 'Type'}</th>
                             <th>{language === 'ar' ? 'طريقة الدفع' : 'Payment'}</th>
                             <th>{language === 'ar' ? 'سعر البيع' : 'Sale Price'}</th>
                             <th>{language === 'ar' ? 'التكلفة' : 'Cost'}</th>
@@ -3415,10 +3734,11 @@ export default function AdminDashboard({
                           </tr>
                         </thead>
                         <tbody>
-                          {completedInvoices.map(inv => {
+                          {filteredInvoices.map(inv => {
                             const cost = inv.total_cost || 0;
                             const profit = inv.total_price - cost;
-                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet' ? '📱 محفظة' : '💵 كاش';
+                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet' ? '📱 محفظة' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : '💵 كاش';
+                            const typeLabel = inv.order_type === 'dine_in' ? '🍽️' : inv.order_type === 'takeaway' ? '🥡' : inv.order_type === 'delivery' ? '🚗' : inv.order_type === 'talabat' ? '📱' : '—';
                             return (
                               <tr key={inv.id}>
                                 <td className="font-en" style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--gold-primary)' }}>#{inv.id.slice(0, 8)}</td>
@@ -3427,6 +3747,7 @@ export default function AdminDashboard({
                                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{inv.customer_phone}</div>
                                 </td>
                                 <td className="font-en" style={{ fontSize: '0.8rem' }}>{new Date(inv.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}</td>
+                                <td style={{ fontSize: '0.85rem' }}>{typeLabel} {inv.order_type?.toUpperCase()}</td>
                                 <td style={{ fontSize: '0.85rem' }}>{payLabel}</td>
                                 <td className="font-en" style={{ fontWeight: 'bold', color: 'var(--success)' }}>+{inv.total_price.toLocaleString()}</td>
                                 <td className="font-en" style={{ fontWeight: 'bold', color: 'var(--danger)' }}>-{cost.toLocaleString()}</td>
@@ -3440,7 +3761,20 @@ export default function AdminDashboard({
                                       style={{ padding: '0.3rem 0.5rem', fontSize: '0.75rem', borderRadius: '8px' }}
                                       onClick={() => {
                                         const items = inv.items.map((i: any) => `${language === 'ar' ? i.name_ar : i.name_en} x${i.quantity} = ${(i.price * i.quantity).toFixed(2)}`).join('\n');
-                                        alert(`${language === 'ar' ? 'تفاصيل الفاتورة' : 'Invoice Details'} #${inv.id.slice(0,8)}\n\n${items}\n\n${language === 'ar' ? 'الإجمالي' : 'Total'}: ${inv.total_price} EGP\n${language === 'ar' ? 'التكلفة' : 'Cost'}: ${cost} EGP\n${language === 'ar' ? 'الربح' : 'Profit'}: ${profit} EGP`);
+                                        const pd = inv.payment_details;
+                                        let payInfo = '';
+                                        if (pd && typeof pd === 'object' && pd.type !== 'hospitality') {
+                                          payInfo = `\n${language === 'ar' ? 'تفاصيل الدفع:' : 'Payment Details:'}\n` +
+                                            (pd.cash ? `  كاش: ${pd.cash}\n` : '') +
+                                            (pd.visa ? `  فيزا: ${pd.visa}\n` : '') +
+                                            (pd.wallet ? `  محفظة: ${pd.wallet}\n` : '') +
+                                            (pd.instapay ? `  انستاباي: ${pd.instapay}\n` : '') +
+                                            (pd.deferred ? `  آجل: ${pd.deferred}\n` : '');
+                                        }
+                                        if (pd?.type === 'hospitality') {
+                                          payInfo = `\n🎁 ${language === 'ar' ? 'ضيافة - القيمة الأصلية:' : 'Hospitality - Original:'} ${pd.original_price} EGP`;
+                                        }
+                                        alert(`${language === 'ar' ? 'تفاصيل الفاتورة' : 'Invoice Details'} #${inv.id.slice(0,8)}\n\n${items}\n\n${language === 'ar' ? 'الإجمالي' : 'Total'}: ${inv.total_price} EGP\n${language === 'ar' ? 'التكلفة' : 'Cost'}: ${cost} EGP\n${language === 'ar' ? 'الربح' : 'Profit'}: ${profit} EGP${payInfo}`);
                                       }}
                                     >
                                       👁 {language === 'ar' ? 'عرض' : 'View'}
@@ -3461,10 +3795,10 @@ export default function AdminDashboard({
                               </tr>
                             );
                           })}
-                          {completedInvoices.length === 0 && (
+                          {filteredInvoices.length === 0 && (
                             <tr>
-                              <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem' }}>
-                                {language === 'ar' ? 'لا توجد فواتير مكتملة حالياً' : 'No completed invoices found'}
+                              <td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem' }}>
+                                {language === 'ar' ? 'لا توجد فواتير مطابقة للفلاتر المحددة' : 'No invoices match the selected filters'}
                               </td>
                             </tr>
                           )}
@@ -4612,6 +4946,347 @@ export default function AdminDashboard({
             )}
           </div>
         )}
+
+        {/* TAB: EMPLOYEES & PAYROLL / الموظفين والرواتب */}
+        {activeTab === 'employees' && (
+              <div>
+                {selectedEmployee ? (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                      <button className="btn-outline-gold" onClick={() => setSelectedEmployee(null)}>
+                        &larr; {language === 'ar' ? 'العودة لقائمة الموظفين' : 'Back to Employee List'}
+                      </button>
+                      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <label style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>
+                          {language === 'ar' ? 'شهر الحسابات:' : 'Payroll Month:'}
+                        </label>
+                        <input 
+                          type="month" 
+                          className="input-gold" 
+                          style={{ width: '150px' }}
+                          value={selectedProfileMonth} 
+                          onChange={(e) => setSelectedProfileMonth(e.target.value)} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Employee Profile summary */}
+                    {(() => {
+                      const txs = employeeTransactions.filter(t => t.employee_id === selectedEmployee.id && t.date.slice(0, 7) === selectedProfileMonth);
+                      const advances = txs.filter(t => t.type === 'advance').reduce((s, t) => s + t.amount, 0);
+                      const bonuses = txs.filter(t => t.type === 'bonus').reduce((s, t) => s + t.amount, 0);
+                      const manualDiscounts = txs.filter(t => t.type === 'discount').reduce((s, t) => s + t.amount, 0);
+                      const paidVacations = txs.filter(t => t.type === 'vacation_paid').length;
+                      const unpaidVacations = txs.filter(t => t.type === 'vacation_unpaid').length;
+
+                      // Auto attendance penalty calculation
+                      const attLogs = attendanceLogs.filter(l => l.employee_id === selectedEmployee.id && l.date.slice(0, 7) === selectedProfileMonth);
+                      const autoDiscounts = attLogs.reduce((s, l) => s + (l.penalty_applied || 0), 0);
+
+                      // Vacation deduction
+                      const allowedVacations = selectedEmployee.allowed_vacations ?? 4;
+                      const extraPaidVacations = Math.max(0, paidVacations - allowedVacations);
+                      const vacationDeduction = (extraPaidVacations + unpaidVacations) * (selectedEmployee.salary / 30);
+
+                      const totalDiscounts = manualDiscounts + autoDiscounts + vacationDeduction;
+                      const netSalary = selectedEmployee.salary + bonuses - advances - totalDiscounts;
+
+                      return (
+                        <div>
+                          <div className="table-panel" style={{ padding: '2rem', marginBottom: '2rem', background: 'radial-gradient(circle at top right, rgba(212,175,55,0.05) 0%, transparent 60%)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid #333', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
+                              <div>
+                                <h1 style={{ color: 'var(--gold-primary)', margin: '0 0 0.5rem 0', fontSize: '2rem' }}>{selectedEmployee.name}</h1>
+                                <p style={{ color: 'var(--text-gray)', margin: 0 }}>📞 {selectedEmployee.phone || '-'}</p>
+                              </div>
+                              <button className="btn-gold" onClick={() => setTxModalOpen(true)}>
+                                <Plus size={18} /> {language === 'ar' ? 'إضافة معاملة (سلفة / حافز / إجازة / خصم)' : 'Add Transaction / Leave'}
+                              </button>
+                            </div>
+
+                            {/* Statistics Grid */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+                              <div style={{ background: '#1c1c1e', border: '1px solid #333', borderRadius: '16px', padding: '1.5rem', textAlign: 'center' }}>
+                                <div style={{ color: '#8e8e93', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{language === 'ar' ? 'الراتب الأساسي' : 'Base Salary'}</div>
+                                <div style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 'bold' }}>{selectedEmployee.salary.toFixed(2)} EGP</div>
+                              </div>
+                              <div style={{ background: '#1c1c1e', border: '1px solid #333', borderRadius: '16px', padding: '1.5rem', textAlign: 'center' }}>
+                                <div style={{ color: '#8e8e93', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{language === 'ar' ? 'إجمالي الحوافز' : 'Total Bonuses'}</div>
+                                <div style={{ color: '#2ecc71', fontSize: '1.5rem', fontWeight: 'bold' }}>+ {bonuses.toFixed(2)} EGP</div>
+                              </div>
+                              <div style={{ background: '#1c1c1e', border: '1px solid #333', borderRadius: '16px', padding: '1.5rem', textAlign: 'center' }}>
+                                <div style={{ color: '#8e8e93', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{language === 'ar' ? 'إجمالي السلف' : 'Total Advances'}</div>
+                                <div style={{ color: '#eab308', fontSize: '1.5rem', fontWeight: 'bold' }}>- {advances.toFixed(2)} EGP</div>
+                              </div>
+                              <div style={{ background: '#1c1c1e', border: '1px solid #333', borderRadius: '16px', padding: '1.5rem', textAlign: 'center' }}>
+                                <div style={{ color: '#8e8e93', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{language === 'ar' ? 'إجمالي الخصومات والإجازات' : 'Discounts & Short Hours'}</div>
+                                <div style={{ color: '#ef4444', fontSize: '1.5rem', fontWeight: 'bold' }}>- {totalDiscounts.toFixed(2)} EGP</div>
+                              </div>
+                              <div style={{ background: 'rgba(212,175,55,0.05)', border: '1px solid var(--gold-primary)', borderRadius: '16px', padding: '1.5rem', textAlign: 'center' }}>
+                                <div style={{ color: 'var(--gold-primary)', fontSize: '0.9rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>{language === 'ar' ? 'صافي الراتب المستحق' : 'Net Salary Due'}</div>
+                                <div style={{ color: 'var(--gold-primary)', fontSize: '1.7rem', fontWeight: 'bold' }}>{netSalary.toFixed(2)} EGP</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2rem' }}>
+                            {/* Transactions List */}
+                            <div className="table-panel" style={{ padding: '1.5rem' }}>
+                              <h3 style={{ color: 'var(--gold-primary)', marginBottom: '1rem', borderBottom: '1px solid #333', paddingBottom: '0.5rem' }}>
+                                {language === 'ar' ? 'المعاملات المالية والإجازات للشهر' : 'Monthly Financials & Leaves'}
+                              </h3>
+                              <div className="table-responsive">
+                                <table className="admin-table">
+                                  <thead>
+                                    <tr>
+                                      <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                                      <th>{language === 'ar' ? 'النوع' : 'Type'}</th>
+                                      <th>{language === 'ar' ? 'المبلغ' : 'Amount'}</th>
+                                      <th>{language === 'ar' ? 'ملاحظات' : 'Notes'}</th>
+                                      <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {txs.map(t => (
+                                      <tr key={t.id}>
+                                        <td className="font-en">{new Date(t.date).toLocaleDateString()}</td>
+                                        <td>
+                                          {t.type === 'advance' ? (language === 'ar' ? '💸 سلفة' : 'Advance') :
+                                           t.type === 'bonus' ? (language === 'ar' ? '🟢 حافز' : 'Bonus') :
+                                           t.type === 'discount' ? (language === 'ar' ? '🔴 خصم يدوي' : 'Manual Discount') :
+                                           t.type === 'vacation_paid' ? (language === 'ar' ? '🏖️ إجازة مدفوعة' : 'Paid Vacation') :
+                                           t.type === 'vacation_unpaid' ? (language === 'ar' ? '🏚️ إجازة غير مدفوعة' : 'Unpaid Vacation') : t.type}
+                                        </td>
+                                        <td className="font-en">
+                                          {t.type === 'vacation_paid' || t.type === 'vacation_unpaid' ? '-' : `${t.amount.toFixed(2)} EGP`}
+                                        </td>
+                                        <td>{t.notes || '-'}</td>
+                                        <td>
+                                          <button className="btn-delete" onClick={() => handleDeleteTransaction(t.id)}>
+                                            <Trash2 size={16} />
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    {txs.length === 0 && (
+                                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد معاملات مسجلة في هذا الشهر' : 'No transactions for this month'}</td></tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* Monthly Attendance Table */}
+                            <div className="table-panel" style={{ padding: '1.5rem' }}>
+                              <h3 style={{ color: 'var(--gold-primary)', marginBottom: '1rem', borderBottom: '1px solid #333', paddingBottom: '0.5rem' }}>
+                                {language === 'ar' ? 'سجل الحضور والانصراف للشهر' : 'Monthly Attendance Logs'}
+                              </h3>
+                              <div className="table-responsive">
+                                <table className="admin-table">
+                                  <thead>
+                                    <tr>
+                                      <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
+                                      <th>{language === 'ar' ? 'حضور' : 'Check In'}</th>
+                                      <th>{language === 'ar' ? 'انصراف' : 'Check Out'}</th>
+                                      <th>{language === 'ar' ? 'ساعات العمل' : 'Hours'}</th>
+                                      <th>{language === 'ar' ? 'الخصم التلقائي' : 'Auto Deduction'}</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {attLogs.map(l => (
+                                      <tr key={l.id}>
+                                        <td className="font-en">{l.date}</td>
+                                        <td className="font-en">{new Date(l.check_in_time).toLocaleTimeString('ar-EG')}</td>
+                                        <td className="font-en">
+                                          {l.check_out_time ? new Date(l.check_out_time).toLocaleTimeString('ar-EG') : <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{language === 'ar' ? 'نشط' : 'Active'}</span>}
+                                        </td>
+                                        <td className="font-en">{l.working_hours !== undefined ? `${l.working_hours} ساعة` : '-'}</td>
+                                        <td className="font-en" style={{ color: (l.penalty_applied || 0) > 0 ? '#ff4d4d' : 'var(--text-gray)' }}>
+                                          {(l.penalty_applied || 0) > 0 ? `${l.penalty_applied?.toFixed(2)} EGP` : '-'}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    {attLogs.length === 0 && (
+                                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد سجلات حضور في هذا الشهر' : 'No attendance logs for this month'}</td></tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div>
+                    {/* List of employees view */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                      <h2 style={{ color: 'var(--gold-primary)', margin: 0 }}>{language === 'ar' ? 'إدارة الموظفين والرواتب' : 'Employees & Payroll Management'}</h2>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <div style={{ position: 'relative' }}>
+                          <input 
+                            type="text" 
+                            className="input-gold" 
+                            style={{ paddingLeft: '2.5rem', width: '250px' }}
+                            placeholder={language === 'ar' ? 'بحث عن موظف بالاسم...' : 'Search employee by name...'}
+                            value={empSearchQuery}
+                            onChange={(e) => setEmpSearchQuery(e.target.value)}
+                          />
+                          <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--gold-primary)' }} />
+                        </div>
+                        <button className="btn-gold" onClick={() => setEmpModalOpen(true)}>
+                          <Plus size={18} /> {language === 'ar' ? 'إضافة موظف جديد' : 'Add Employee'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="table-panel">
+                      <div className="table-responsive">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>{language === 'ar' ? 'اسم الموظف' : 'Employee Name'}</th>
+                              <th>{language === 'ar' ? 'رقم الهاتف' : 'Phone'}</th>
+                              <th>{language === 'ar' ? 'الراتب الأساسي' : 'Base Salary'}</th>
+                              <th>{language === 'ar' ? 'الإجازات المسموحة شهرياً' : 'Allowed Leaves/Month'}</th>
+                              <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {employees
+                              .filter(e => e.name.toLowerCase().includes(empSearchQuery.toLowerCase()))
+                              .map(emp => (
+                                <tr key={emp.id}>
+                                  <td style={{ fontWeight: 'bold', color: 'var(--gold-primary)' }}>{emp.name}</td>
+                                  <td className="font-en">{emp.phone || '-'}</td>
+                                  <td className="font-en">{emp.salary.toFixed(2)} EGP</td>
+                                  <td className="font-en">{emp.allowed_vacations} {language === 'ar' ? 'أيام' : 'days'}</td>
+                                  <td>
+                                    <div style={{ display: 'flex', gap: '0.8rem' }}>
+                                      <button className="btn-gold" style={{ padding: '0.3rem 0.8rem', fontSize: '0.85rem' }} onClick={() => {
+                                        setSelectedProfileMonth(new Date().toISOString().slice(0, 7));
+                                        setSelectedEmployee(emp);
+                                      }}>
+                                        👤 {language === 'ar' ? 'كشف الحساب والبروفايل' : 'View Profile'}
+                                      </button>
+                                      <button className="btn-delete" onClick={() => handleDeleteEmployee(emp.id)}>
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            {employees.length === 0 && (
+                              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem' }}>{language === 'ar' ? 'لا يوجد موظفون مسجلون في النظام حالياً' : 'No employees registered yet'}</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: DAILY ATTENDANCE LOG / سجل الحضور والانصراف */}
+            {activeTab === 'attendance' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                  <h2 style={{ color: 'var(--gold-primary)', margin: 0 }}>{language === 'ar' ? 'سجل الحضور والانصراف اليومي' : 'Daily Attendance Log'}</h2>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type="text" 
+                        className="input-gold" 
+                        style={{ paddingLeft: '2.5rem', width: '220px' }}
+                        placeholder={language === 'ar' ? 'بحث باسم الموظف...' : 'Search by employee...'}
+                        value={attSearchQuery}
+                        onChange={(e) => setAttSearchQuery(e.target.value)}
+                      />
+                      <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--gold-primary)' }} />
+                    </div>
+                    <input 
+                      type="date" 
+                      className="input-gold" 
+                      style={{ width: '160px' }}
+                      value={attDateFilter} 
+                      onChange={(e) => setAttDateFilter(e.target.value)} 
+                    />
+                  </div>
+                </div>
+
+                <div className="table-panel">
+                  <div className="table-responsive">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>{language === 'ar' ? 'الموظف' : 'Employee'}</th>
+                          <th>{language === 'ar' ? 'تاريخ الوردية' : 'Shift Date'}</th>
+                          <th>{language === 'ar' ? 'حضور' : 'Check In'}</th>
+                          <th>{language === 'ar' ? 'صورة الحضور' : 'Check In Photo'}</th>
+                          <th>{language === 'ar' ? 'انصراف' : 'Check Out'}</th>
+                          <th>{language === 'ar' ? 'صورة الانصراف' : 'Check Out Photo'}</th>
+                          <th>{language === 'ar' ? 'ساعات العمل' : 'Working Hours'}</th>
+                          <th>{language === 'ar' ? 'خصم التأخر (< 9ساعات)' : 'Short Hours Penalty'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attendanceLogs
+                          .filter(l => {
+                            const matchName = l.employee_name.toLowerCase().includes(attSearchQuery.toLowerCase());
+                            const matchDate = l.date === attDateFilter;
+                            return matchName && matchDate;
+                          })
+                          .map(log => (
+                            <tr key={log.id}>
+                              <td style={{ fontWeight: 'bold' }}>{log.employee_name}</td>
+                              <td className="font-en">{log.date}</td>
+                              <td className="font-en">{new Date(log.check_in_time).toLocaleTimeString('ar-EG')}</td>
+                              <td>
+                                {log.check_in_photo ? (
+                                  <img 
+                                    src={log.check_in_photo} 
+                                    alt="Check In" 
+                                    style={{ width: '50px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #333', cursor: 'pointer' }}
+                                    onClick={() => {
+                                      const w = window.open();
+                                      w?.document.write(`<img src="${log.check_in_photo}" style="width:100%; max-width:800px; display:block; margin:auto;" />`);
+                                    }}
+                                  />
+                                ) : '-'}
+                              </td>
+                              <td className="font-en">
+                                {log.check_out_time ? new Date(log.check_out_time).toLocaleTimeString('ar-EG') : <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{language === 'ar' ? 'قيد العمل' : 'On Duty'}</span>}
+                              </td>
+                              <td>
+                                {log.check_out_photo ? (
+                                  <img 
+                                    src={log.check_out_photo} 
+                                    alt="Check Out" 
+                                    style={{ width: '50px', height: '40px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #333', cursor: 'pointer' }}
+                                    onClick={() => {
+                                      const w = window.open();
+                                      w?.document.write(`<img src="${log.check_out_photo}" style="width:100%; max-width:800px; display:block; margin:auto;" />`);
+                                    }}
+                                  />
+                                ) : '-'}
+                              </td>
+                              <td className="font-en">{log.working_hours !== undefined ? `${log.working_hours} ساعة` : '-'}</td>
+                              <td className="font-en" style={{ color: (log.penalty_applied || 0) > 0 ? '#ff4d4d' : 'var(--text-gray)' }}>
+                                {(log.penalty_applied || 0) > 0 ? `${log.penalty_applied?.toFixed(2)} EGP` : '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        {attendanceLogs.filter(l => l.date === attDateFilter).length === 0 && (
+                          <tr><td colSpan={8} style={{ textAlign: 'center', padding: '1.5rem' }}>{language === 'ar' ? 'لا توجد سجلات حضور مسجلة لهذا اليوم' : 'No attendance logs for this day'}</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
 
       </main>
 
@@ -6450,6 +7125,128 @@ export default function AdminDashboard({
                 {language === 'ar' ? 'إلغاء' : 'Cancel'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Employee Modal */}
+      {empModalOpen && (
+        <div className="admin-modal-overlay" onClick={() => setEmpModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'إضافة موظف جديد' : 'Add New Employee'}</h2>
+              <button className="btn-close" onClick={() => setEmpModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveEmployee}>
+              <div className="admin-modal-body">
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'اسم الموظف *' : 'Employee Name *'}</label>
+                  <input 
+                    type="text" 
+                    className="input-gold" 
+                    value={empName} 
+                    onChange={(e) => setEmpName(e.target.value)} 
+                    required 
+                  />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'رقم الهاتف' : 'Phone Number'}</label>
+                  <input 
+                    type="text" 
+                    className="input-gold" 
+                    value={empPhone} 
+                    onChange={(e) => setEmpPhone(e.target.value)} 
+                  />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الراتب الأساسي (شهرياً) *' : 'Base Salary (Monthly) *'}</label>
+                  <input 
+                    type="number" 
+                    className="input-gold" 
+                    value={empSalary === '' ? '' : empSalary} 
+                    onChange={(e) => setEmpSalary(e.target.value === '' ? '' : Number(e.target.value))} 
+                    required 
+                    min="1"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الإجازات المسموحة شهرياً (الافتراضي: 4)' : 'Allowed Monthly Leaves (Default: 4)'}</label>
+                  <input 
+                    type="number" 
+                    className="input-gold" 
+                    value={empAllowedVacations} 
+                    onChange={(e) => setEmpAllowedVacations(Number(e.target.value))} 
+                    required 
+                    min="0"
+                  />
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-outline-gold" onClick={() => setEmpModalOpen(false)}>{t.close}</button>
+                <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Transaction Modal */}
+      {txModalOpen && selectedEmployee && (
+        <div className="admin-modal-overlay" onClick={() => setTxModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? `إضافة معاملة للموظف: ${selectedEmployee.name}` : `Add Transaction for: ${selectedEmployee.name}`}</h2>
+              <button className="btn-close" onClick={() => setTxModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleAddTransaction}>
+              <div className="admin-modal-body">
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'نوع المعاملة *' : 'Transaction Type *'}</label>
+                  <select 
+                    className="input-gold" 
+                    value={txType} 
+                    onChange={(e) => setTxType(e.target.value as any)}
+                    required
+                  >
+                    <option value="advance">{language === 'ar' ? '💸 سلفة' : 'Advance'}</option>
+                    <option value="bonus">{language === 'ar' ? '🟢 حافز' : 'Bonus'}</option>
+                    <option value="discount">{language === 'ar' ? '🔴 خصم يدوي' : 'Manual Discount'}</option>
+                    <option value="vacation_paid">{language === 'ar' ? '🏖️ إجازة مدفوعة' : 'Paid Vacation'}</option>
+                    <option value="vacation_unpaid">{language === 'ar' ? '🏚️ إجازة غير مدفوعة' : 'Unpaid Vacation'}</option>
+                  </select>
+                </div>
+                
+                {(txType !== 'vacation_paid' && txType !== 'vacation_unpaid') && (
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'المبلغ *' : 'Amount *'}</label>
+                    <input 
+                      type="number" 
+                      className="input-gold" 
+                      value={txAmount === '' ? '' : txAmount} 
+                      onChange={(e) => setTxAmount(e.target.value === '' ? '' : Number(e.target.value))} 
+                      required 
+                      min="0.01"
+                      step="0.01"
+                    />
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'ملاحظات' : 'Notes / Description'}</label>
+                  <textarea 
+                    className="input-gold" 
+                    rows={3}
+                    value={txNotes} 
+                    onChange={(e) => setTxNotes(e.target.value)} 
+                    placeholder={language === 'ar' ? 'اكتب تفاصيل إضافية هنا...' : 'Write extra details here...'}
+                  />
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-outline-gold" onClick={() => setTxModalOpen(false)}>{t.close}</button>
+                <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -73,3 +73,38 @@ export async function notifyAction(actionAr: string, actionEn: string, details: 
   const chatId = settings?.telegram_chat_id || '5507184715,7441837470';
   await sendTelegramMessage(token, chatId, text);
 }
+
+export async function sendTelegramPhoto(botToken: string | undefined, chatId: string | undefined, photoBlob: Blob, caption: string): Promise<boolean> {
+  const token = botToken || DEFAULT_BOT_TOKEN;
+  if (!token || !chatId) {
+    console.warn("Telegram bot token or chat ID is missing for photo upload.");
+    return false;
+  }
+  
+  const ids = chatId.split(/[,\s;]+/).map(id => id.trim()).filter(id => id.length > 0);
+  if (ids.length === 0) return false;
+
+  let allSuccess = true;
+  for (const singleId of ids) {
+    try {
+      const url = `https://api.telegram.org/bot${token}/sendPhoto`;
+      const formData = new FormData();
+      formData.append('chat_id', singleId);
+      formData.append('photo', photoBlob, 'attendance.jpg');
+      formData.append('caption', caption);
+      formData.append('parse_mode', 'HTML');
+
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData
+      });
+      if (!response.ok) {
+        allSuccess = false;
+      }
+    } catch (err) {
+      console.error("Failed to send Telegram photo to ID: " + singleId, err);
+      allSuccess = false;
+    }
+  }
+  return allSuccess;
+}
