@@ -204,19 +204,19 @@ export default function PartnersView({ language }: PartnersViewProps) {
               <button className="close-btn" onClick={() => setShowPartnerModal(false)}><X size={24} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>{language === 'ar' ? 'اسم الشريك' : 'Partner Name'}</label>
-                <input type="text" className="input-gold" value={name} onChange={e => setName(e.target.value)} style={{ width: '100%' }} />
+              <div className="form-group">
+                <label>{language === 'ar' ? 'اسم الشريك' : 'Partner Name'}</label>
+                <input type="text" className="input-gold" value={name} onChange={e => setName(e.target.value)} />
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>{language === 'ar' ? 'رقم الهاتف' : 'Phone'}</label>
-                <input type="text" className="input-gold" value={phone} onChange={e => setPhone(e.target.value)} style={{ width: '100%' }} />
+              <div className="form-group">
+                <label>{language === 'ar' ? 'رقم الهاتف' : 'Phone'}</label>
+                <input type="text" className="input-gold" value={phone} onChange={e => setPhone(e.target.value)} />
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>{language === 'ar' ? 'الرصيد الافتتاحي' : 'Opening Balance'}</label>
-                <input type="number" className="input-gold" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} style={{ width: '100%' }} />
+              <div className="form-group">
+                <label>{language === 'ar' ? 'الرصيد الافتتاحي' : 'Opening Balance'}</label>
+                <input type="number" className="input-gold" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} />
               </div>
-              <button className="btn-gold" onClick={handleSavePartner} style={{ width: '100%', marginTop: '1rem', padding: '1rem' }}>
+              <button className="btn-gold" onClick={handleSavePartner} style={{ width: '100%', marginTop: '1rem', padding: '1rem', justifyContent: 'center' }}>
                 {language === 'ar' ? 'حفظ البيانات' : 'Save'}
               </button>
             </div>
@@ -235,15 +235,15 @@ export default function PartnersView({ language }: PartnersViewProps) {
               <button className="close-btn" onClick={() => setShowTxModal(false)}><X size={24} /></button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>{language === 'ar' ? 'المبلغ' : 'Amount'}</label>
-                <input type="number" className="input-gold" value={txAmount} onChange={e => setTxAmount(e.target.value)} style={{ width: '100%', fontSize: '1.2rem' }} />
+              <div className="form-group">
+                <label>{language === 'ar' ? 'المبلغ' : 'Amount'}</label>
+                <input type="number" className="input-gold" value={txAmount} onChange={e => setTxAmount(e.target.value)} style={{ fontSize: '1.2rem', padding: '0.75rem' }} autoFocus />
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>{language === 'ar' ? 'البيان / التفاصيل' : 'Description'}</label>
-                <textarea className="input-gold" value={txDesc} onChange={e => setTxDesc(e.target.value)} style={{ width: '100%', minHeight: '80px' }} />
+              <div className="form-group">
+                <label>{language === 'ar' ? 'البيان / التفاصيل' : 'Description'}</label>
+                <textarea className="input-gold" value={txDesc} onChange={e => setTxDesc(e.target.value)} style={{ minHeight: '100px', resize: 'vertical' }} />
               </div>
-              <button className="btn-gold" onClick={handleSaveTransaction} style={{ width: '100%', marginTop: '1rem', padding: '1rem' }}>
+              <button className="btn-gold" onClick={handleSaveTransaction} style={{ width: '100%', marginTop: '1rem', padding: '1rem', justifyContent: 'center' }}>
                 {language === 'ar' ? 'حفظ الحركة' : 'Save Transaction'}
               </button>
             </div>
