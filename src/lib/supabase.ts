@@ -497,6 +497,7 @@ export const db = {
             const fallbackUpdates = { ...updates };
             delete fallbackUpdates.inventory_deducted;
             delete fallbackUpdates.total_cost;
+            delete fallbackUpdates.customer_id; // Added to prevent PGRST204 if column is missing
             const res = await supabase.from('orders').update(fallbackUpdates).eq('id', id).select().single();
             data = res.data; error = res.error;
           }
