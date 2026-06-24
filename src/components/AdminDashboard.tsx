@@ -519,6 +519,20 @@ export default function AdminDashboard({
   const [invUnit, setInvUnit] = useState('كجم');
   const [invUnitsPerCarton, setInvUnitsPerCarton] = useState<number | ''>('');
   const [invUnitsPerBox, setInvUnitsPerBox] = useState<number | ''>('');
+  const [invIsManufactured, setInvIsManufactured] = useState(false);
+  
+  // Manufacturing Recipe (BOM) modal
+  const [mfgRecipeModalOpen, setMfgRecipeModalOpen] = useState(false);
+  const [activeMfgItem, setActiveMfgItem] = useState<InventoryItem | null>(null);
+  const [activeMfgRecipes, setActiveMfgRecipes] = useState<any[]>([]);
+  const [mfgSelIngredient, setMfgSelIngredient] = useState('');
+  const [mfgSelQuantity, setMfgSelQuantity] = useState<number | ''>('');
+  
+  // Warehouse Selection & Stock Editing
+  const [inventoryWarehouseFilter, setInventoryWarehouseFilter] = useState<'main' | 'factory' | 'distribution'>('main');
+  const [editStockModalOpen, setEditStockModalOpen] = useState(false);
+  const [editStockItem, setEditStockItem] = useState<InventoryItem | null>(null);
+  const [editStockAdjustment, setEditStockAdjustment] = useState<number>(0);
 
   // Purchase Invoice modal
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
@@ -714,7 +728,8 @@ export default function AdminDashboard({
         avg_purchase_price: 0,
         last_purchase_price: 0,
         units_per_carton: invUnitsPerCarton ? Number(invUnitsPerCarton) : undefined,
-        units_per_box: invUnitsPerBox ? Number(invUnitsPerBox) : undefined
+        units_per_box: invUnitsPerBox ? Number(invUnitsPerBox) : undefined,
+        is_manufactured: invIsManufactured
       });
       await fetchInventoryData();
       setInvModalOpen(false);
@@ -722,6 +737,55 @@ export default function AdminDashboard({
       setInvUnit('كجم');
       setInvUnitsPerCarton('');
       setInvUnitsPerBox('');
+      setInvIsManufactured(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveStockAdjustment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editStockItem || editStockAdjustment === 0) return;
+    setLoading(true);
+    try {
+      // Current stock based on selected warehouse
+      let currentStock = 0;
+      if (inventoryWarehouseFilter === 'main') currentStock = editStockItem.stock_main || 0;
+      if (inventoryWarehouseFilter === 'factory') currentStock = editStockItem.stock_factory || 0;
+      if (inventoryWarehouseFilter === 'distribution') currentStock = editStockItem.stock_distribution || 0;
+
+      const newStock = Math.max(0, currentStock + editStockAdjustment);
+      const updateData: Partial<InventoryItem> = {};
+      if (inventoryWarehouseFilter === 'main') updateData.stock_main = newStock;
+      if (inventoryWarehouseFilter === 'factory') updateData.stock_factory = newStock;
+      if (inventoryWarehouseFilter === 'distribution') updateData.stock_distribution = newStock;
+
+      if (window.supabase) {
+        await window.supabase.from('inventory_items').update(updateData).eq('id', editStockItem.id);
+      }
+      
+      const type = editStockAdjustment > 0 ? 'adjustment' : 'waste';
+      await db.addInventoryMovement({
+        item_id: editStockItem.id,
+        warehouse: inventoryWarehouseFilter,
+        type: type as any,
+        quantity: Math.abs(editStockAdjustment),
+        unit_price: editStockItem.avg_purchase_price || 0,
+        total_price: (editStockItem.avg_purchase_price || 0) * Math.abs(editStockAdjustment),
+        description: `تسوية جردية (${editStockAdjustment > 0 ? 'إضافة' : 'خصم'})`
+      });
+
+      // Update local state
+      const updatedItems = inventoryItems.map(item => item.id === editStockItem.id ? { ...item, ...updateData } : item);
+      setInventoryItems(updatedItems);
+      // We rely on fetchInventoryData to refresh perfectly, but local is good for immediate UI feedback.
+      await fetchInventoryData();
+      
+      setEditStockModalOpen(false);
+      setEditStockItem(null);
+      setEditStockAdjustment(0);
     } catch (err) {
       console.error(err);
     } finally {
@@ -4961,11 +5025,25 @@ export default function AdminDashboard({
             {/* ITEMS SUB TAB */}
             {inventorySubTab === 'items' && (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                   <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'الأصناف والخامات' : 'Items & Raw Materials'}</h2>
-                  <button className="btn-gold" onClick={() => setInvModalOpen(true)}>
-                    <Plus size={18} /> {language === 'ar' ? 'إضافة صنف جديد' : 'Add New Item'}
-                  </button>
+                  
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <select 
+                      className="input-gold" 
+                      value={inventoryWarehouseFilter}
+                      onChange={(e) => setInventoryWarehouseFilter(e.target.value as any)}
+                      style={{ padding: '0.5rem' }}
+                    >
+                      <option value="main">{language === 'ar' ? 'المخزن الرئيسي' : 'Main Warehouse'}</option>
+                      <option value="factory">{language === 'ar' ? 'مخزن المصنع' : 'Factory Warehouse'}</option>
+                      <option value="distribution">{language === 'ar' ? 'مخزن التوزيع' : 'Distribution Warehouse'}</option>
+                    </select>
+
+                    <button className="btn-gold" onClick={() => setInvModalOpen(true)}>
+                      <Plus size={18} /> {language === 'ar' ? 'إضافة صنف جديد' : 'Add New Item'}
+                    </button>
+                  </div>
                 </div>
                 
                 {/* Valuation Cards */}
@@ -4973,15 +5051,16 @@ export default function AdminDashboard({
                   <div className="stat-card">
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
                     <div className="stat-info">
-                      <h3>{language === 'ar' ? 'قيمة المخزن الأساسي' : 'Main Stock Value'}</h3>
-                      <p className="stat-value">{inventoryItems.reduce((sum, item) => sum + (item.stock_main * item.avg_purchase_price), 0).toFixed(2)}</p>
-                    </div>
-                  </div>
-                  <div className="stat-card">
-                    <div className="stat-icon"><Package color="#000" size={24} /></div>
-                    <div className="stat-info">
-                      <h3>{language === 'ar' ? 'قيمة بضاعة المصنع / المطبخ' : 'Factory Stock Value'}</h3>
-                      <p className="stat-value">{inventoryItems.reduce((sum, item) => sum + (item.stock_factory * item.avg_purchase_price), 0).toFixed(2)}</p>
+                      <h3>{language === 'ar' ? 'قيمة مخزون المخزن المحدد' : 'Selected Warehouse Value'}</h3>
+                      <p className="stat-value">
+                        {inventoryItems.reduce((sum, item) => {
+                          let stock = 0;
+                          if (inventoryWarehouseFilter === 'main') stock = item.stock_main || 0;
+                          if (inventoryWarehouseFilter === 'factory') stock = item.stock_factory || 0;
+                          if (inventoryWarehouseFilter === 'distribution') stock = item.stock_distribution || 0;
+                          return sum + (stock * item.avg_purchase_price);
+                        }, 0).toFixed(2)}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -4992,33 +5071,63 @@ export default function AdminDashboard({
                       <tr>
                         <th>{language === 'ar' ? 'الصنف' : 'Item'}</th>
                         <th>{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
-                        <th>{language === 'ar' ? 'المخزن الأساسي' : 'Main Stock'}</th>
-                        <th>{language === 'ar' ? 'المصنع' : 'Factory'}</th>
-                        <th>{language === 'ar' ? 'التوزيع' : 'Distribution'}</th>
+                        <th>{language === 'ar' ? 'رصيد المخزن المحدد' : 'Selected Stock'}</th>
                         <th>{language === 'ar' ? 'متوسط السعر' : 'Avg Price'}</th>
                         <th>{language === 'ar' ? 'آخر سعر شراء' : 'Last Price'}</th>
                         <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {inventoryItems.map(item => (
-                        <tr key={item.id}>
-                          <td>{item.name}</td>
-                          <td>{item.unit}</td>
-                          <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{item.stock_main}</td>
-                          <td>{item.stock_factory}</td>
-                          <td>{item.stock_distribution}</td>
-                          <td>{item.avg_purchase_price.toFixed(2)}</td>
-                          <td>{item.last_purchase_price.toFixed(2)}</td>
-                          <td>
-                            <button className="action-btn delete" onClick={() => handleDeleteInventoryItem(item.id)}>
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {inventoryItems.map(item => {
+                        let stock = 0;
+                        if (inventoryWarehouseFilter === 'main') stock = item.stock_main || 0;
+                        if (inventoryWarehouseFilter === 'factory') stock = item.stock_factory || 0;
+                        if (inventoryWarehouseFilter === 'distribution') stock = item.stock_distribution || 0;
+
+                        return (
+                          <tr key={item.id}>
+                            <td>{item.name}</td>
+                            <td>{item.unit}</td>
+                            <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{stock}</td>
+                            <td>{item.avg_purchase_price.toFixed(2)}</td>
+                            <td>{item.last_purchase_price.toFixed(2)}</td>
+                            <td>
+                              <button 
+                                className="action-btn edit" 
+                                style={{ marginInlineEnd: '0.5rem' }} 
+                                onClick={() => {
+                                  setEditStockItem(item);
+                                  setEditStockAdjustment(0);
+                                  setEditStockModalOpen(true);
+                                }}
+                              >
+                                {language === 'ar' ? 'تعديل الرصيد' : 'Edit Stock'}
+                              </button>
+                              
+                              {item.is_manufactured && (
+                                <button 
+                                  className="action-btn" 
+                                  style={{ marginInlineEnd: '0.5rem', background: '#3b82f6', color: 'white', border: 'none' }}
+                                  onClick={async () => {
+                                    setActiveMfgItem(item);
+                                    const recipes = await db.getManufacturingRecipes(item.id);
+                                    setActiveMfgRecipes(recipes);
+                                    setMfgRecipeModalOpen(true);
+                                  }}
+                                >
+                                  {language === 'ar' ? 'وصفة التصنيع' : 'BOM'}
+                                </button>
+                              )}
+                              
+                              <button className="action-btn delete" onClick={() => handleDeleteInventoryItem(item.id)}>
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {inventoryItems.length === 0 && (
-                        <tr><td colSpan={8} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
+                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -7201,9 +7310,185 @@ export default function AdminDashboard({
                   <label>{language === 'ar' ? 'الوحدات في العلبة (اختياري)' : 'Units per Box (Optional)'}</label>
                   <input type="number" className="input-gold" min="1" value={invUnitsPerBox} onChange={e => setInvUnitsPerBox(e.target.value ? Number(e.target.value) : '')} />
                 </div>
+                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <input 
+                    type="checkbox" 
+                    id="is-manufactured-checkbox"
+                    checked={invIsManufactured}
+                    onChange={(e) => setInvIsManufactured(e.target.checked)}
+                    style={{ width: '18px', height: '18px', accentColor: 'var(--gold-primary)' }}
+                  />
+                  <label htmlFor="is-manufactured-checkbox" style={{ cursor: 'pointer', fontWeight: 'bold', color: 'var(--gold-secondary)' }}>
+                    {language === 'ar' ? 'منتج مُصنّع داخلياً (له مكونات من المطبخ)' : 'Manufactured Product (has BOM)'}
+                  </label>
+                </div>
               </div>
               <div className="admin-modal-footer">
                 <button type="button" className="btn-outline-gold" onClick={() => setInvModalOpen(false)}>{t.close}</button>
+                <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manufacturing Recipe (BOM) Modal */}
+      {mfgRecipeModalOpen && activeMfgItem && (
+        <div className="admin-modal-overlay" onClick={() => setMfgRecipeModalOpen(false)}>
+          <div className="admin-modal" style={{ maxWidth: '600px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.8rem' }}>
+              <h2>{language === 'ar' ? `وصفة تصنيع: ${activeMfgItem.name}` : `BOM: ${activeMfgItem.name}`}</h2>
+              <button className="btn-close" onClick={() => setMfgRecipeModalOpen(false)}><X size={20} /></button>
+            </div>
+            
+            <div className="admin-modal-body" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+              <div style={{ background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--gold-secondary)' }}>
+                  {language === 'ar' ? `حدد الخامات التي يتم سحبها من المطبخ لإنتاج (1 ${activeMfgItem.unit}) من ${activeMfgItem.name}.` : `Select the ingredients deducted from factory to produce (1 ${activeMfgItem.unit}) of ${activeMfgItem.name}.`}
+                </p>
+              </div>
+
+              {/* Add Ingredient Form */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'end' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>{language === 'ar' ? 'الخامة' : 'Ingredient'}</label>
+                  <select className="input-gold" value={mfgSelIngredient} onChange={e => setMfgSelIngredient(e.target.value)}>
+                    <option value="">{language === 'ar' ? '-- اختر الخامة --' : '-- Select Ingredient --'}</option>
+                    {inventoryItems.filter(i => i.id !== activeMfgItem.id).map(i => (
+                      <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>{language === 'ar' ? 'الكمية' : 'Quantity'}</label>
+                  <input type="number" step="0.01" className="input-gold" value={mfgSelQuantity} onChange={e => setMfgSelQuantity(e.target.value ? Number(e.target.value) : '')} />
+                </div>
+                <button 
+                  type="button" 
+                  className="btn-gold" 
+                  style={{ height: '42px', padding: '0 1rem', margin: 0 }}
+                  onClick={() => {
+                    if (!mfgSelIngredient || !mfgSelQuantity) return;
+                    const ingItem = inventoryItems.find(i => i.id === mfgSelIngredient);
+                    if (!ingItem) return;
+                    
+                    if (activeMfgRecipes.some(r => r.ingredient_item_id === mfgSelIngredient)) {
+                      alert(language === 'ar' ? 'هذه الخامة مضافة بالفعل!' : 'Ingredient already added!');
+                      return;
+                    }
+                    
+                    setActiveMfgRecipes([...activeMfgRecipes, {
+                      ingredient_item_id: mfgSelIngredient,
+                      quantity: Number(mfgSelQuantity),
+                      ingredient_name: ingItem.name,
+                      ingredient_unit: ingItem.unit
+                    }]);
+                    setMfgSelIngredient('');
+                    setMfgSelQuantity('');
+                  }}
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+
+              {/* Recipe Ingredients List */}
+              {activeMfgRecipes.length === 0 ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1rem', border: '1px dashed var(--border-color)', borderRadius: '8px' }}>
+                  {language === 'ar' ? 'لا توجد مكونات بعد.' : 'No ingredients yet.'}
+                </p>
+              ) : (
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(212, 175, 55, 0.05)', borderBottom: '1px solid var(--border-color)' }}>
+                        <th style={{ textAlign: language === 'ar' ? 'right' : 'left', padding: '0.5rem 1rem', color: 'var(--gold-secondary)' }}>{language === 'ar' ? 'الخامة' : 'Ingredient'}</th>
+                        <th style={{ textAlign: 'center', padding: '0.5rem 1rem', color: 'var(--gold-secondary)' }}>{language === 'ar' ? 'الكمية' : 'Quantity'}</th>
+                        <th style={{ textAlign: 'center', padding: '0.5rem 1rem', color: 'var(--gold-secondary)' }}>{language === 'ar' ? 'حذف' : 'Remove'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeMfgRecipes.map(r => (
+                        <tr key={r.ingredient_item_id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: '0.5rem 1rem', fontWeight: 'bold', textAlign: language === 'ar' ? 'right' : 'left' }}>{r.ingredient_name}</td>
+                          <td style={{ padding: '0.5rem 1rem', textAlign: 'center' }}>{r.quantity} <span style={{ color: 'var(--text-muted)' }}>{r.ingredient_unit}</span></td>
+                          <td style={{ padding: '0.5rem 1rem', textAlign: 'center' }}>
+                            <button 
+                              type="button" 
+                              style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer' }}
+                              onClick={() => {
+                                setActiveMfgRecipes(activeMfgRecipes.filter(x => x.ingredient_item_id !== r.ingredient_item_id));
+                              }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            
+            <div className="admin-modal-footer">
+              <button type="button" className="btn-outline-gold" onClick={() => setMfgRecipeModalOpen(false)}>{t.close}</button>
+              <button 
+                type="button" 
+                className="btn-gold" 
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    await db.saveManufacturingRecipe(activeMfgItem.id, activeMfgRecipes);
+                    setMfgRecipeModalOpen(false);
+                  } catch (e) {
+                    console.error(e);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+              >
+                {t.save}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Stock Modal */}
+      {editStockModalOpen && editStockItem && (
+        <div className="admin-modal-overlay" onClick={() => setEditStockModalOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? 'تسوية جردية للرصيد' : 'Stock Adjustment'} - {editStockItem.name}</h2>
+              <button className="btn-close" onClick={() => setEditStockModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleSaveStockAdjustment}>
+              <div className="admin-modal-body">
+                <p style={{ marginBottom: '1rem', color: 'var(--text-gray)' }}>
+                  {language === 'ar' ? 'المخزن المحدد: ' : 'Selected Warehouse: '}
+                  <strong>
+                    {inventoryWarehouseFilter === 'main' ? (language === 'ar' ? 'الرئيسي' : 'Main') :
+                     inventoryWarehouseFilter === 'factory' ? (language === 'ar' ? 'المصنع' : 'Factory') :
+                     (language === 'ar' ? 'التوزيع' : 'Distribution')}
+                  </strong>
+                </p>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'كمية الإضافة / الخصم (+ او -)' : 'Adjustment Quantity (+ or -)'} *</label>
+                  <input 
+                    type="number" 
+                    className="input-gold" 
+                    value={editStockAdjustment} 
+                    onChange={e => setEditStockAdjustment(Number(e.target.value))} 
+                    required 
+                    step="0.01"
+                  />
+                  <small style={{ color: 'var(--text-gray)', marginTop: '0.5rem', display: 'block' }}>
+                    {language === 'ar' ? 'استخدم رقم موجب للإضافة، ورقم سالب للخصم.' : 'Use positive for addition, negative for deduction.'}
+                  </small>
+                </div>
+              </div>
+              <div className="admin-modal-footer">
+                <button type="button" className="btn-outline-gold" onClick={() => setEditStockModalOpen(false)}>{t.close}</button>
                 <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
               </div>
             </form>
@@ -7435,7 +7720,24 @@ export default function AdminDashboard({
                     className="input-gold" 
                     style={{ padding: '0.5rem' }} 
                     value={producedItemId} 
-                    onChange={e => setProducedItemId(e.target.value)}
+                    onChange={async (e) => {
+                      const id = e.target.value;
+                      setProducedItemId(id);
+                      if (id) {
+                        const item = inventoryItems.find(i => i.id === id);
+                        if (item?.is_manufactured) {
+                          const recipes = await db.getManufacturingRecipes(id);
+                          setConsumedItems(recipes.map(r => ({
+                            item_id: r.ingredient_item_id,
+                            quantity: Number((r.quantity * producedQuantity).toFixed(2))
+                          })));
+                        } else {
+                          setConsumedItems([]);
+                        }
+                      } else {
+                        setConsumedItems([]);
+                      }
+                    }}
                   >
                     <option value="">{language === 'ar' ? 'اختر المنتج...' : 'Select produced item...'}</option>
                     {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
@@ -7448,7 +7750,20 @@ export default function AdminDashboard({
                     step="0.01" 
                     min="0.01"
                     value={producedQuantity}
-                    onChange={e => setProducedQuantity(parseFloat(e.target.value) || 0)}
+                    onChange={async (e) => {
+                      const qty = parseFloat(e.target.value) || 0;
+                      setProducedQuantity(qty);
+                      if (producedItemId) {
+                        const item = inventoryItems.find(i => i.id === producedItemId);
+                        if (item?.is_manufactured) {
+                          const recipes = await db.getManufacturingRecipes(producedItemId);
+                          setConsumedItems(recipes.map(r => ({
+                            item_id: r.ingredient_item_id,
+                            quantity: Number((r.quantity * qty).toFixed(2))
+                          })));
+                        }
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -7458,7 +7773,7 @@ export default function AdminDashboard({
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
                   <select id="prod-consumed-item" className="input-gold" style={{ padding: '0.5rem' }}>
                     <option value="">{language === 'ar' ? 'اختر الخامة...' : 'Select raw material...'}</option>
-                    {inventoryItems.filter(i => (i.stock_factory || 0) > 0).map(i => <option key={i.id} value={i.id}>{i.name} ({i.stock_factory} {language === 'ar' ? 'بالمصنع' : 'in factory'})</option>)}
+                    {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name} ({i.stock_factory || 0} {language === 'ar' ? 'بالمصنع' : 'in factory'})</option>)}
                   </select>
                   <input type="number" id="prod-consumed-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية المستهلكة' : 'Consumed Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
                   <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
@@ -7467,7 +7782,14 @@ export default function AdminDashboard({
                     const itemId = idEl.value;
                     const qty = parseFloat(qtyEl.value);
                     if (itemId && qty > 0) {
-                      setConsumedItems([...consumedItems, { item_id: itemId, quantity: qty }]);
+                      const existingIdx = consumedItems.findIndex(c => c.item_id === itemId);
+                      if (existingIdx > -1) {
+                        const newItems = [...consumedItems];
+                        newItems[existingIdx].quantity += qty;
+                        setConsumedItems(newItems);
+                      } else {
+                        setConsumedItems([...consumedItems, { item_id: itemId, quantity: qty }]);
+                      }
                       idEl.value = ''; qtyEl.value = '';
                     }
                   }}>

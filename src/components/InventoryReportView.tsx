@@ -15,6 +15,7 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
   // Month and Year filter (default to current)
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedWarehouse, setSelectedWarehouse] = useState<'main' | 'factory' | 'distribution'>('main');
 
   const fetchData = async () => {
     setLoading(true);
@@ -50,7 +51,8 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
     let totalFinalValue = 0;
 
     const itemStats = items.map(item => {
-      const itemMovements = movements.filter(m => m.item_id === item.id);
+      // Filter movements for this specific item AND the selected warehouse
+      const itemMovements = movements.filter(m => m.item_id === item.id && (m.warehouse === selectedWarehouse || (!m.warehouse && selectedWarehouse === 'main')));
       
       // Calculate Opening
       const pastMovements = itemMovements.filter(m => {
@@ -71,13 +73,16 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
       });
 
       // To handle legacy data where we didn't have movements:
-      // If there are NO past movements at all, we might fallback to current stock as opening, 
-      // but to be precise moving forward, we just trust the movements. If no movements, it's 0.
-      if (itemMovements.length === 0 && item.stock_main > 0) {
-        // Legacy fallback: assume current stock is the opening if no movements exist
-        // Note: This is an approximation for systems that didn't start with zero.
-        openingQty = item.stock_main;
-        openingVal = item.stock_main * (item.avg_purchase_price || 0);
+      if (itemMovements.length === 0) {
+        let legacyStock = 0;
+        if (selectedWarehouse === 'main') legacyStock = item.stock_main || 0;
+        if (selectedWarehouse === 'factory') legacyStock = item.stock_factory || 0;
+        if (selectedWarehouse === 'distribution') legacyStock = item.stock_distribution || 0;
+
+        if (legacyStock > 0) {
+          openingQty = legacyStock;
+          openingVal = legacyStock * (item.avg_purchase_price || 0);
+        }
       }
 
       // Current Month
@@ -128,14 +133,25 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
       totalOutValue,
       totalFinalValue
     };
-  }, [items, movements, selectedMonth, selectedYear]);
+  }, [items, movements, selectedMonth, selectedYear, selectedWarehouse]);
 
   return (
     <div className="admin-content-section fade-in">
       <div className="section-header" style={{ flexWrap: 'wrap', gap: '1rem' }}>
         <h2>{language === 'ar' ? 'الجرد الشهري للمخازن' : 'Monthly Inventory Report'}</h2>
         
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <select 
+            className="input-gold" 
+            value={selectedWarehouse} 
+            onChange={(e) => setSelectedWarehouse(e.target.value as 'main' | 'factory' | 'distribution')}
+            style={{ width: '200px' }}
+          >
+            <option value="main">{language === 'ar' ? 'المخزن الرئيسي (الخامات)' : 'Main Warehouse'}</option>
+            <option value="factory">{language === 'ar' ? 'مخزن المصنع / المطبخ' : 'Factory / Kitchen'}</option>
+            <option value="distribution">{language === 'ar' ? 'مخزن التوزيع' : 'Distribution Warehouse'}</option>
+          </select>
+
           <Calendar size={20} color="var(--gold-primary)" />
           <select 
             className="input-gold" 

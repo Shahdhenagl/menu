@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS inventory_movements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id UUID REFERENCES inventory_items(id) ON DELETE CASCADE,
+  warehouse TEXT NOT NULL DEFAULT 'main' CHECK (warehouse IN ('main', 'factory', 'distribution')),
   type TEXT NOT NULL CHECK (type IN ('in', 'out', 'waste', 'adjustment')),
   quantity NUMERIC NOT NULL,
   unit_price NUMERIC NOT NULL,

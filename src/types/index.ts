@@ -152,13 +152,28 @@ export interface InventoryItem {
   units_per_box?: number;
   
   low_stock_threshold?: number; // Threshold in grams/units for low stock warning
+  is_manufactured?: boolean; // True if this item is manufactured in the kitchen/factory
 
+  created_at?: string;
+}
+
+export interface ManufacturingRecipeItem {
+  id: string;
+  manufactured_item_id: string;
+  ingredient_item_id: string;
+  quantity: number;
+  
+  // For UI display purposes
+  ingredient_name?: string;
+  ingredient_unit?: string;
+  
   created_at?: string;
 }
 
 export interface InventoryMovement {
   id: string;
   item_id: string;
+  warehouse: 'main' | 'factory' | 'distribution';
   type: 'in' | 'out' | 'waste' | 'adjustment';
   quantity: number;
   unit_price: number;

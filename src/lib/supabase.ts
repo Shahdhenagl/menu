@@ -126,6 +126,74 @@ function saveLocalData<T>(key: string, data: T) {
 
 // Unified Database API (works against Supabase if configured, or falls back transparently to LocalStorage)
 export const db = {
+  // --- MANUFACTURING RECIPES ---
+  async getManufacturingRecipes(manufacturedItemId: string): Promise<any[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('manufacturing_recipes')
+          .select(`
+            id,
+            manufactured_item_id,
+            ingredient_item_id,
+            quantity,
+            inventory_items!ingredient_item_id(name, unit)
+          `)
+          .eq('manufactured_item_id', manufacturedItemId);
+        if (!error && data) {
+          return data.map(d => ({
+            id: d.id,
+            manufactured_item_id: d.manufactured_item_id,
+            ingredient_item_id: d.ingredient_item_id,
+            quantity: d.quantity,
+            ingredient_name: (d.inventory_items as any)?.name,
+            ingredient_unit: (d.inventory_items as any)?.unit
+          }));
+        }
+      } catch (err) {
+        console.warn("Supabase getManufacturingRecipes failed", err);
+      }
+    }
+    const all = getLocalData('meridien_manufacturing_recipes', []) as any[];
+    return all.filter(r => r.manufactured_item_id === manufacturedItemId);
+  },
+
+  async saveManufacturingRecipe(manufacturedItemId: string, recipes: any[]): Promise<void> {
+    if (supabase) {
+      try {
+        // Delete old recipes
+        await supabase.from('manufacturing_recipes').delete().eq('manufactured_item_id', manufacturedItemId);
+        // Insert new recipes
+        if (recipes.length > 0) {
+          await supabase.from('manufacturing_recipes').insert(
+            recipes.map(r => ({
+              manufactured_item_id: manufacturedItemId,
+              ingredient_item_id: r.ingredient_item_id,
+              quantity: r.quantity
+            }))
+          );
+        }
+        return;
+      } catch (err) {
+        console.warn("Supabase saveManufacturingRecipe failed", err);
+      }
+    }
+    const all = getLocalData('meridien_manufacturing_recipes', []) as any[];
+    const others = all.filter(r => r.manufactured_item_id !== manufacturedItemId);
+    
+    const newRecipes = recipes.map(r => ({
+      id: crypto.randomUUID(),
+      manufactured_item_id: manufacturedItemId,
+      ingredient_item_id: r.ingredient_item_id,
+      quantity: r.quantity,
+      ingredient_name: r.ingredient_name,
+      ingredient_unit: r.ingredient_unit,
+      created_at: new Date().toISOString()
+    }));
+    
+    saveLocalData('meridien_manufacturing_recipes', [...others, ...newRecipes]);
+  },
+
   isMock: !supabase,
 
   // --- CATEGORIES ---
@@ -1026,6 +1094,7 @@ export const db = {
 
               await this.addInventoryMovement({
                 item_id: invItem.item_id,
+                warehouse: 'main',
                 type: 'in',
                 quantity: invItem.quantity,
                 unit_price: invItem.unit_price,
@@ -1069,6 +1138,7 @@ export const db = {
 
         await this.addInventoryMovement({
           item_id: invItem.item_id,
+          warehouse: 'main',
           type: 'in',
           quantity: invItem.quantity,
           unit_price: invItem.unit_price,
@@ -1182,6 +1252,26 @@ export const db = {
                   .from('inventory_items')
                   .update({ stock_main: newStockMain, stock_factory: newStockFactory })
                   .eq('id', itemReq.item_id);
+                  
+                // Record Movements
+                await this.addInventoryMovement({
+                  item_id: itemReq.item_id,
+                  warehouse: 'main',
+                  type: 'out',
+                  quantity: itemReq.calculated_main_quantity,
+                  unit_price: Number(itemData.avg_purchase_price || 0),
+                  total_price: Number(itemData.avg_purchase_price || 0) * itemReq.calculated_main_quantity,
+                  description: `صرف للمصنع/المطبخ (أمر #${id.slice(0, 6)})`
+                });
+                await this.addInventoryMovement({
+                  item_id: itemReq.item_id,
+                  warehouse: 'factory',
+                  type: 'in',
+                  quantity: itemReq.calculated_main_quantity,
+                  unit_price: Number(itemData.avg_purchase_price || 0),
+                  total_price: Number(itemData.avg_purchase_price || 0) * itemReq.calculated_main_quantity,
+                  description: `استلام من المخزن الرئيسي (أمر #${id.slice(0, 6)})`
+                });
               }
             }
             await this.addNotification({
@@ -1220,6 +1310,25 @@ export const db = {
         if (itemIndex > -1) {
           inventoryItems[itemIndex].stock_main -= itemReq.calculated_main_quantity;
           inventoryItems[itemIndex].stock_factory += itemReq.calculated_main_quantity;
+          
+          await this.addInventoryMovement({
+            item_id: itemReq.item_id,
+            warehouse: 'main',
+            type: 'out',
+            quantity: itemReq.calculated_main_quantity,
+            unit_price: inventoryItems[itemIndex].avg_purchase_price || 0,
+            total_price: (inventoryItems[itemIndex].avg_purchase_price || 0) * itemReq.calculated_main_quantity,
+            description: `صرف للمصنع/المطبخ (أمر #${id.slice(0, 6)})`
+          });
+          await this.addInventoryMovement({
+            item_id: itemReq.item_id,
+            warehouse: 'factory',
+            type: 'in',
+            quantity: itemReq.calculated_main_quantity,
+            unit_price: inventoryItems[itemIndex].avg_purchase_price || 0,
+            total_price: (inventoryItems[itemIndex].avg_purchase_price || 0) * itemReq.calculated_main_quantity,
+            description: `استلام من المخزن الرئيسي (أمر #${id.slice(0, 6)})`
+          });
         }
       }
       saveLocalData('meridien_inventory_items', inventoryItems);
@@ -1373,6 +1482,16 @@ export const db = {
                 .from('inventory_items')
                 .update({ stock_factory: newStockFactory })
                 .eq('id', consumed.item_id);
+
+              await this.addInventoryMovement({
+                item_id: consumed.item_id,
+                warehouse: 'factory',
+                type: 'out',
+                quantity: consumed.quantity,
+                unit_price: Number(itemData.avg_purchase_price || 0),
+                total_price: Number(itemData.avg_purchase_price || 0) * consumed.quantity,
+                description: `استهلاك تصنيع (سجل #${logData.id?.slice(0,6) || ''})`
+              });
             }
           }
           // Process produced items (Increase distribution stock)
@@ -1388,6 +1507,16 @@ export const db = {
                 .from('inventory_items')
                 .update({ stock_distribution: newStockDist })
                 .eq('id', produced.item_id);
+
+              await this.addInventoryMovement({
+                item_id: produced.item_id,
+                warehouse: 'distribution',
+                type: 'in',
+                quantity: produced.quantity,
+                unit_price: Number(itemData.avg_purchase_price || 0),
+                total_price: Number(itemData.avg_purchase_price || 0) * produced.quantity,
+                description: `وارد تصنيع (سجل #${logData.id?.slice(0,6) || ''})`
+              });
             }
           }
           return;
@@ -1414,6 +1543,16 @@ export const db = {
       if (itemIdx > -1) {
         items[itemIdx].stock_factory = Math.max(0, (items[itemIdx].stock_factory || 0) - consumed.quantity);
         updated = true;
+        
+        await this.addInventoryMovement({
+          item_id: consumed.item_id,
+          warehouse: 'factory',
+          type: 'out',
+          quantity: consumed.quantity,
+          unit_price: items[itemIdx].avg_purchase_price || 0,
+          total_price: (items[itemIdx].avg_purchase_price || 0) * consumed.quantity,
+          description: `استهلاك تصنيع (سجل #${newLog.id.slice(0,6)})`
+        });
       }
     }
 
@@ -1423,6 +1562,16 @@ export const db = {
       if (itemIdx > -1) {
         items[itemIdx].stock_distribution = (items[itemIdx].stock_distribution || 0) + produced.quantity;
         updated = true;
+
+        await this.addInventoryMovement({
+          item_id: produced.item_id,
+          warehouse: 'distribution',
+          type: 'in',
+          quantity: produced.quantity,
+          unit_price: items[itemIdx].avg_purchase_price || 0,
+          total_price: (items[itemIdx].avg_purchase_price || 0) * produced.quantity,
+          description: `وارد تصنيع (سجل #${newLog.id.slice(0,6)})`
+        });
       }
     }
 
@@ -1514,6 +1663,25 @@ export const db = {
                   stock_distribution: (Number(itemData.stock_distribution) || 0) + item.quantity
                 })
                 .eq('id', item.item_id);
+                
+              await this.addInventoryMovement({
+                item_id: item.item_id,
+                warehouse: 'factory',
+                type: 'out',
+                quantity: item.quantity,
+                unit_price: Number(itemData.avg_purchase_price || 0),
+                total_price: Number(itemData.avg_purchase_price || 0) * item.quantity,
+                description: `تحويل للتوزيع (طلب #${id.slice(0, 6)})`
+              });
+              await this.addInventoryMovement({
+                item_id: item.item_id,
+                warehouse: 'distribution',
+                type: 'in',
+                quantity: item.quantity,
+                unit_price: Number(itemData.avg_purchase_price || 0),
+                total_price: Number(itemData.avg_purchase_price || 0) * item.quantity,
+                description: `استلام من المصنع (طلب #${id.slice(0, 6)})`
+              });
             }
           }
           await this.addNotification({
@@ -1549,9 +1717,28 @@ export const db = {
         if (itemIdx > -1) {
           items[itemIdx].stock_factory = Math.max(0, (items[itemIdx].stock_factory || 0) - item.quantity);
           items[itemIdx].stock_distribution = (items[itemIdx].stock_distribution || 0) + item.quantity;
+          
+          await this.addInventoryMovement({
+            item_id: item.item_id,
+            warehouse: 'factory',
+            type: 'out',
+            quantity: item.quantity,
+            unit_price: items[itemIdx].avg_purchase_price || 0,
+            total_price: (items[itemIdx].avg_purchase_price || 0) * item.quantity,
+            description: `تحويل للتوزيع (طلب #${id.slice(0, 6)})`
+          });
+          await this.addInventoryMovement({
+            item_id: item.item_id,
+            warehouse: 'distribution',
+            type: 'in',
+            quantity: item.quantity,
+            unit_price: items[itemIdx].avg_purchase_price || 0,
+            total_price: (items[itemIdx].avg_purchase_price || 0) * item.quantity,
+            description: `استلام من المصنع (طلب #${id.slice(0, 6)})`
+          });
         }
       }
-      saveLocalData('meridien_inventory', items);
+      saveLocalData('meridien_inventory_items', items);
       
       await this.addNotification({
         title: '✅ تمت الموافقة على التحويل',
@@ -1756,6 +1943,7 @@ export const db = {
 
                 await this.addInventoryMovement({
                   item_id: rec.inventory_item_id,
+                  warehouse: 'distribution',
                   type: 'out',
                   quantity: deductQty,
                   unit_price: Number(itemData.avg_purchase_price) || 0,
@@ -1791,6 +1979,7 @@ export const db = {
 
             await this.addInventoryMovement({
               item_id: item.id,
+              warehouse: 'distribution',
               type: 'out',
               quantity: item.quantity,
               unit_price: Number(prodItem.avg_purchase_price) || 0,
@@ -1825,6 +2014,7 @@ export const db = {
 
               await this.addInventoryMovement({
                 item_id: items[itemIdx].id,
+                warehouse: 'distribution',
                 type: 'out',
                 quantity: deductQty,
                 unit_price: items[itemIdx].avg_purchase_price || 0,
@@ -1851,6 +2041,7 @@ export const db = {
 
             await this.addInventoryMovement({
               item_id: items[prodItemIdx].id,
+              warehouse: 'distribution',
               type: 'out',
               quantity: item.quantity,
               unit_price: items[prodItemIdx].avg_purchase_price || 0,
@@ -2256,6 +2447,7 @@ export const db = {
 
   async addInventoryMovement(movement: Omit<any, 'id' | 'created_at'>): Promise<any> {
     const newMovement = {
+      warehouse: 'main', // Default fallback
       ...movement,
       id: crypto.randomUUID(),
       created_at: new Date().toISOString()
