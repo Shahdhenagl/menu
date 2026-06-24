@@ -7,17 +7,18 @@ import {
 } from 'lucide-react';
 import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog } from '../types';
-import { printOrderTickets } from '../utils/printUtils';
+import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
 
 interface PosSystemProps {
   onClose: () => void;
   language: 'ar' | 'en';
+  setLanguage?: (lang: 'ar' | 'en') => void;
 }
 
 type PosView = 'role_select' | 'waiter_auth' | 'customer_info' | 'order_type' | 'menu' | 'checkout' | 'success' | 'waiter_dashboard' | 'waiter_order_edit';
 
-export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
+export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLanguage }) => {
   // Global Data
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -544,8 +545,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
       });
     }
 
-    // Auto-print tickets for kitchen/bar
-    printOrderTickets(placedOrder, categories, products, printers, language);
+    // Auto-print customer receipt and kitchen/bar tickets
+    printCustomerReceipt(placedOrder, language, settings);
+    setTimeout(() => {
+      printOrderTickets(placedOrder, categories, products, printers, language);
+    }, 1500);
   };
 
   const handleTransferSubmit = async () => {
@@ -835,14 +839,39 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
         }
       `}</style>
 
-      <div className="pos-header">
+      {/* <div className="pos-header">
         <h1 style={{ color: 'var(--gold-primary)', margin: 0 }}>MERIDIEN POS</h1>
         <button onClick={handleClose} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <X size={32} />
         </button>
-      </div>
+      </div> */}
 
       <div className={`pos-content ${mobileShowCart && view === 'menu' ? 'show-mobile-cart' : ''}`} dir={language === 'ar' ? 'rtl' : 'ltr'}>
+        
+        {/* Top Floating Controls */}
+        <div style={{ position: 'absolute', top: '1rem', left: '1rem', right: '1rem', display: 'flex', justifyContent: 'space-between', zIndex: 100 }}>
+          {setLanguage && (
+            <button 
+              onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
+              style={{
+                background: 'rgba(0,0,0,0.5)',
+                border: '1px solid var(--gold-primary)',
+                color: 'var(--gold-primary)',
+                padding: '0.5rem 1rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                fontFamily: 'inherit'
+              }}
+            >
+              {language === 'ar' ? 'English' : 'عربي'}
+            </button>
+          )}
+          <button onClick={onClose} style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px' }}>
+            <X size={24} />
+          </button>
+        </div>
+
         <AnimatePresence mode="wait">
           
           {view === 'role_select' && (
@@ -1245,9 +1274,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language }) => {
               <div style={{ display: 'flex', gap: '1.5rem', marginTop: '3rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                 {lastPlacedOrder && (
                   <>
+                    <button className="pos-btn" style={{ background: 'var(--gold-primary)', color: '#000' }} onClick={() => printCustomerReceipt(lastPlacedOrder, language, settings)}>
+                      <PrinterIcon size={20} style={{ marginRight: '8px' }} />
+                      {language === 'ar' ? 'طباعة الفاتورة للعميل' : 'Print Customer Receipt'}
+                    </button>
                     <button className="pos-btn" style={{ background: '#3b82f6', color: '#fff' }} onClick={() => printOrderTickets(lastPlacedOrder, categories, products, printers, language)}>
                       <PrinterIcon size={20} style={{ marginRight: '8px' }} />
-                      {language === 'ar' ? 'طباعة البونات' : 'Print Tickets'}
+                      {language === 'ar' ? 'طباعة بونات الأقسام' : 'Print Section Tickets'}
                     </button>
                     <button className="pos-btn" style={{ background: '#25D366', color: '#fff' }} onClick={() => {
                       const msg = language === 'ar' 

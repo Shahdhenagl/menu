@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct } from '../types';
 import { db } from '../lib/supabase';
-import { printOrderTickets } from '../utils/printUtils';
+import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import { 
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   ResponsiveContainer, Cell, AreaChart, Area 
@@ -3457,25 +3457,48 @@ export default function AdminDashboard({
 
                           <button 
                             type="button" 
-                            className="btn-outline-gold" 
-                            style={{ 
-                              padding: '0.25rem 0.5rem', 
-                              borderRadius: '8px', 
-                              fontSize: '0.75rem', 
-                              marginTop: '0.3rem', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: '0.3rem',
-                              width: '100%',
-                              justifyContent: 'center',
-                              borderColor: '#3b82f6',
-                              color: '#3b82f6'
-                            }}
-                            onClick={() => printOrderTickets(order, categories, products, printers, language)}
-                          >
-                            <PrinterIcon size={12} />
-                            <span>{language === 'ar' ? 'طباعة البونات' : 'Print Tickets'}</span>
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.3rem' }}>
+                            <button 
+                              type="button" 
+                              className="btn-outline-gold" 
+                              style={{ 
+                                padding: '0.25rem 0.5rem', 
+                                borderRadius: '8px', 
+                                fontSize: '0.75rem', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '0.3rem',
+                                flex: 1,
+                                justifyContent: 'center',
+                                borderColor: 'var(--gold-primary)',
+                                color: 'var(--gold-primary)'
+                              }}
+                              onClick={() => printCustomerReceipt(order, language, settings)}
+                            >
+                              <PrinterIcon size={12} />
+                              <span>{language === 'ar' ? 'الفاتورة' : 'Receipt'}</span>
+                            </button>
+                            <button 
+                              type="button" 
+                              className="btn-outline-gold" 
+                              style={{ 
+                                padding: '0.25rem 0.5rem', 
+                                borderRadius: '8px', 
+                                fontSize: '0.75rem', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '0.3rem',
+                                flex: 1,
+                                justifyContent: 'center',
+                                borderColor: '#3b82f6',
+                                color: '#3b82f6'
+                              }}
+                              onClick={() => printOrderTickets(order, categories, products, printers, language)}
+                            >
+                              <PrinterIcon size={12} />
+                              <span>{language === 'ar' ? 'البونات' : 'Tickets'}</span>
+                            </button>
+                          </div>
 
                           {/* Collect Payment Button */}
                           {!order.status.startsWith('completed') && order.status !== 'cancelled' && (

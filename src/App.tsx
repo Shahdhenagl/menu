@@ -254,6 +254,7 @@ function App() {
             setCurrentView('menu');
           }}
           language={language}
+          setLanguage={setLanguage}
         />
       ) : (
         <AdminDashboard 
