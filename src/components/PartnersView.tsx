@@ -212,13 +212,13 @@ export default function PartnersView({ language }: PartnersViewProps) {
 
       {/* Add/Edit Partner Modal */}
       {showPartnerModal && (
-        <div className="modal-overlay" onClick={() => setShowPartnerModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
-            <div className="modal-header">
+        <div className="admin-modal-overlay" onClick={() => setShowPartnerModal(false)}>
+          <div className="admin-modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="admin-modal-header">
               <h3>{editPartnerId ? (language === 'ar' ? 'تعديل الشريك' : 'Edit Partner') : (language === 'ar' ? 'إضافة شريك جديد' : 'Add New Partner')}</h3>
               <button className="close-btn" onClick={() => setShowPartnerModal(false)}><X size={24} /></button>
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', padding: '1.5rem' }}>
               <div className="form-group">
                 <label>{language === 'ar' ? 'اسم الشريك' : 'Partner Name'}</label>
                 <input type="text" className="input-gold" value={name} onChange={e => setName(e.target.value)} />
@@ -241,15 +241,15 @@ export default function PartnersView({ language }: PartnersViewProps) {
 
       {/* Transaction Modal */}
       {showTxModal && (
-        <div className="modal-overlay" onClick={() => setShowTxModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
-            <div className="modal-header">
+        <div className="admin-modal-overlay" onClick={() => setShowTxModal(false)}>
+          <div className="admin-modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="admin-modal-header">
               <h3 style={{ color: txType === 'credit' ? '#10b981' : '#ef4444' }}>
                 {txType === 'credit' ? (language === 'ar' ? 'إضافة دائن (له)' : 'Add Credit') : (language === 'ar' ? 'إضافة مدين (عليه)' : 'Add Debit')}
               </h3>
               <button className="close-btn" onClick={() => setShowTxModal(false)}><X size={24} /></button>
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', padding: '1.5rem' }}>
               <div className="form-group">
                 <label>{language === 'ar' ? 'المبلغ' : 'Amount'}</label>
                 <input type="number" className="input-gold" value={txAmount} onChange={e => setTxAmount(e.target.value)} style={{ fontSize: '1.2rem', padding: '0.75rem' }} autoFocus />
@@ -268,13 +268,13 @@ export default function PartnersView({ language }: PartnersViewProps) {
 
       {/* Details Ledger Modal */}
       {showDetailsModal && activePartner && (
-        <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
-            <div className="modal-header">
+        <div className="admin-modal-overlay" onClick={() => setShowDetailsModal(false)}>
+          <div className="admin-modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
+            <div className="admin-modal-header">
               <h3>{language === 'ar' ? `كشف حساب: ${activePartner.name}` : `Ledger: ${activePartner.name}`}</h3>
               <button className="close-btn" onClick={() => setShowDetailsModal(false)}><X size={24} /></button>
             </div>
-            <div className="modal-body">
+            <div className="admin-modal-body" style={{ padding: '1.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
                 <span>{language === 'ar' ? 'الرصيد الافتتاحي:' : 'Opening Balance:'}</span>
                 <span style={{ fontWeight: 'bold' }}>{activePartner.opening_balance.toLocaleString()}</span>
