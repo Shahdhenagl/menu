@@ -114,80 +114,95 @@ export default function PartnersView({ language }: PartnersViewProps) {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
+      <div className="products-grid" style={{ marginTop: '1.5rem' }}>
         {partners.map(p => {
           const bal = calculatePartnerBalance(p.id, p.opening_balance);
           return (
-            <div key={p.id} className="stat-card" style={{ background: 'var(--bg-darker)', border: '1px solid var(--border-color)', position: 'relative' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <h3 style={{ margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Users size={20} color="var(--gold-primary)" />
-                    {p.name}
-                  </h3>
-                  <div style={{ color: 'var(--text-gray)', fontSize: '0.9rem', marginBottom: '1rem' }}>{p.phone || '-'}</div>
+            <div key={p.id} className="premium-card-wrapper">
+              <div className="premium-card" style={{ padding: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div className="stat-icon" style={{ background: 'var(--gold-gradient)', padding: '0.8rem', borderRadius: '15px' }}>
+                      <Users size={24} color="var(--bg-darker)" />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: '0 0 0.2rem 0', fontSize: '1.2rem', color: 'var(--text-white)' }}>
+                        {p.name}
+                      </h3>
+                      <div style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>{p.phone || '-'}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="icon-btn" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => {
+                      setEditPartnerId(p.id);
+                      setName(p.name);
+                      setPhone(p.phone || '');
+                      setOpeningBalance(String(p.opening_balance));
+                      setShowPartnerModal(true);
+                    }}>
+                      <Edit size={16} color="var(--text-light)" />
+                    </button>
+                    <button className="icon-btn" style={{ background: 'rgba(239, 68, 68, 0.1)' }} onClick={() => handleDeletePartner(p.id)}>
+                      <Trash2 size={16} color="#ef4444" />
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button className="icon-btn" onClick={() => {
-                    setEditPartnerId(p.id);
-                    setName(p.name);
-                    setPhone(p.phone || '');
-                    setOpeningBalance(String(p.opening_balance));
-                    setShowPartnerModal(true);
-                  }}>
-                    <Edit size={16} color="var(--text-light)" />
-                  </button>
-                  <button className="icon-btn" onClick={() => handleDeletePartner(p.id)}>
-                    <Trash2 size={16} color="#ef4444" />
-                  </button>
-                </div>
-              </div>
 
-              <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', marginBottom: '1rem' }}>
-                <div style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>{language === 'ar' ? 'الرصيد الحالي:' : 'Current Balance:'}</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: bal >= 0 ? '#10b981' : '#ef4444' }}>
-                  {bal.toLocaleString()} {language === 'ar' ? 'ج.م' : 'EGP'}
+                <div style={{ 
+                  padding: '1.2rem', 
+                  background: 'rgba(0,0,0,0.2)', 
+                  borderRadius: '16px', 
+                  marginBottom: '1.5rem',
+                  border: '1px solid rgba(255,255,255,0.02)'
+                }}>
+                  <div style={{ color: 'var(--text-gray)', fontSize: '0.85rem', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {language === 'ar' ? 'الرصيد الحالي' : 'Current Balance'}
+                  </div>
+                  <div style={{ fontSize: '2rem', fontWeight: '800', color: bal >= 0 ? '#10b981' : '#ef4444', textShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
+                    {bal.toLocaleString()} <span style={{ fontSize: '1rem', opacity: 0.8 }}>{language === 'ar' ? 'ج.م' : 'EGP'}</span>
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <button 
+                    className="category-tab" 
+                    style={{ padding: '0.8rem', justifyContent: 'center', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.2)' }}
+                    onClick={() => {
+                      setActivePartnerId(p.id);
+                      setTxType('credit');
+                      setTxAmount('');
+                      setTxDesc('');
+                      setShowTxModal(true);
+                    }}
+                  >
+                    <ArrowUpRight size={18} />
+                    {language === 'ar' ? 'دائن (له)' : 'Credit'}
+                  </button>
+                  <button 
+                    className="category-tab" 
+                    style={{ padding: '0.8rem', justifyContent: 'center', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+                    onClick={() => {
+                      setActivePartnerId(p.id);
+                      setTxType('debit');
+                      setTxAmount('');
+                      setTxDesc('');
+                      setShowTxModal(true);
+                    }}
+                  >
+                    <ArrowDownRight size={18} />
+                    {language === 'ar' ? 'مدين (عليه)' : 'Debit'}
+                  </button>
+                </div>
                 <button 
-                  className="btn-gold outline" 
-                  style={{ flex: 1, padding: '0.5rem', display: 'flex', justifyContent: 'center', gap: '0.3rem', fontSize: '0.9rem' }}
-                  onClick={() => {
-                    setActivePartnerId(p.id);
-                    setTxType('credit');
-                    setTxAmount('');
-                    setTxDesc('');
-                    setShowTxModal(true);
-                  }}
-                >
-                  <ArrowUpRight size={16} color="#10b981" />
-                  {language === 'ar' ? 'إضافة دائن' : 'Add Credit'}
-                </button>
-                <button 
-                  className="btn-gold outline" 
-                  style={{ flex: 1, padding: '0.5rem', display: 'flex', justifyContent: 'center', gap: '0.3rem', fontSize: '0.9rem' }}
-                  onClick={() => {
-                    setActivePartnerId(p.id);
-                    setTxType('debit');
-                    setTxAmount('');
-                    setTxDesc('');
-                    setShowTxModal(true);
-                  }}
-                >
-                  <ArrowDownRight size={16} color="#ef4444" />
-                  {language === 'ar' ? 'إضافة مدين' : 'Add Debit'}
-                </button>
-                <button 
-                  className="btn-gold outline" 
-                  style={{ padding: '0.5rem', display: 'flex', justifyContent: 'center', gap: '0.3rem', fontSize: '0.9rem' }}
+                  className="btn-outline-gold" 
+                  style={{ width: '100%', padding: '0.8rem', justifyContent: 'center' }}
                   onClick={() => {
                     setActivePartnerId(p.id);
                     setShowDetailsModal(true);
                   }}
                 >
-                  <Eye size={16} />
+                  <Eye size={18} />
+                  {language === 'ar' ? 'كشف الحساب' : 'View Ledger'}
                 </button>
               </div>
             </div>
