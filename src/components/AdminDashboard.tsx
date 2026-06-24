@@ -519,7 +519,10 @@ export default function AdminDashboard({
   const [invUnit, setInvUnit] = useState('كجم');
   const [invUnitsPerCarton, setInvUnitsPerCarton] = useState<number | ''>('');
   const [invUnitsPerBox, setInvUnitsPerBox] = useState<number | ''>('');
-  const [invIsManufactured, setInvIsManufactured] = useState(false);
+  const [invTargetType, setInvTargetType] = useState<'raw' | 'manufactured'>('raw');
+  const [invRecipes, setInvRecipes] = useState<any[]>([]);
+  const [invRecipeSelIngredient, setInvRecipeSelIngredient] = useState('');
+  const [invRecipeSelQuantity, setInvRecipeSelQuantity] = useState<number | ''>('');
   
   // Manufacturing Recipe (BOM) modal
   const [mfgRecipeModalOpen, setMfgRecipeModalOpen] = useState(false);
@@ -719,7 +722,7 @@ export default function AdminDashboard({
     if (!invName.trim()) return;
     setLoading(true);
     try {
-      await db.addInventoryItem({
+      const newItem = await db.addInventoryItem({
         name: invName,
         unit: invUnit,
         stock_main: 0,
@@ -729,15 +732,21 @@ export default function AdminDashboard({
         last_purchase_price: 0,
         units_per_carton: invUnitsPerCarton ? Number(invUnitsPerCarton) : undefined,
         units_per_box: invUnitsPerBox ? Number(invUnitsPerBox) : undefined,
-        is_manufactured: invIsManufactured
+        is_manufactured: invTargetType === 'manufactured'
       });
+      
+      if (newItem && invTargetType === 'manufactured' && invRecipes.length > 0) {
+        await db.saveManufacturingRecipe(newItem.id, invRecipes);
+      }
+      
       await fetchInventoryData();
       setInvModalOpen(false);
       setInvName('');
       setInvUnit('كجم');
       setInvUnitsPerCarton('');
       setInvUnitsPerBox('');
-      setInvIsManufactured(false);
+      setInvTargetType('raw');
+      setInvRecipes([]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -7310,18 +7319,108 @@ export default function AdminDashboard({
                   <label>{language === 'ar' ? 'الوحدات في العلبة (اختياري)' : 'Units per Box (Optional)'}</label>
                   <input type="number" className="input-gold" min="1" value={invUnitsPerBox} onChange={e => setInvUnitsPerBox(e.target.value ? Number(e.target.value) : '')} />
                 </div>
-                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  <input 
-                    type="checkbox" 
-                    id="is-manufactured-checkbox"
-                    checked={invIsManufactured}
-                    onChange={(e) => setInvIsManufactured(e.target.checked)}
-                    style={{ width: '18px', height: '18px', accentColor: 'var(--gold-primary)' }}
-                  />
-                  <label htmlFor="is-manufactured-checkbox" style={{ cursor: 'pointer', fontWeight: 'bold', color: 'var(--gold-secondary)' }}>
-                    {language === 'ar' ? 'منتج مُصنّع داخلياً (له مكونات من المطبخ)' : 'Manufactured Product (has BOM)'}
+                <div className="form-group" style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                  <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                    <input 
+                      type="radio" 
+                      name="invTargetType" 
+                      value="raw" 
+                      checked={invTargetType === 'raw'} 
+                      onChange={() => setInvTargetType('raw')} 
+                      style={{ accentColor: 'var(--gold-primary)' }}
+                    />
+                    {language === 'ar' ? 'خامة / مكون (مخزن رئيسي)' : 'Raw Material (Main)'}
+                  </label>
+                  <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                    <input 
+                      type="radio" 
+                      name="invTargetType" 
+                      value="manufactured" 
+                      checked={invTargetType === 'manufactured'} 
+                      onChange={() => setInvTargetType('manufactured')}
+                      style={{ accentColor: 'var(--gold-primary)' }}
+                    />
+                    {language === 'ar' ? 'منتج توزيع جاهز (له مكونات)' : 'Finished Product (Has BOM)'}
                   </label>
                 </div>
+
+                {invTargetType === 'manufactured' && (
+                  <div style={{ marginTop: '1.5rem', padding: '1rem', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'rgba(0,0,0,0.2)' }}>
+                    <h3 style={{ marginBottom: '1rem', color: 'var(--gold-secondary)' }}>
+                      {language === 'ar' ? 'مكونات المنتج من المخزن الرئيسي' : 'Product Ingredients from Main Warehouse'}
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', marginBottom: '1rem', alignItems: 'end' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label>{language === 'ar' ? 'الخامة' : 'Ingredient'}</label>
+                        <select className="input-gold" value={invRecipeSelIngredient} onChange={e => setInvRecipeSelIngredient(e.target.value)}>
+                          <option value="">{language === 'ar' ? '-- اختر الخامة --' : '-- Select Ingredient --'}</option>
+                          {inventoryItems.filter(i => !i.is_manufactured).map(i => (
+                            <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label>{language === 'ar' ? 'الكمية' : 'Quantity'}</label>
+                        <input type="number" step="0.01" className="input-gold" value={invRecipeSelQuantity} onChange={e => setInvRecipeSelQuantity(e.target.value ? Number(e.target.value) : '')} />
+                      </div>
+                      <button 
+                        type="button" 
+                        className="btn-gold" 
+                        style={{ height: '42px', padding: '0 1rem', margin: 0 }}
+                        onClick={() => {
+                          if (!invRecipeSelIngredient || !invRecipeSelQuantity) return;
+                          const ingItem = inventoryItems.find(i => i.id === invRecipeSelIngredient);
+                          if (!ingItem) return;
+                          
+                          if (invRecipes.some(r => r.ingredient_item_id === invRecipeSelIngredient)) {
+                            alert(language === 'ar' ? 'هذه الخامة مضافة بالفعل!' : 'Ingredient already added!');
+                            return;
+                          }
+                          
+                          setInvRecipes([...invRecipes, {
+                            ingredient_item_id: invRecipeSelIngredient,
+                            quantity: Number(invRecipeSelQuantity),
+                            ingredient_name: ingItem.name,
+                            ingredient_unit: ingItem.unit
+                          }]);
+                          setInvRecipeSelIngredient('');
+                          setInvRecipeSelQuantity('');
+                        }}
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+
+                    {invRecipes.length > 0 && (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                        <thead>
+                          <tr style={{ background: 'rgba(212, 175, 55, 0.05)', borderBottom: '1px solid var(--border-color)' }}>
+                            <th style={{ textAlign: language === 'ar' ? 'right' : 'left', padding: '0.5rem 1rem' }}>{language === 'ar' ? 'الخامة' : 'Ingredient'}</th>
+                            <th style={{ textAlign: 'center', padding: '0.5rem 1rem' }}>{language === 'ar' ? 'الكمية' : 'Quantity'}</th>
+                            <th style={{ textAlign: 'center', padding: '0.5rem 1rem' }}>{language === 'ar' ? 'حذف' : 'Remove'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invRecipes.map(r => (
+                            <tr key={r.ingredient_item_id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '0.5rem 1rem', fontWeight: 'bold' }}>{r.ingredient_name}</td>
+                              <td style={{ padding: '0.5rem 1rem', textAlign: 'center' }}>{r.quantity} <span style={{ color: 'var(--text-muted)' }}>{r.ingredient_unit}</span></td>
+                              <td style={{ padding: '0.5rem 1rem', textAlign: 'center' }}>
+                                <button 
+                                  type="button" 
+                                  style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer' }}
+                                  onClick={() => setInvRecipes(invRecipes.filter(x => x.ingredient_item_id !== r.ingredient_item_id))}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="admin-modal-footer">
                 <button type="button" className="btn-outline-gold" onClick={() => setInvModalOpen(false)}>{t.close}</button>
