@@ -762,8 +762,8 @@ export default function AdminDashboard({
       if (inventoryWarehouseFilter === 'factory') updateData.stock_factory = newStock;
       if (inventoryWarehouseFilter === 'distribution') updateData.stock_distribution = newStock;
 
-      if (window.supabase) {
-        await window.supabase.from('inventory_items').update(updateData).eq('id', editStockItem.id);
+      if ((window as any).supabase) {
+        await (window as any).supabase.from('inventory_items').update(updateData).eq('id', editStockItem.id);
       }
       
       const type = editStockAdjustment > 0 ? 'adjustment' : 'waste';

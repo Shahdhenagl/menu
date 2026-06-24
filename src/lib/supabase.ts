@@ -1242,7 +1242,7 @@ export const db = {
             for (const itemReq of order.items) {
               const { data: itemData } = await supabase
                 .from('inventory_items')
-                .select('stock_main, stock_factory')
+                .select('stock_main, stock_factory, avg_purchase_price')
                 .eq('id', itemReq.item_id)
                 .single();
               if (itemData) {
@@ -1473,7 +1473,7 @@ export const db = {
           for (const consumed of logData.consumed_items) {
             const { data: itemData } = await supabase
               .from('inventory_items')
-              .select('stock_factory')
+              .select('stock_factory, avg_purchase_price')
               .eq('id', consumed.item_id)
               .single();
             if (itemData) {
@@ -1490,7 +1490,7 @@ export const db = {
                 quantity: consumed.quantity,
                 unit_price: Number(itemData.avg_purchase_price || 0),
                 total_price: Number(itemData.avg_purchase_price || 0) * consumed.quantity,
-                description: `استهلاك تصنيع (سجل #${logData.id?.slice(0,6) || ''})`
+                description: `استهلاك تصنيع (سجل #${data.id?.slice(0,6) || ''})`
               });
             }
           }
@@ -1498,7 +1498,7 @@ export const db = {
           for (const produced of logData.produced_items) {
             const { data: itemData } = await supabase
               .from('inventory_items')
-              .select('stock_distribution')
+              .select('stock_distribution, avg_purchase_price')
               .eq('id', produced.item_id)
               .single();
             if (itemData) {
@@ -1515,7 +1515,7 @@ export const db = {
                 quantity: produced.quantity,
                 unit_price: Number(itemData.avg_purchase_price || 0),
                 total_price: Number(itemData.avg_purchase_price || 0) * produced.quantity,
-                description: `وارد تصنيع (سجل #${logData.id?.slice(0,6) || ''})`
+                description: `وارد تصنيع (سجل #${data.id?.slice(0,6) || ''})`
               });
             }
           }
@@ -1652,7 +1652,7 @@ export const db = {
           for (const item of req.items) {
             const { data: itemData } = await supabase
               .from('inventory_items')
-              .select('stock_factory, stock_distribution')
+              .select('stock_factory, stock_distribution, avg_purchase_price')
               .eq('id', item.item_id)
               .single();
             if (itemData) {
