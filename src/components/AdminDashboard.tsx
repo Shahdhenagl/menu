@@ -2,6 +2,21 @@ import { useState, useEffect, useRef } from 'react';
 import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct } from '../types';
 import { db } from '../lib/supabase';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
+
+
+const getLocalDayStr = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getLocalMonthStr = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+};
+
 import { 
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   ResponsiveContainer, Cell, AreaChart, Area 
@@ -163,8 +178,8 @@ export default function AdminDashboard({
   // Manual orders states & filtering
   const [orderFilterType, setOrderFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
   const [ordersDepartmentFilter, setOrdersDepartmentFilter] = useState<'all' | 'restaurant' | 'bar'>('all');
-  const [selectedFilterDay, setSelectedFilterDay] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [selectedFilterMonth, setSelectedFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [selectedFilterDay, setSelectedFilterDay] = useState<string>(() => getLocalDayStr());
+  const [selectedFilterMonth, setSelectedFilterMonth] = useState<string>(() => getLocalMonthStr()); // YYYY-MM
   const [selectedFilterYear, setSelectedFilterYear] = useState<number>(() => new Date().getFullYear());
 
   const [orderModalOpen, setOrderModalOpen] = useState(false);
@@ -176,8 +191,8 @@ export default function AdminDashboard({
 
   // Invoice filter states
   const [invFilterType, setInvFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
-  const [invFilterDay, setInvFilterDay] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [invFilterMonth, setInvFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [invFilterDay, setInvFilterDay] = useState<string>(() => getLocalDayStr());
+  const [invFilterMonth, setInvFilterMonth] = useState<string>(() => getLocalMonthStr());
   const [invFilterYear, setInvFilterYear] = useState<number>(() => new Date().getFullYear());
   const [invOrderTypeFilter, setInvOrderTypeFilter] = useState<'all' | 'takeaway' | 'talabat' | 'dine_in' | 'delivery'>('all');
   const [invPaymentFilter, setInvPaymentFilter] = useState<string>('all');
@@ -221,19 +236,19 @@ export default function AdminDashboard({
   const [expType, setExpType] = useState('بضائع وخامات');
   const [customExpType, setCustomExpType] = useState('');
   const [expAmount, setExpAmount] = useState(0);
-  const [expDate, setExpDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [expDate, setExpDate] = useState(() => getLocalDayStr());
   const [expPaymentMethod, setExpPaymentMethod] = useState<'cash' | 'visa' | 'wallet' | 'instapay'>('cash');
   
   // Expenses filtering states
   const [expFilterType, setExpFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
-  const [expFilterDay, setExpFilterDay] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [expFilterMonth, setExpFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [expFilterDay, setExpFilterDay] = useState<string>(() => getLocalDayStr());
+  const [expFilterMonth, setExpFilterMonth] = useState<string>(() => getLocalMonthStr());
   const [expFilterYear, setExpFilterYear] = useState<number>(() => new Date().getFullYear());
 
   // Analytics filtering states
   const [analyticsFilterType, setAnalyticsFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
-  const [analyticsFilterDay, setAnalyticsFilterDay] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [analyticsFilterMonth, setAnalyticsFilterMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [analyticsFilterDay, setAnalyticsFilterDay] = useState<string>(() => getLocalDayStr());
+  const [analyticsFilterMonth, setAnalyticsFilterMonth] = useState<string>(() => getLocalMonthStr());
   const [analyticsFilterYear, setAnalyticsFilterYear] = useState<number>(() => new Date().getFullYear());
   const [analyticsDepartmentFilter, setAnalyticsDepartmentFilter] = useState<'all' | 'restaurant' | 'bar'>('all');
 
@@ -270,8 +285,8 @@ export default function AdminDashboard({
   // Filters
   const [empSearchQuery, setEmpSearchQuery] = useState('');
   const [attSearchQuery, setAttSearchQuery] = useState('');
-  const [attDateFilter, setAttDateFilter] = useState(() => new Date().toISOString().split('T')[0]);
-  const [selectedProfileMonth, setSelectedProfileMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [attDateFilter, setAttDateFilter] = useState(() => getLocalDayStr());
+  const [selectedProfileMonth, setSelectedProfileMonth] = useState(() => getLocalMonthStr());
 
   // --- SYSTEM USERS MODULE STATES ---
   const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
@@ -490,7 +505,7 @@ export default function AdminDashboard({
   // Purchase Invoice modal
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const [invoiceSupplierId, setInvoiceSupplierId] = useState('');
-  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [invoiceDate, setInvoiceDate] = useState(() => getLocalDayStr());
   const [invoiceCart, setInvoiceCart] = useState<{item_id: string, quantity: number, unit_price: number}[]>([]);
   const [invoicePaidCash, setInvoicePaidCash] = useState<number | ''>('');
   const [invoicePaidVisa, setInvoicePaidVisa] = useState<number | ''>('');
@@ -1003,7 +1018,7 @@ export default function AdminDashboard({
       setExpType('بضائع وخامات');
       setCustomExpType('');
       setExpAmount(0);
-      setExpDate(new Date().toISOString().split('T')[0]);
+      setExpDate(getLocalDayStr());
       setExpPaymentMethod('cash');
       alert(language === 'ar' ? 'تم تسجيل المصروف بنجاح!' : 'Expense recorded successfully!');
     } catch (err) {
@@ -1161,7 +1176,7 @@ export default function AdminDashboard({
         employee_id: selectedEmployee.id,
         type: txType,
         amount: amount,
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDayStr(),
         notes: txNotes.trim()
       });
       setTxModalOpen(false);
@@ -1520,12 +1535,12 @@ export default function AdminDashboard({
       if (boundaries) {
         return orderDate >= boundaries.start && orderDate <= boundaries.end;
       } else {
-        const dayStr = orderDate.toISOString().split('T')[0];
+        const dayStr = getLocalDayStr(orderDate);
         return dayStr === selectedFilterDay;
       }
     }
     if (orderFilterType === 'month') {
-      const monthStr = orderDate.toISOString().slice(0, 7);
+      const monthStr = getLocalMonthStr(orderDate);
       return monthStr === selectedFilterMonth;
     }
     if (orderFilterType === 'year') {
@@ -1547,10 +1562,10 @@ export default function AdminDashboard({
         if (boundaries) {
           if (d < boundaries.start || d > boundaries.end) return false;
         } else {
-          if (d.toISOString().split('T')[0] !== invFilterDay) return false;
+          if (getLocalDayStr(d) !== invFilterDay) return false;
         }
       } else if (invFilterType === 'month') {
-        if (d.toISOString().slice(0, 7) !== invFilterMonth) return false;
+        if (getLocalMonthStr(d) !== invFilterMonth) return false;
       } else if (invFilterType === 'year') {
         if (d.getFullYear() !== invFilterYear) return false;
       }
@@ -1671,8 +1686,8 @@ export default function AdminDashboard({
     if (analyticsFilterType === 'all') return true;
     if (!o.created_at) return true;
     const dateObj = new Date(o.created_at);
-    if (analyticsFilterType === 'day') return dateObj.toISOString().split('T')[0] === analyticsFilterDay;
-    if (analyticsFilterType === 'month') return dateObj.toISOString().slice(0, 7) === analyticsFilterMonth;
+    if (analyticsFilterType === 'day') return getLocalDayStr(dateObj) === analyticsFilterDay;
+    if (analyticsFilterType === 'month') return getLocalMonthStr(dateObj) === analyticsFilterMonth;
     if (analyticsFilterType === 'year') return dateObj.getFullYear() === analyticsFilterYear;
     return true;
   });
@@ -4647,7 +4662,7 @@ export default function AdminDashboard({
                   </thead>
                   <tbody>
                     {systemUsers.filter(u => u.role === 'waiter').map(user => {
-                      const todayStr = new Date().toISOString().split('T')[0];
+                      const todayStr = getLocalDayStr();
                       const ordersTodayCount = orders.filter(o => 
                         o.waiter_id === user.id && o.created_at.startsWith(todayStr)
                       ).length;
@@ -5577,7 +5592,7 @@ export default function AdminDashboard({
                                   <td>
                                     <div style={{ display: 'flex', gap: '0.8rem' }}>
                                       <button className="btn-gold" style={{ padding: '0.3rem 0.8rem', fontSize: '0.85rem' }} onClick={() => {
-                                        setSelectedProfileMonth(new Date().toISOString().slice(0, 7));
+                                        setSelectedProfileMonth(getLocalMonthStr());
                                         setSelectedEmployee(emp);
                                       }}>
                                         👤 {language === 'ar' ? 'كشف الحساب والبروفايل' : 'View Profile'}

@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+
+const getLocalDayStr = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 import { 
   ShoppingBag, Utensils, CheckCircle, X, 
   Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
@@ -245,7 +254,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         playCheckOutSound();
       }
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDayStr();
 
       if (isCheckIn) {
         await db.addAttendanceLog({
@@ -2198,7 +2207,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           return emp.name.toLowerCase().includes(q) || (emp.phone && emp.phone.includes(q));
                         })
                         .map(emp => {
-                          const todayStr = new Date().toISOString().split('T')[0];
+                          const todayStr = getLocalDayStr();
                           
                           // Check if they are currently checked in (active)
                           const activeLog = attendanceLogsList.find(l => l.employee_id === emp.id && l.date === todayStr && !l.check_out_time);
