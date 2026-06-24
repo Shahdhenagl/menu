@@ -132,17 +132,25 @@ export default function PartnersView({ language }: PartnersViewProps) {
                       <div style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>{p.phone || '-'}</div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="icon-btn" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => {
-                      setEditPartnerId(p.id);
-                      setName(p.name);
-                      setPhone(p.phone || '');
-                      setOpeningBalance(String(p.opening_balance));
-                      setShowPartnerModal(true);
-                    }}>
-                      <Edit size={16} color="var(--text-light)" />
+                  <div style={{ display: 'flex', gap: '0.8rem' }}>
+                    <button 
+                      className="icon-btn" 
+                      style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                      onClick={() => {
+                        setEditPartnerId(p.id);
+                        setName(p.name);
+                        setPhone(p.phone || '');
+                        setOpeningBalance(String(p.opening_balance));
+                        setShowPartnerModal(true);
+                      }}
+                    >
+                      <Edit size={16} color="var(--gold-secondary)" />
                     </button>
-                    <button className="icon-btn" style={{ background: 'rgba(239, 68, 68, 0.1)' }} onClick={() => handleDeletePartner(p.id)}>
+                    <button 
+                      className="icon-btn" 
+                      style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                      onClick={() => handleDeletePartner(p.id)}
+                    >
                       <Trash2 size={16} color="#ef4444" />
                     </button>
                   </div>
@@ -282,36 +290,46 @@ export default function PartnersView({ language }: PartnersViewProps) {
               
               <div style={{ maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">
                 {activePartnerTxs.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '2rem' }}>
-                    {language === 'ar' ? 'لا توجد حركات' : 'No transactions'}
-                  </p>
+                  <div style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem', background: 'var(--bg-darker)', borderRadius: '12px', border: '1px dashed var(--border-color)' }}>
+                    <Users size={48} opacity={0.2} style={{ marginBottom: '1rem' }} />
+                    <p>{language === 'ar' ? 'لا توجد حركات مسجلة حتى الآن' : 'No transactions recorded yet'}</p>
+                  </div>
                 ) : (
-                  <table className="data-table" style={{ width: '100%' }}>
-                    <thead>
-                      <tr>
-                        <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
-                        <th>{language === 'ar' ? 'البيان' : 'Description'}</th>
-                        <th>{language === 'ar' ? 'مدين (عليه)' : 'Debit'}</th>
-                        <th>{language === 'ar' ? 'دائن (له)' : 'Credit'}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activePartnerTxs.map(t => (
-                        <tr key={t.id}>
-                          <td style={{ fontSize: '0.9rem', color: 'var(--text-gray)' }}>
-                            {new Date(t.created_at || '').toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
-                          </td>
-                          <td>{t.description || '-'}</td>
-                          <td style={{ color: '#ef4444', fontWeight: 'bold' }}>
-                            {t.type === 'debit' ? Number(t.amount).toLocaleString() : '-'}
-                          </td>
-                          <td style={{ color: '#10b981', fontWeight: 'bold' }}>
-                            {t.type === 'credit' ? Number(t.amount).toLocaleString() : '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                    {activePartnerTxs.map(t => (
+                      <div key={t.id} style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        background: 'var(--bg-darker)', 
+                        padding: '1.2rem', 
+                        borderRadius: '12px', 
+                        borderLeft: `4px solid ${t.type === 'credit' ? '#10b981' : '#ef4444'}`,
+                        boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: 'bold', color: 'var(--text-white)', marginBottom: '0.4rem', fontSize: '1.05rem' }}>
+                            {t.description || (language === 'ar' ? 'بدون تفاصيل' : 'No description')}
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-gray)' }}>
+                            {new Date(t.created_at || '').toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
+                              year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            })}
+                          </div>
+                        </div>
+                        <div style={{ 
+                          fontWeight: '800', 
+                          fontSize: '1.2rem', 
+                          color: t.type === 'credit' ? '#10b981' : '#ef4444',
+                          background: t.type === 'credit' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '8px'
+                        }}>
+                          {t.type === 'credit' ? '+' : '-'}{Number(t.amount).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
