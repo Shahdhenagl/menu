@@ -3455,8 +3455,6 @@ export default function AdminDashboard({
                             <option value="cancelled" style={{ background: '#121212', color: 'var(--danger)' }}>❌ ملغي</option>
                           </select>
 
-                          <button 
-                            type="button" 
                           <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.3rem' }}>
                             <button 
                               type="button" 
