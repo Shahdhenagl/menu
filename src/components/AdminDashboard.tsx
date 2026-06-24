@@ -17,18 +17,21 @@ const getLocalMonthStr = (d = new Date()) => {
   return `${year}-${month}`;
 };
 
-import { 
+import {
   BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   ResponsiveContainer, Cell, AreaChart, Area 
 } from 'recharts';
 import {
+  Loader,
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
   Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle, Eye,
-  UserCheck, DollarSign, WalletCards
+  UserCheck, DollarSign, WalletCards, TrendingDown
 } from 'lucide-react';
 import { playClickSound, playNewOrderSound } from '../utils/audioUtils';
 import FinancialsView from './FinancialsView';
+import PartnersView from './PartnersView';
+import InventoryReportView from './InventoryReportView';
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -43,7 +46,7 @@ interface AdminDashboardProps {
   setLanguage: (lang: 'ar' | 'en') => void;
 }
 
-type TabType = 'analytics' | 'financials' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'factory' | 'employees' | 'attendance';
+type TabType = 'analytics' | 'financials' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'inventory_report' | 'factory' | 'employees' | 'attendance' | 'partners';
 
 export default function AdminDashboard({
   onClose,
@@ -153,7 +156,10 @@ export default function AdminDashboard({
 
   // --- DEBT CUSTOMERS STATE ---
   const [debtCustomers, setDebtCustomers] = useState<Customer[]>([]);
-  const [debtSettleAmount, setDebtSettleAmount] = useState<Record<string, number>>({});
+  
+  const [showDebtSettleModal, setShowDebtSettleModal] = useState<string | null>(null);
+  const [debtSettleMethods, setDebtSettleMethods] = useState({ cash: '', visa: '', wallet: '', instapay: '' });
+  const [isSettlingDebt, setIsSettlingDebt] = useState(false);
 
   const fetchDebtCustomers = async () => {
     try {
@@ -245,6 +251,17 @@ export default function AdminDashboard({
   const [expFilterMonth, setExpFilterMonth] = useState<string>(() => getLocalMonthStr());
   const [expFilterYear, setExpFilterYear] = useState<number>(() => new Date().getFullYear());
 
+  // --- FINANCIAL TRANSACTIONS STATE ---
+  const [financialTransactions, setFinancialTransactions] = useState<any[]>([]);
+  const fetchFinancialTransactions = async () => {
+    try {
+      const txs = await db.getFinancialTransactions();
+      setFinancialTransactions(txs);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Analytics filtering states
   const [analyticsFilterType, setAnalyticsFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
   const [analyticsFilterDay, setAnalyticsFilterDay] = useState<string>(() => getLocalDayStr());
@@ -302,6 +319,7 @@ export default function AdminDashboard({
   const AVAILABLE_PERMISSIONS = [
     { id: 'analytics', ar: 'نظرة عامة والتحليلات', en: 'Overview & Analytics' },
     { id: 'financials', ar: 'المعاملات المالية', en: 'Financial Transactions' },
+    { id: 'partners', ar: 'العهد والشركاء', en: 'Partners & Custody' },
     { id: 'categories', ar: 'إدارة التصنيفات', en: 'Categories' },
     { id: 'products', ar: 'إدارة المنتجات', en: 'Products' },
     { id: 'orders', ar: 'إدارة الطلبات', en: 'Orders' },
@@ -994,6 +1012,7 @@ export default function AdminDashboard({
     fetchEmployees();
     fetchAttendanceLogs();
     fetchEmployeeTransactions();
+    fetchFinancialTransactions();
   }, []);
 
   const handleSaveExpense = async (e: React.FormEvent) => {
@@ -2525,6 +2544,16 @@ export default function AdminDashboard({
               <span>{language === 'ar' ? 'المعاملات المالية' : 'Financials'}</span>
             </button>
           )}
+
+          {hasPermission('partners') && (
+            <button 
+              className={`admin-nav-item ${activeTab === 'partners' ? 'active' : ''}`}
+              onClick={() => setActiveTab('partners')}
+            >
+              <Users size={18} />
+              <span>{language === 'ar' ? 'العهد والشركاء' : 'Partners'}</span>
+            </button>
+          )}
           
           {hasPermission('categories') && (
             <button 
@@ -2657,13 +2686,23 @@ export default function AdminDashboard({
           )}
 
           {(loggedInUser?.role === 'admin' || loggedInUser?.role === 'inventory_manager' || loggedInUser?.role === 'manager') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
-              onClick={() => setActiveTab('inventory')}
-            >
-              <Package size={18} />
-              <span>{language === 'ar' ? 'إدارة المخازن' : 'Inventory'}</span>
-            </button>
+            <>
+              <button 
+                className={`admin-nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
+                onClick={() => setActiveTab('inventory')}
+              >
+                <Package size={18} />
+                <span>{language === 'ar' ? 'إدارة المخازن' : 'Inventory'}</span>
+              </button>
+
+              <button 
+                className={`admin-nav-item ${activeTab === 'inventory_report' ? 'active' : ''}`}
+                onClick={() => setActiveTab('inventory_report')}
+              >
+                <TrendingDown size={18} />
+                <span>{language === 'ar' ? 'الجرد الشهري' : 'Monthly Report'}</span>
+              </button>
+            </>
           )}
 
           {(loggedInUser?.role === 'admin' || loggedInUser?.role === 'kitchen_manager') && (
@@ -3137,11 +3176,17 @@ export default function AdminDashboard({
           <FinancialsView 
             orders={orders}
             expenses={expenses}
+            financialTransactions={financialTransactions}
+            fetchFinancialTransactions={fetchFinancialTransactions}
             inventoryItems={inventoryItems}
             language={language}
             dateFilter={financialsDateFilter}
             setDateFilter={setFinancialsDateFilter}
           />
+        )}
+
+        {activeTab === 'partners' && (
+          <PartnersView language={language} />
         )}
 
         {activeTab === 'categories' && (
@@ -3723,7 +3768,6 @@ export default function AdminDashboard({
                       <th>{language === 'ar' ? 'العميل' : 'Customer'}</th>
                       <th>{language === 'ar' ? 'رقم الهاتف' : 'Phone'}</th>
                       <th>{language === 'ar' ? 'المديونية الحالية' : 'Current Debt'}</th>
-                      <th>{language === 'ar' ? 'تسديد مبلغ' : 'Settle Amount'}</th>
                       <th>{language === 'ar' ? 'إجراء' : 'Action'}</th>
                     </tr>
                   </thead>
@@ -3747,30 +3791,13 @@ export default function AdminDashboard({
                           {(cust.total_debt || 0).toLocaleString()} EGP
                         </td>
                         <td>
-                          <input
-                            type="number"
-                            min="0"
-                            max={cust.total_debt || 0}
-                            className="input-gold"
-                            placeholder={language === 'ar' ? 'مبلغ التسديد' : 'Amount'}
-                            value={debtSettleAmount[cust.id] || ''}
-                            onChange={(e) => setDebtSettleAmount(prev => ({ ...prev, [cust.id]: Number(e.target.value) }))}
-                            style={{ width: '120px', padding: '0.4rem 0.6rem', fontSize: '0.9rem' }}
-                          />
-                        </td>
-                        <td>
                           <button
                             className="btn-gold"
-                            disabled={(debtSettleAmount[cust.id] || 0) <= 0 || (debtSettleAmount[cust.id] || 0) > (cust.total_debt || 0)}
+                            disabled={(cust.total_debt || 0) <= 0}
                             style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', borderRadius: '10px' }}
-                            onClick={async () => {
-                              const amount = debtSettleAmount[cust.id] || 0;
-                              if (amount <= 0 || amount > (cust.total_debt || 0)) return;
-                              const newDebt = (cust.total_debt || 0) - amount;
-                              await db.updateCustomerDebt(cust.id, newDebt);
-                              await fetchDebtCustomers();
-                              setDebtSettleAmount(prev => ({ ...prev, [cust.id]: 0 }));
-                              alert(language === 'ar' ? `تم تسديد ${amount} جنيه بنجاح! المديونية المتبقية: ${newDebt} جنيه` : `Settled ${amount} EGP! Remaining: ${newDebt} EGP`);
+                            onClick={() => {
+                              setShowDebtSettleModal(cust.id);
+                              setDebtSettleMethods({ cash: '', visa: '', wallet: '', instapay: '' });
                             }}
                           >
                             <CheckCircle size={14} />
@@ -3781,7 +3808,7 @@ export default function AdminDashboard({
                     ))}
                     {debtCustomers.length === 0 && (
                       <tr>
-                        <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem' }}>
+                        <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem' }}>
                           {language === 'ar' ? 'لا يوجد عملاء مسجلين بمديونيات' : 'No customers with debts found'}
                         </td>
                       </tr>
@@ -3790,6 +3817,150 @@ export default function AdminDashboard({
                 </table>
               </div>
             </div>
+
+            {/* Debt Settlement Modal */}
+            {showDebtSettleModal && (
+              <div className="modal-overlay" onClick={() => !isSettlingDebt && setShowDebtSettleModal(null)}>
+                <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                  <div className="modal-header">
+                    <h3 className="text-gradient-gold" style={{ margin: 0 }}>
+                      {language === 'ar' ? 'تسديد دفعة من المديونية' : 'Settle Debt'}
+                    </h3>
+                    <button className="close-btn" onClick={() => !isSettlingDebt && setShowDebtSettleModal(null)} disabled={isSettlingDebt}>
+                      <X size={24} />
+                    </button>
+                  </div>
+                  
+                  {(() => {
+                    const cust = debtCustomers.find(c => c.id === showDebtSettleModal);
+                    if (!cust) return null;
+                    const cashVal = Number(debtSettleMethods.cash) || 0;
+                    const visaVal = Number(debtSettleMethods.visa) || 0;
+                    const walletVal = Number(debtSettleMethods.wallet) || 0;
+                    const instapayVal = Number(debtSettleMethods.instapay) || 0;
+                    const totalSettle = cashVal + visaVal + walletVal + instapayVal;
+                    const remainingDebt = (cust.total_debt || 0) - totalSettle;
+                    const isError = totalSettle <= 0 || remainingDebt < 0;
+
+                    return (
+                      <div className="modal-body">
+                        <div style={{ background: 'rgba(212,175,55,0.05)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', textAlign: 'center', border: '1px solid rgba(212,175,55,0.2)' }}>
+                          <div style={{ fontSize: '0.9rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'العميل' : 'Customer'}</div>
+                          <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{cust.name}</div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--danger)', marginTop: '0.5rem' }}>{language === 'ar' ? 'المديونية الحالية:' : 'Current Debt:'} <span className="font-en" style={{ fontWeight: 'bold' }}>{(cust.total_debt || 0).toLocaleString()} EGP</span></div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-gray)' }}>
+                              💵 {language === 'ar' ? 'كاش (نقدي)' : 'Cash'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              className="input-gold"
+                              value={debtSettleMethods.cash}
+                              onChange={e => setDebtSettleMethods(prev => ({ ...prev, cash: e.target.value }))}
+                              placeholder="0"
+                              style={{ width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-gray)' }}>
+                              💳 {language === 'ar' ? 'فيزا' : 'Visa'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              className="input-gold"
+                              value={debtSettleMethods.visa}
+                              onChange={e => setDebtSettleMethods(prev => ({ ...prev, visa: e.target.value }))}
+                              placeholder="0"
+                              style={{ width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-gray)' }}>
+                              📱 {language === 'ar' ? 'محفظة (Wallet)' : 'Wallet'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              className="input-gold"
+                              value={debtSettleMethods.wallet}
+                              onChange={e => setDebtSettleMethods(prev => ({ ...prev, wallet: e.target.value }))}
+                              placeholder="0"
+                              style={{ width: '100%' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-gray)' }}>
+                              ⚡ {language === 'ar' ? 'إنستاباي' : 'Instapay'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              className="input-gold"
+                              value={debtSettleMethods.instapay}
+                              onChange={e => setDebtSettleMethods(prev => ({ ...prev, instapay: e.target.value }))}
+                              placeholder="0"
+                              style={{ width: '100%' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                            <span>{language === 'ar' ? 'إجمالي الدفعة:' : 'Total Payment:'}</span>
+                            <span className="font-en" style={{ color: 'var(--success)', fontWeight: 'bold' }}>{totalSettle.toLocaleString()} EGP</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>{language === 'ar' ? 'المديونية المتبقية:' : 'Remaining Debt:'}</span>
+                            <span className="font-en" style={{ color: remainingDebt < 0 ? 'var(--danger)' : 'var(--text-gray)', fontWeight: 'bold' }}>{remainingDebt.toLocaleString()} EGP</span>
+                          </div>
+                        </div>
+
+                        <button
+                          className="btn-gold"
+                          style={{ width: '100%', padding: '1rem', fontSize: '1rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                          disabled={isError || isSettlingDebt}
+                          onClick={async () => {
+                            try {
+                              setIsSettlingDebt(true);
+                              
+                              if (cashVal > 0) {
+                                await db.addFinancialTransaction({ type: 'debt_settlement', amount: cashVal, from_method: 'deferred', to_method: 'cash', customer_id: cust.id, description: language === 'ar' ? 'تسديد دفعة من المديونية (كاش)' : 'Debt settlement (Cash)' });
+                              }
+                              if (visaVal > 0) {
+                                await db.addFinancialTransaction({ type: 'debt_settlement', amount: visaVal, from_method: 'deferred', to_method: 'visa', customer_id: cust.id, description: language === 'ar' ? 'تسديد دفعة من المديونية (فيزا)' : 'Debt settlement (Visa)' });
+                              }
+                              if (walletVal > 0) {
+                                await db.addFinancialTransaction({ type: 'debt_settlement', amount: walletVal, from_method: 'deferred', to_method: 'wallet', customer_id: cust.id, description: language === 'ar' ? 'تسديد دفعة من المديونية (محفظة)' : 'Debt settlement (Wallet)' });
+                              }
+                              if (instapayVal > 0) {
+                                await db.addFinancialTransaction({ type: 'debt_settlement', amount: instapayVal, from_method: 'deferred', to_method: 'instapay', customer_id: cust.id, description: language === 'ar' ? 'تسديد دفعة من المديونية (إنستاباي)' : 'Debt settlement (Instapay)' });
+                              }
+
+                              await db.updateCustomerDebt(cust.id, remainingDebt);
+                              await fetchDebtCustomers();
+                              
+                              setShowDebtSettleModal(null);
+                              setIsSettlingDebt(false);
+                            } catch (e) {
+                              setIsSettlingDebt(false);
+                              alert(language === 'ar' ? 'حدث خطأ أثناء حفظ العمليات' : 'Error saving transactions');
+                            }
+                          }}
+                        >
+                          {isSettlingDebt ? <Loader className="spin" size={20} /> : <CheckCircle size={20} />}
+                          <span>{language === 'ar' ? 'تأكيد وحفظ الدفعات' : 'Confirm & Save Payments'}</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -4740,6 +4911,10 @@ export default function AdminDashboard({
         )}
 
         {/* --- INVENTORY TAB --- */}
+        {activeTab === 'inventory_report' && (
+          <InventoryReportView language={language} />
+        )}
+
         {activeTab === 'inventory' && (
           <div className="admin-section">
             <div className="section-header" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>

@@ -1,9 +1,13 @@
-import { TrendingUp, TrendingDown, Landmark, Banknote, PackageOpen, Receipt } from 'lucide-react';
+import { useState } from 'react';
+import { TrendingUp, TrendingDown, Landmark, Banknote, PackageOpen, Receipt, ArrowRightLeft, X } from 'lucide-react';
 import type { Order, Expense, InventoryItem } from '../types';
+import { db } from '../lib/supabase';
 
 interface FinancialsViewProps {
   orders: Order[];
   expenses: Expense[];
+  financialTransactions?: any[];
+  fetchFinancialTransactions?: () => void;
   inventoryItems: InventoryItem[];
   language: 'ar' | 'en';
   dateFilter: 'today' | 'week' | 'month' | 'all';
@@ -13,12 +17,20 @@ interface FinancialsViewProps {
 export default function FinancialsView({
   orders,
   expenses,
+  financialTransactions = [],
+  fetchFinancialTransactions,
   inventoryItems,
   language,
   dateFilter,
   setDateFilter
 }: FinancialsViewProps) {
   
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferFrom, setTransferFrom] = useState('cash');
+  const [transferTo, setTransferTo] = useState('visa');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
+
   const filterDate = (dateStr: string | number) => {
     if (dateFilter === 'all') return true;
     const date = new Date(dateStr);
@@ -38,26 +50,70 @@ export default function FinancialsView({
     return true;
   };
 
-  // Only consider completed orders, excluding deferred & hospitality
+  // Only consider completed orders, excluding hospitality. Deferred is now INCLUDED in revenue
   const filteredOrders = orders.filter(o => 
     o.status === 'completed' && 
-    o.payment_method !== 'deferred' && 
     o.payment_method !== 'hospitality' && 
-    (o.id ? filterDate(Number.isInteger(parseInt(o.id)) ? parseInt(o.id) : o.id) : true) // Order IDs are often timestamps
+    (o.id ? filterDate(Number.isInteger(parseInt(o.id)) ? parseInt(o.id) : o.id) : true)
   );
   
   const filteredExpenses = expenses.filter(e => filterDate(e.expense_date || e.created_at || ''));
+  const filteredTxs = financialTransactions.filter(t => filterDate(t.created_at));
 
   const totalRevenue = filteredOrders.reduce((sum, o) => sum + o.total_price, 0);
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-  const netCashflow = totalRevenue - totalExpenses;
+  const netCashflow = totalRevenue - totalExpenses; // Note: Revenue now includes deferred, so true net cashflow requires checking balances
 
-  // Breakdowns
-  const revenueByType = filteredOrders.reduce((acc, o) => {
-    const method = o.payment_method || 'cash';
-    acc[method] = (acc[method] || 0) + o.total_price;
-    return acc;
-  }, {} as Record<string, number>);
+  // Revenue Breakdown (5 Categories)
+  const revenueByType = { cash: 0, visa: 0, wallet: 0, instapay: 0, deferred: 0 };
+  
+  filteredOrders.forEach(o => {
+    if (o.payment_method === 'split' && o.payment_details) {
+      revenueByType.cash += (o.payment_details.cash || 0);
+      revenueByType.visa += (o.payment_details.visa || 0);
+      revenueByType.wallet += (o.payment_details.wallet || 0);
+      revenueByType.instapay += (o.payment_details.instapay || 0);
+      revenueByType.deferred += (o.payment_details.deferred || 0);
+    } else {
+      const method = o.payment_method || 'cash';
+      if (revenueByType[method as keyof typeof revenueByType] !== undefined) {
+        revenueByType[method as keyof typeof revenueByType] += o.total_price;
+      } else {
+        revenueByType.cash += o.total_price; // fallback
+      }
+    }
+  });
+
+  // Calculate actual Vault/Bank balances (All Time, not just filtered date to show true balances)
+  // For precise balances, we shouldn't use filtered, we should calculate overall. But for this view, we can calculate period balances.
+  // We will calculate period balances:
+  const balances = { cash: 0, visa: 0, wallet: 0, instapay: 0, deferred: 0 };
+  
+  // 1. Add Revenues
+  balances.cash += revenueByType.cash;
+  balances.visa += revenueByType.visa;
+  balances.wallet += revenueByType.wallet;
+  balances.instapay += revenueByType.instapay;
+  balances.deferred += revenueByType.deferred;
+
+  // 2. Subtract Expenses
+  filteredExpenses.forEach(e => {
+    const method = e.payment_method || 'cash';
+    if (balances[method as keyof typeof balances] !== undefined) {
+      balances[method as keyof typeof balances] -= e.amount;
+    }
+  });
+
+  // 3. Apply Financial Transactions (Transfers & Debt Settlements)
+  filteredTxs.forEach(tx => {
+    if (tx.from_method && balances[tx.from_method as keyof typeof balances] !== undefined) {
+      balances[tx.from_method as keyof typeof balances] -= tx.amount;
+    }
+    if (tx.to_method && balances[tx.to_method as keyof typeof balances] !== undefined) {
+      balances[tx.to_method as keyof typeof balances] += tx.amount;
+    }
+  });
+
 
   const stockMainValue = inventoryItems.reduce((sum, i) => sum + ((i.stock_main || 0) * (i.avg_purchase_price || 0)), 0);
   const stockFactoryValue = inventoryItems.reduce((sum, i) => sum + ((i.stock_factory || 0) * (i.avg_purchase_price || 0)), 0);
@@ -69,6 +125,7 @@ export default function FinancialsView({
       case 'visa': return language === 'ar' ? 'فيزا' : 'Visa';
       case 'wallet': return language === 'ar' ? 'محفظة' : 'Wallet';
       case 'instapay': return language === 'ar' ? 'إنستاباي' : 'Instapay';
+      case 'deferred': return language === 'ar' ? 'آجل (مديونية)' : 'Deferred (Debt)';
       case 'split': return language === 'ar' ? 'دفع مقسم' : 'Split Payment';
       default: return method;
     }
@@ -80,6 +137,7 @@ export default function FinancialsView({
       case 'visa': return '#3b82f6'; // Blue
       case 'wallet': return '#8b5cf6'; // Purple
       case 'instapay': return '#f59e0b'; // Orange
+      case 'deferred': return '#ef4444'; // Red
       default: return '#6b7280';
     }
   };
@@ -88,11 +146,43 @@ export default function FinancialsView({
     return amount.toLocaleString() + (language === 'ar' ? ' ج.م' : ' EGP');
   };
 
+  const handleTransferSubmit = async () => {
+    const amount = Number(transferAmount);
+    if (amount <= 0) return;
+    if (transferFrom === transferTo) {
+      alert(language === 'ar' ? 'لا يمكن التحويل لنفس الجهة' : 'Cannot transfer to the same method');
+      return;
+    }
+
+    setIsSubmittingTransfer(true);
+    try {
+      await db.addFinancialTransaction({
+        type: 'fund_transfer',
+        amount,
+        from_method: transferFrom,
+        to_method: transferTo,
+        description: language === 'ar' ? 'تحويل أرصدة داخلي' : 'Internal Fund Transfer'
+      });
+      if (fetchFinancialTransactions) fetchFinancialTransactions();
+      setShowTransferModal(false);
+      setTransferAmount('');
+    } catch (e) {
+      console.error(e);
+      alert('Error transferring funds');
+    } finally {
+      setIsSubmittingTransfer(false);
+    }
+  };
+
   return (
     <div className="admin-content-section fade-in">
       <div className="section-header">
         <h2>{language === 'ar' ? 'المعاملات المالية' : 'Financial Transactions'}</h2>
         <div className="action-buttons">
+          <button className="btn-gold outline" onClick={() => setShowTransferModal(true)}>
+            <ArrowRightLeft size={16} />
+            {language === 'ar' ? 'تحويل بين الأرصدة' : 'Transfer Funds'}
+          </button>
           <select 
             className="input-gold" 
             value={dateFilter} 
@@ -136,12 +226,29 @@ export default function FinancialsView({
           <div className="stat-card" style={{ background: 'var(--bg-darker)', border: `1px solid ${netCashflow >= 0 ? 'rgba(59, 130, 246, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`, position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: netCashflow >= 0 ? '#3b82f6' : '#ef4444' }}></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ color: 'var(--text-gray)', fontSize: '1.1rem', margin: 0 }}>{language === 'ar' ? 'صافي السيولة النقدية' : 'Net Cashflow'}</h3>
+              <h3 style={{ color: 'var(--text-gray)', fontSize: '1.1rem', margin: 0 }}>{language === 'ar' ? 'صافي التدفقات (الفترة)' : 'Period Net Flow'}</h3>
               <Landmark size={24} color={netCashflow >= 0 ? '#3b82f6' : '#ef4444'} />
             </div>
             <p style={{ fontSize: '2rem', fontWeight: 'bold', color: netCashflow >= 0 ? '#3b82f6' : '#ef4444', margin: 0 }}>
               {formatCurrency(netCashflow)}
             </p>
+          </div>
+        </div>
+
+        {/* Treasurary Balances */}
+        <div>
+          <h3 style={{ marginBottom: '1rem', color: 'var(--text-light)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+            {language === 'ar' ? 'أرصدة الخزينة والحسابات (خلال الفترة)' : 'Treasury Balances (Period)'}
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+            {['cash', 'visa', 'wallet', 'instapay', 'deferred'].map(method => (
+              <div key={method} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '12px', border: `1px solid ${getMethodColor(method)}` }}>
+                <div style={{ color: 'var(--text-gray)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{getMethodLabel(method)}</div>
+                <div className="font-en" style={{ fontSize: '1.5rem', fontWeight: 'bold', color: getMethodColor(method) }}>
+                  {formatCurrency(balances[method as keyof typeof balances])}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -152,7 +259,7 @@ export default function FinancialsView({
           <div style={{ background: 'var(--bg-darker)', borderRadius: '12px', padding: '1.5rem', border: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
               <Banknote size={24} color="#10b981" />
-              <h3 style={{ margin: 0, color: '#10b981' }}>{language === 'ar' ? 'الإيرادات (الطلبات المكتملة)' : 'Revenues (Completed)'}</h3>
+              <h3 style={{ margin: 0, color: '#10b981' }}>{language === 'ar' ? 'تحليل الإيرادات (المبيعات)' : 'Revenue Analysis (Sales)'}</h3>
             </div>
             
             {/* Payment Methods Breakdown */}
@@ -252,8 +359,75 @@ export default function FinancialsView({
             </div>
           </div>
         </div>
-
+        
       </div>
+
+      {/* Fund Transfer Modal */}
+      {showTransferModal && (
+        <div className="modal-overlay" onClick={() => !isSubmittingTransfer && setShowTransferModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3 className="text-gradient-gold" style={{ margin: 0 }}>
+                {language === 'ar' ? 'تحويل أرصدة' : 'Fund Transfer'}
+              </h3>
+              <button className="close-btn" onClick={() => !isSubmittingTransfer && setShowTransferModal(false)} disabled={isSubmittingTransfer}>
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>
+                  {language === 'ar' ? 'من:' : 'From:'}
+                </label>
+                <select className="input-gold" value={transferFrom} onChange={e => setTransferFrom(e.target.value)} style={{ width: '100%' }}>
+                  <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
+                  <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
+                  <option value="wallet">{language === 'ar' ? 'محفظة' : 'Wallet'}</option>
+                  <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>
+                  {language === 'ar' ? 'إلى:' : 'To:'}
+                </label>
+                <select className="input-gold" value={transferTo} onChange={e => setTransferTo(e.target.value)} style={{ width: '100%' }}>
+                  <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
+                  <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
+                  <option value="wallet">{language === 'ar' ? 'محفظة' : 'Wallet'}</option>
+                  <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>
+                  {language === 'ar' ? 'المبلغ:' : 'Amount:'}
+                </label>
+                <input 
+                  type="number" 
+                  className="input-gold" 
+                  value={transferAmount} 
+                  onChange={e => setTransferAmount(e.target.value)} 
+                  placeholder="0.00"
+                  style={{ width: '100%', fontSize: '1.2rem' }}
+                />
+              </div>
+
+              <button 
+                className="btn-gold" 
+                style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', display: 'flex', justifyContent: 'center', gap: '0.5rem' }}
+                disabled={isSubmittingTransfer || Number(transferAmount) <= 0}
+                onClick={handleTransferSubmit}
+              >
+                <ArrowRightLeft size={20} />
+                {language === 'ar' ? 'تأكيد التحويل' : 'Confirm Transfer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

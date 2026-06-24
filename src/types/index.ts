@@ -156,6 +156,17 @@ export interface InventoryItem {
   created_at?: string;
 }
 
+export interface InventoryMovement {
+  id: string;
+  item_id: string;
+  type: 'in' | 'out' | 'waste' | 'adjustment';
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  description?: string;
+  created_at?: string;
+}
+
 export interface PurchaseInvoiceItem {
   item_id: string;
   item_name: string;
@@ -257,6 +268,35 @@ export interface DistributionProduct {
   notes?: string;
   created_at?: string;
 }
+
+export interface FinancialTransaction {
+  id: string;
+  type: 'fund_transfer' | 'debt_settlement';
+  amount: number;
+  from_method?: 'cash' | 'visa' | 'wallet' | 'instapay' | 'deferred';
+  to_method?: 'cash' | 'visa' | 'wallet' | 'instapay' | 'deferred';
+  description?: string;
+  customer_id?: string;
+  created_at?: string;
+}
+
+export interface Partner {
+  id: string;
+  name: string;
+  phone?: string;
+  opening_balance: number; // For example: positive means partner invested this much.
+  created_at?: string;
+}
+
+export interface PartnerTransaction {
+  id: string;
+  partner_id: string;
+  type: 'credit' | 'debit'; // credit: additions to partner (داين), debit: deductions from partner (مدين)
+  amount: number;
+  description?: string;
+  created_at?: string;
+}
+
 
 export interface ProductRecipe {
   id: string;

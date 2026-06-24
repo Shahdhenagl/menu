@@ -1023,6 +1023,15 @@ export const db = {
                   avg_purchase_price: newAvg
                 })
                 .eq('id', invItem.item_id);
+
+              await this.addInventoryMovement({
+                item_id: invItem.item_id,
+                type: 'in',
+                quantity: invItem.quantity,
+                unit_price: invItem.unit_price,
+                total_price: invItem.total_price,
+                description: `فاتورة مشتريات من ${invoice.supplier_name || 'مورد'}`
+              });
             }
           }
           return data;
@@ -1057,6 +1066,15 @@ export const db = {
           last_purchase_price: incomingPrice,
           avg_purchase_price: newAvg
         };
+
+        await this.addInventoryMovement({
+          item_id: invItem.item_id,
+          type: 'in',
+          quantity: invItem.quantity,
+          unit_price: invItem.unit_price,
+          total_price: invItem.total_price,
+          description: `فاتورة مشتريات من ${newInvoice.supplier_name || 'مورد'}`
+        });
       }
     }
     
@@ -1736,6 +1754,15 @@ export const db = {
                   .update({ stock_distribution: newStockDist })
                   .eq('id', rec.inventory_item_id);
 
+                await this.addInventoryMovement({
+                  item_id: rec.inventory_item_id,
+                  type: 'out',
+                  quantity: deductQty,
+                  unit_price: Number(itemData.avg_purchase_price) || 0,
+                  total_price: ((Number(itemData.avg_purchase_price) || 0) * deductQty),
+                  description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
+                });
+
                 if (newStockDist <= (Number(itemData.low_stock_threshold) || 5000)) {
                   await this.addNotification({
                     title: 'تنبيه: اقتراب نفاذ المخزون',
@@ -1762,6 +1789,15 @@ export const db = {
               .update({ stock_distribution: newStockDist })
               .eq('id', item.id);
 
+            await this.addInventoryMovement({
+              item_id: item.id,
+              type: 'out',
+              quantity: item.quantity,
+              unit_price: Number(prodItem.avg_purchase_price) || 0,
+              total_price: ((Number(prodItem.avg_purchase_price) || 0) * item.quantity),
+              description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
+            });
+
             if (newStockDist <= (Number(prodItem.low_stock_threshold) || 5000)) {
               await this.addNotification({
                 title: 'تنبيه: اقتراب نفاذ المخزون',
@@ -1787,6 +1823,15 @@ export const db = {
               items[itemIdx].stock_distribution = Math.max(0, (items[itemIdx].stock_distribution || 0) - deductQty);
               updated = true;
 
+              await this.addInventoryMovement({
+                item_id: items[itemIdx].id,
+                type: 'out',
+                quantity: deductQty,
+                unit_price: items[itemIdx].avg_purchase_price || 0,
+                total_price: (items[itemIdx].avg_purchase_price || 0) * deductQty,
+                description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
+              });
+
               if (items[itemIdx].stock_distribution <= (items[itemIdx].low_stock_threshold || 5000)) {
                 await this.addNotification({
                   title: 'تنبيه: اقتراب نفاذ المخزون',
@@ -1803,6 +1848,15 @@ export const db = {
             total_cost += (items[prodItemIdx].avg_purchase_price || 0) * item.quantity;
             items[prodItemIdx].stock_distribution = Math.max(0, (items[prodItemIdx].stock_distribution || 0) - item.quantity);
             updated = true;
+
+            await this.addInventoryMovement({
+              item_id: items[prodItemIdx].id,
+              type: 'out',
+              quantity: item.quantity,
+              unit_price: items[prodItemIdx].avg_purchase_price || 0,
+              total_price: (items[prodItemIdx].avg_purchase_price || 0) * item.quantity,
+              description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
+            });
 
             if (items[prodItemIdx].stock_distribution <= (items[prodItemIdx].low_stock_threshold || 5000)) {
               await this.addNotification({
@@ -2051,6 +2105,173 @@ export const db = {
     const updated = txs.filter(t => t.id !== id);
     saveLocalData('meridien_employee_transactions', updated);
     return true;
+  },
+
+  // --- FINANCIAL TRANSACTIONS (Ledger) ---
+  async getFinancialTransactions(): Promise<any[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('financial_transactions')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase fetch financial transactions failed", err);
+      }
+    }
+    return getLocalData('meridien_financial_transactions', [] as any[]);
+  },
+
+  async addFinancialTransaction(tx: Omit<any, 'id' | 'created_at'>): Promise<any> {
+    const newTx = {
+      ...tx,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await (supabase as any).from('financial_transactions').insert([newTx]).select().single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase insert financial transaction failed", err);
+      }
+    }
+    const txs = getLocalData('meridien_financial_transactions', [] as any[]);
+    txs.unshift(newTx);
+    saveLocalData('meridien_financial_transactions', txs);
+    return newTx;
+  },
+
+  // --- PARTNERS & CUSTODY (العهد والشركاء) ---
+  async getPartners(): Promise<any[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('partners').select('*').order('created_at', { ascending: true });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase fetch partners failed", err);
+      }
+    }
+    return getLocalData('meridien_partners', []);
+  },
+
+  async addPartner(partner: Omit<any, 'id' | 'created_at'>): Promise<any> {
+    const newPartner = {
+      ...partner,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await (supabase as any).from('partners').insert([newPartner]).select().single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase insert partner failed", err);
+      }
+    }
+    const partners = getLocalData('meridien_partners', [] as any[]);
+    partners.push(newPartner);
+    saveLocalData('meridien_partners', partners);
+    return newPartner;
+  },
+
+  async updatePartner(id: string, updates: Partial<any>): Promise<boolean> {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('partners').update(updates).eq('id', id);
+        if (!error) return true;
+      } catch (err) {
+        console.warn("Supabase update partner failed", err);
+      }
+    }
+    const partners = getLocalData('meridien_partners', [] as any[]);
+    const updated = partners.map(p => p.id === id ? { ...p, ...updates } : p);
+    saveLocalData('meridien_partners', updated);
+    return true;
+  },
+
+  async deletePartner(id: string): Promise<boolean> {
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('partners').delete().eq('id', id);
+        if (!error) return true;
+      } catch (err) {
+        console.warn("Supabase delete partner failed", err);
+      }
+    }
+    const partners = getLocalData('meridien_partners', [] as any[]);
+    saveLocalData('meridien_partners', partners.filter(p => p.id !== id));
+    return true;
+  },
+
+  async getPartnerTransactions(partnerId?: string): Promise<any[]> {
+    if (supabase) {
+      try {
+        let query = supabase.from('partner_transactions').select('*').order('created_at', { ascending: false });
+        if (partnerId) query = query.eq('partner_id', partnerId);
+        const { data, error } = await query;
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase fetch partner transactions failed", err);
+      }
+    }
+    const txs = getLocalData('meridien_partner_transactions', [] as any[]);
+    if (partnerId) return txs.filter(t => t.partner_id === partnerId);
+    return txs;
+  },
+
+  async addPartnerTransaction(tx: Omit<any, 'id' | 'created_at'>): Promise<any> {
+    const newTx = {
+      ...tx,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await (supabase as any).from('partner_transactions').insert([newTx]).select().single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase insert partner transaction failed", err);
+      }
+    }
+    const txs = getLocalData('meridien_partner_transactions', [] as any[]);
+    txs.unshift(newTx);
+    saveLocalData('meridien_partner_transactions', txs);
+    return newTx;
+  },
+
+  // --- INVENTORY MOVEMENTS (الجرد الشهري) ---
+  async getInventoryMovements(): Promise<any[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('inventory_movements').select('*').order('created_at', { ascending: false });
+        if (!error) return data || [];
+      } catch (err) {
+        console.warn("Supabase fetch inventory movements failed", err);
+      }
+    }
+    return getLocalData('meridien_inventory_movements', []);
+  },
+
+  async addInventoryMovement(movement: Omit<any, 'id' | 'created_at'>): Promise<any> {
+    const newMovement = {
+      ...movement,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await (supabase as any).from('inventory_movements').insert([newMovement]).select().single();
+        if (!error && data) return data;
+      } catch (err) {
+        console.warn("Supabase insert inventory movement failed", err);
+      }
+    }
+    const movements = getLocalData('meridien_inventory_movements', [] as any[]);
+    movements.unshift(newMovement);
+    saveLocalData('meridien_inventory_movements', movements);
+    return newMovement;
   }
 };
 
