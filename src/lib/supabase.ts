@@ -162,16 +162,18 @@ export const db = {
     if (supabase) {
       try {
         // Delete old recipes
-        await supabase.from('manufacturing_recipes').delete().eq('manufactured_item_id', manufacturedItemId);
+        const { error: delErr } = await supabase.from('manufacturing_recipes').delete().eq('manufactured_item_id', manufacturedItemId);
+        if (delErr) throw delErr;
         // Insert new recipes
         if (recipes.length > 0) {
-          await supabase.from('manufacturing_recipes').insert(
+          const { error: insErr } = await supabase.from('manufacturing_recipes').insert(
             recipes.map(r => ({
               manufactured_item_id: manufacturedItemId,
               ingredient_item_id: r.ingredient_item_id,
               quantity: r.quantity
             }))
           );
+          if (insErr) throw insErr;
         }
         return;
       } catch (err) {

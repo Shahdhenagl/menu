@@ -53,7 +53,7 @@ export interface Order {
   total_price: number;
   total_cost?: number; // COGS for profit calculation
   status: 'pending' | 'preparing' | 'delivered' | 'completed' | 'cancelled';
-  order_type?: 'takeaway' | 'talabat' | 'dine_in' | 'delivery';
+  order_type?: 'takeaway' | 'talabat' | 'dine_in' | 'delivery' | 'website';
   waiter_id?: string;
   waiter_name?: string;
   payment_method?: 'cash' | 'visa' | 'wallet' | 'instapay' | 'split' | 'deferred' | 'hospitality'; // Added hospitality (ضيافة)

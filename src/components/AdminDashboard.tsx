@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct } from '../types';
 import { db } from '../lib/supabase';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
-
+import * as XLSX from 'xlsx';
 
 const getLocalDayStr = (d = new Date()) => {
   const year = d.getFullYear();
@@ -132,10 +132,12 @@ export default function AdminDashboard({
   const [prodRecipes, setProdRecipes] = useState<ProductRecipe[]>([]);
   const [selectedInvItemId, setSelectedInvItemId] = useState('');
   const [recipeItemQty, setRecipeItemQty] = useState<number | ''>('');
+  const [recipeItemUnitMode, setRecipeItemUnitMode] = useState<'base' | 'sub'>('base');
 
   // Products filtering
   const [adminProdSearch, setAdminProdSearch] = useState('');
   const [adminProdCatFilter, setAdminProdCatFilter] = useState('all');
+  const [adminProdDeptFilter, setAdminProdDeptFilter] = useState('all');
 
   // Settings inputs
   const [setLogoUrl, setSetLogoUrl] = useState(settings.logo_url);
@@ -152,6 +154,24 @@ export default function AdminDashboard({
   const [servicePercent, setServicePercent] = useState<number>(settings.service_percent || 0);
   const [telegramBotToken, setTelegramBotToken] = useState(settings.telegram_bot_token || '');
   const [telegramChatId, setTelegramChatId] = useState(settings.telegram_chat_id || '');
+
+  const getSubUnitLabel = (baseUnit: string) => {
+    if (!baseUnit) return null;
+    const u = baseUnit.toLowerCase().trim();
+    if (['كجم', 'كغ', 'kg', 'kilo'].includes(u)) return language === 'ar' ? 'جرام' : 'Gram';
+    if (['لتر', 'liter', 'l'].includes(u)) return language === 'ar' ? 'ملي' : 'ML';
+    if (['جرام', 'gram', 'g'].includes(u)) return language === 'ar' ? 'كجم' : 'Kg';
+    if (['ملي', 'ml'].includes(u)) return language === 'ar' ? 'لتر' : 'Liter';
+    return null;
+  };
+
+  const computeFinalQty = (qty: number, mode: 'base' | 'sub', baseUnit: string) => {
+    if (mode === 'base') return qty;
+    const u = baseUnit?.toLowerCase().trim() || '';
+    if (['كجم', 'كغ', 'kg', 'kilo', 'لتر', 'liter', 'l'].includes(u)) return qty / 1000;
+    if (['جرام', 'gram', 'g', 'ملي', 'ml'].includes(u)) return qty * 1000;
+    return qty;
+  };
 
 
   // --- DEBT CUSTOMERS STATE ---
@@ -515,6 +535,7 @@ export default function AdminDashboard({
 
   // Inventory Item modal
   const [invModalOpen, setInvModalOpen] = useState(false);
+  const [editingInvItem, setEditingInvItem] = useState<InventoryItem | null>(null);
   const [invName, setInvName] = useState('');
   const [invUnit, setInvUnit] = useState('كجم');
   const [invUnitsPerCarton, setInvUnitsPerCarton] = useState<number | ''>('');
@@ -530,6 +551,7 @@ export default function AdminDashboard({
   const [activeMfgRecipes, setActiveMfgRecipes] = useState<any[]>([]);
   const [mfgSelIngredient, setMfgSelIngredient] = useState('');
   const [mfgSelQuantity, setMfgSelQuantity] = useState<number | ''>('');
+  const [mfgSelUnitMode, setMfgSelUnitMode] = useState<'base' | 'sub'>('base');
   
   // Warehouse Selection & Stock Editing
   const [inventoryWarehouseFilter, setInventoryWarehouseFilter] = useState<'main' | 'factory' | 'distribution'>('main');
@@ -722,25 +744,41 @@ export default function AdminDashboard({
     if (!invName.trim()) return;
     setLoading(true);
     try {
-      const newItem = await db.addInventoryItem({
-        name: invName,
-        unit: invUnit,
-        stock_main: 0,
-        stock_factory: 0,
-        stock_distribution: 0,
-        avg_purchase_price: 0,
-        last_purchase_price: 0,
-        units_per_carton: invUnitsPerCarton ? Number(invUnitsPerCarton) : undefined,
-        units_per_box: invUnitsPerBox ? Number(invUnitsPerBox) : undefined,
-        is_manufactured: invTargetType === 'manufactured'
-      });
+      let savedItemId = '';
+      if (editingInvItem) {
+        await db.updateInventoryItem(editingInvItem.id, {
+          name: invName,
+          unit: invUnit,
+          units_per_carton: invUnitsPerCarton ? Number(invUnitsPerCarton) : undefined,
+          units_per_box: invUnitsPerBox ? Number(invUnitsPerBox) : undefined,
+          is_manufactured: invTargetType === 'manufactured'
+        });
+        savedItemId = editingInvItem.id;
+      } else {
+        const newItem = await db.addInventoryItem({
+          name: invName,
+          unit: invUnit,
+          stock_main: 0,
+          stock_factory: 0,
+          stock_distribution: 0,
+          avg_purchase_price: 0,
+          last_purchase_price: 0,
+          units_per_carton: invUnitsPerCarton ? Number(invUnitsPerCarton) : undefined,
+          units_per_box: invUnitsPerBox ? Number(invUnitsPerBox) : undefined,
+          is_manufactured: invTargetType === 'manufactured'
+        });
+        savedItemId = newItem?.id || '';
+      }
       
-      if (newItem && invTargetType === 'manufactured' && invRecipes.length > 0) {
-        await db.saveManufacturingRecipe(newItem.id, invRecipes);
+      if (savedItemId && invTargetType === 'manufactured') {
+        await db.saveManufacturingRecipe(savedItemId, invRecipes);
+      } else if (savedItemId && invTargetType === 'raw') {
+        await db.saveManufacturingRecipe(savedItemId, []);
       }
       
       await fetchInventoryData();
       setInvModalOpen(false);
+      setEditingInvItem(null);
       setInvName('');
       setInvUnit('كجم');
       setInvUnitsPerCarton('');
@@ -1406,7 +1444,7 @@ export default function AdminDashboard({
       id: crypto.randomUUID(),
       product_id: editingProduct?.id || '',
       inventory_item_id: selectedInvItemId,
-      quantity: Number(recipeItemQty),
+      quantity: computeFinalQty(Number(recipeItemQty), recipeItemUnitMode, item.unit),
       inventory_item_name: item.name,
       inventory_item_unit: item.unit
     };
@@ -1414,6 +1452,7 @@ export default function AdminDashboard({
     setProdRecipes([...prodRecipes, newRecipeItem]);
     setSelectedInvItemId('');
     setRecipeItemQty('');
+    setRecipeItemUnitMode('base');
   };
 
   const handleRemoveRecipeItem = (invItemId: string) => {
@@ -1490,7 +1529,127 @@ export default function AdminDashboard({
     }
   };
 
-  // --- ORDERS STATUS ACTIONS ---
+  // --- EXPORT / IMPORT PRODUCTS ---
+  const exportProductsToExcel = async () => {
+    setLoading(true);
+    try {
+      const allRecipes = await Promise.all(products.map(p => db.getProductRecipes(p.id)));
+      
+      const exportData = products.map((prod, index) => {
+        const cat = categories.find(c => c.id === prod.category_id);
+        const recipes = allRecipes[index];
+        
+        const row: any = {
+          'رقم المنتج': prod.id,
+          'التصنيف': cat ? cat.name_ar : '',
+          'اسم المنتج (عربي)': prod.name_ar,
+          'اسم المنتج (إنجليزي)': prod.name_en,
+          'السعر': prod.price,
+        };
+        
+        for (let i = 0; i < 10; i++) {
+          row[`مكون ${i + 1}`] = recipes[i]?.inventory_item_name || '';
+          row[`كمية ${i + 1}`] = recipes[i]?.quantity || '';
+        }
+        return row;
+      });
+
+      const inventoryRefData = inventoryItems.map(item => ({
+        'رقم الخامة': item.id,
+        'اسم الخامة': item.name,
+        'الوحدة': item.unit
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const wsProducts = XLSX.utils.json_to_sheet(exportData);
+      const wsInventory = XLSX.utils.json_to_sheet(inventoryRefData);
+
+      XLSX.utils.book_append_sheet(wb, wsProducts, "المنتجات");
+      XLSX.utils.book_append_sheet(wb, wsInventory, "الخامات المتاحة");
+
+      XLSX.writeFile(wb, `Products_Recipes_${getLocalDayStr()}.xlsx`);
+    } catch (err) {
+      console.error(err);
+      alert(language === 'ar' ? 'حدث خطأ أثناء التصدير' : 'Error exporting data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const importProductsFromExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wsName = wb.SheetNames[0];
+          const ws = wb.Sheets[wsName];
+          const data: any[] = XLSX.utils.sheet_to_json(ws);
+
+          for (const row of data) {
+            const prodId = row['رقم المنتج'];
+            if (!prodId) continue; // Skip if no product ID
+
+            // Update Product Info
+            const newPrice = Number(row['السعر']);
+            const newNameAr = row['اسم المنتج (عربي)'];
+            const newNameEn = row['اسم المنتج (إنجليزي)'];
+
+            if (!isNaN(newPrice) && newNameAr && newNameEn) {
+              await db.updateProduct(prodId, {
+                price: newPrice,
+                name_ar: newNameAr,
+                name_en: newNameEn
+              });
+            }
+
+            // Update Recipes
+            const newRecipes: { inventory_item_id: string; quantity: number }[] = [];
+            for (let i = 1; i <= 10; i++) {
+              const invName = row[`مكون ${i}`];
+              const qtyStr = row[`كمية ${i}`];
+              const qty = Number(qtyStr);
+
+              if (invName && invName.toString().trim() !== '' && !isNaN(qty) && qty > 0) {
+                const invItem = inventoryItems.find(item => item.name.trim() === invName.toString().trim());
+                if (invItem) {
+                  newRecipes.push({
+                    inventory_item_id: invItem.id,
+                    quantity: qty
+                  });
+                } else {
+                  console.warn(`Inventory item "${invName}" not found for product ${prodId}`);
+                }
+              }
+            }
+            
+            await db.updateProductRecipe(prodId, newRecipes);
+          }
+
+          await refreshData();
+          alert(language === 'ar' ? 'تم الاستيراد والتحديث بنجاح!' : 'Import and update successful!');
+        } catch (err) {
+          console.error(err);
+          alert(language === 'ar' ? 'حدث خطأ في قراءة الملف' : 'Error reading file');
+        } finally {
+          setLoading(false);
+          if (e.target) e.target.value = ''; // reset file input
+        }
+      };
+      reader.readAsBinaryString(file);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+      if (e.target) e.target.value = ''; // reset file input
+    }
+  };
+
+  // --- ORDERS MANAGEMENT ---
   const handleUpdateOrderStatus = async (id: string, status: Order['status']) => {
     if (status === 'cancelled') {
       triggerOtpProtectedAction('إلغاء الطلب', 'Cancel Order', async () => {
@@ -3340,12 +3499,31 @@ export default function AdminDashboard({
                       <option key={c.id} value={c.id}>{language === 'ar' ? c.name_ar : c.name_en}</option>
                     ))}
                   </select>
+                  <select 
+                    value={adminProdDeptFilter}
+                    onChange={(e) => setAdminProdDeptFilter(e.target.value)}
+                    className="input-gold"
+                    style={{ padding: '0.4rem', borderRadius: '10px', minWidth: '150px', fontSize: '0.9rem' }}
+                  >
+                    <option value="all">{language === 'ar' ? 'كل الأقسام' : 'All Departments'}</option>
+                    <option value="restaurant">{language === 'ar' ? '🍳 مطعم' : '🍳 Kitchen'}</option>
+                    <option value="bar">{language === 'ar' ? '🍸 بار' : '🍸 Bar'}</option>
+                  </select>
                 </div>
 
-                <button className="btn-gold" onClick={() => handleOpenProdModal(null)}>
-                  <PlusCircle size={16} />
-                  {t.addProd}
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button className="btn-gold" onClick={() => handleOpenProdModal(null)}>
+                    <PlusCircle size={16} />
+                    {t.addProd}
+                  </button>
+                  <button className="btn-outline-gold" onClick={exportProductsToExcel} style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '10px' }}>
+                    <Download size={16} /> {language === 'ar' ? 'تصدير' : 'Export'}
+                  </button>
+                  <label className="btn-outline-gold" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '10px', cursor: 'pointer' }}>
+                    <Upload size={16} /> {language === 'ar' ? 'استيراد' : 'Import'}
+                    <input type="file" accept=".xlsx, .xls" style={{ display: 'none' }} onChange={importProductsFromExcel} />
+                  </label>
+                </div>
               </div>
 
               <div className="table-wrapper">
@@ -3356,6 +3534,7 @@ export default function AdminDashboard({
                       <th>{t.thNameAr}</th>
                       <th>{t.thNameEn}</th>
                       <th>{t.thCategory}</th>
+                      <th>{language === 'ar' ? 'القسم' : 'Dept'}</th>
                       <th>{t.thPrice}</th>
                       <th>{t.thStatus}</th>
                       <th>{t.thActions}</th>
@@ -3363,12 +3542,14 @@ export default function AdminDashboard({
                   </thead>
                   <tbody>
                     {products.filter(p => {
+                      const category = categories.find(c => c.id === p.category_id);
+                      const matchDept = adminProdDeptFilter === 'all' || category?.department === adminProdDeptFilter;
                       const matchCat = adminProdCatFilter === 'all' || p.category_id === adminProdCatFilter;
                       const searchLower = adminProdSearch.toLowerCase();
                       const matchSearch = adminProdSearch.trim() === '' || 
                         p.name_ar.toLowerCase().includes(searchLower) ||
                         p.name_en.toLowerCase().includes(searchLower);
-                      return matchCat && matchSearch;
+                      return matchCat && matchSearch && matchDept;
                     }).map((prod) => {
                       const category = categories.find(c => c.id === prod.category_id);
                       return (
@@ -3385,6 +3566,17 @@ export default function AdminDashboard({
                           <td style={{ fontWeight: '700' }}>{prod.name_ar}</td>
                           <td className="font-en">{prod.name_en}</td>
                           <td>{category ? (language === 'ar' ? category.name_ar : category.name_en) : '---'}</td>
+                          <td>
+                            <span style={{ 
+                              padding: '2px 8px', 
+                              borderRadius: '4px', 
+                              fontSize: '0.8rem',
+                              background: category?.department === 'bar' ? 'rgba(59,130,246,0.1)' : 'rgba(245,158,11,0.1)',
+                              color: category?.department === 'bar' ? '#3b82f6' : '#f59e0b'
+                            }}>
+                              {category?.department === 'bar' ? (language === 'ar' ? '🍸 بار' : '🍸 Bar') : (language === 'ar' ? '🍳 مطعم' : '🍳 Kitchen')}
+                            </span>
+                          </td>
                           <td className="font-en" style={{ color: 'var(--gold-primary)', fontWeight: '800' }}>{prod.price} EGP</td>
                           <td>
                             <button 
@@ -5049,7 +5241,16 @@ export default function AdminDashboard({
                       <option value="distribution">{language === 'ar' ? 'مخزن التوزيع' : 'Distribution Warehouse'}</option>
                     </select>
 
-                    <button className="btn-gold" onClick={() => setInvModalOpen(true)}>
+                    <button className="btn-gold" onClick={() => {
+                      setEditingInvItem(null);
+                      setInvName('');
+                      setInvUnit('كجم');
+                      setInvUnitsPerCarton('');
+                      setInvUnitsPerBox('');
+                      setInvTargetType('raw');
+                      setInvRecipes([]);
+                      setInvModalOpen(true);
+                    }}>
                       <Plus size={18} /> {language === 'ar' ? 'إضافة صنف جديد' : 'Add New Item'}
                     </button>
                   </div>
@@ -5101,6 +5302,30 @@ export default function AdminDashboard({
                             <td>{item.avg_purchase_price.toFixed(2)}</td>
                             <td>{item.last_purchase_price.toFixed(2)}</td>
                             <td>
+                              <button 
+                                className="action-btn edit" 
+                                style={{ marginInlineEnd: '0.5rem', background: '#eab308', color: '#000', border: 'none' }}
+                                onClick={async () => {
+                                  setEditingInvItem(item);
+                                  setInvName(item.name);
+                                  setInvUnit(item.unit || 'كجم');
+                                  setInvUnitsPerCarton(item.units_per_carton || '');
+                                  setInvUnitsPerBox(item.units_per_box || '');
+                                  setInvTargetType(item.is_manufactured ? 'manufactured' : 'raw');
+                                  
+                                  if (item.is_manufactured) {
+                                    const recipes = await db.getManufacturingRecipes(item.id);
+                                    setInvRecipes(recipes);
+                                  } else {
+                                    setInvRecipes([]);
+                                  }
+                                  
+                                  setInvModalOpen(true);
+                                }}
+                              >
+                                <Edit size={16} />
+                              </button>
+
                               <button 
                                 className="action-btn edit" 
                                 style={{ marginInlineEnd: '0.5rem' }} 
@@ -6208,7 +6433,7 @@ export default function AdminDashboard({
                   {/* Select component & quantity */}
                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1rem' }}>
                     <div>
-                      <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.25rem' }}>{language === 'ar' ? 'اختر مادة خام من المخزن' : 'Select Raw Material'}</label>
+                      <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.25rem' }}>{language === 'ar' ? 'اختر مادة مصنعة/خام من المخزن' : 'Select Material'}</label>
                       <select 
                         className="input-gold" 
                         value={selectedInvItemId} 
@@ -6216,24 +6441,42 @@ export default function AdminDashboard({
                         style={{ height: '42px', width: '100%', background: '#000', border: '1px solid var(--gold-secondary)' }}
                       >
                         <option value="">{language === 'ar' ? '-- اختر مكون --' : '-- Select Ingredient --'}</option>
-                        {inventoryItems.map(item => (
+                        {inventoryItems
+                          .slice()
+                          .sort((a, b) => (b.is_manufactured ? 1 : 0) - (a.is_manufactured ? 1 : 0))
+                          .map(item => (
                           <option key={item.id} value={item.id} style={{ background: '#121212' }}>
-                            {item.name} ({item.unit})
+                            {item.is_manufactured ? '📦 [مصنع]' : '🌾 [خام]'} {item.name} ({item.unit})
                           </option>
                         ))}
                       </select>
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.25rem' }}>{language === 'ar' ? 'الكمية المطلوبة' : 'Required Qty'}</label>
-                      <input 
-                        type="number" 
-                        step="0.001" 
-                        className="input-gold" 
-                        value={recipeItemQty} 
-                        onChange={(e) => setRecipeItemQty(e.target.value === '' ? '' : Number(e.target.value))} 
-                        placeholder="0.200"
-                        style={{ height: '42px', width: '100%' }}
-                      />
+                      <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.25rem' }}>
+                        {language === 'ar' ? 'الكمية' : 'Qty'}
+                      </label>
+                      <div style={{ display: 'flex' }}>
+                        <input 
+                          type="number" 
+                          step="0.001" 
+                          className="input-gold" 
+                          value={recipeItemQty} 
+                          onChange={(e) => setRecipeItemQty(e.target.value === '' ? '' : Number(e.target.value))} 
+                          placeholder="0.200"
+                          style={{ height: '42px', width: '100%', borderTopRightRadius: language === 'ar' ? '10px' : '0', borderBottomRightRadius: language === 'ar' ? '10px' : '0', borderTopLeftRadius: language === 'en' ? '10px' : '0', borderBottomLeftRadius: language === 'en' ? '10px' : '0' }}
+                        />
+                        <select 
+                          className="input-gold"
+                          value={recipeItemUnitMode}
+                          onChange={(e) => setRecipeItemUnitMode(e.target.value as 'base' | 'sub')}
+                          style={{ height: '42px', minWidth: '80px', borderTopRightRadius: language === 'en' ? '10px' : '0', borderBottomRightRadius: language === 'en' ? '10px' : '0', borderTopLeftRadius: language === 'ar' ? '10px' : '0', borderBottomLeftRadius: language === 'ar' ? '10px' : '0', borderRight: 'none' }}
+                        >
+                          <option value="base">{selectedInvItemId ? inventoryItems.find(i => i.id === selectedInvItemId)?.unit : '-'}</option>
+                          {selectedInvItemId && getSubUnitLabel(inventoryItems.find(i => i.id === selectedInvItemId)?.unit || '') && (
+                            <option value="sub">{getSubUnitLabel(inventoryItems.find(i => i.id === selectedInvItemId)?.unit || '')}</option>
+                          )}
+                        </select>
+                      </div>
                     </div>
                     <button 
                       type="button" 
@@ -7423,7 +7666,10 @@ export default function AdminDashboard({
                 )}
               </div>
               <div className="admin-modal-footer">
-                <button type="button" className="btn-outline-gold" onClick={() => setInvModalOpen(false)}>{t.close}</button>
+                <button type="button" className="btn-outline-gold" onClick={() => {
+                  setInvModalOpen(false);
+                  setEditingInvItem(null);
+                }}>{t.close}</button>
                 <button type="submit" className="btn-gold" disabled={loading}>{t.save}</button>
               </div>
             </form>
@@ -7460,7 +7706,27 @@ export default function AdminDashboard({
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>{language === 'ar' ? 'الكمية' : 'Quantity'}</label>
-                  <input type="number" step="0.01" className="input-gold" value={mfgSelQuantity} onChange={e => setMfgSelQuantity(e.target.value ? Number(e.target.value) : '')} />
+                  <div style={{ display: 'flex' }}>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      className="input-gold" 
+                      value={mfgSelQuantity} 
+                      onChange={e => setMfgSelQuantity(e.target.value ? Number(e.target.value) : '')} 
+                      style={{ borderTopRightRadius: language === 'ar' ? '10px' : '0', borderBottomRightRadius: language === 'ar' ? '10px' : '0', borderTopLeftRadius: language === 'en' ? '10px' : '0', borderBottomLeftRadius: language === 'en' ? '10px' : '0' }}
+                    />
+                    <select 
+                      className="input-gold"
+                      value={mfgSelUnitMode}
+                      onChange={(e) => setMfgSelUnitMode(e.target.value as 'base' | 'sub')}
+                      style={{ minWidth: '80px', borderTopRightRadius: language === 'en' ? '10px' : '0', borderBottomRightRadius: language === 'en' ? '10px' : '0', borderTopLeftRadius: language === 'ar' ? '10px' : '0', borderBottomLeftRadius: language === 'ar' ? '10px' : '0', borderRight: 'none' }}
+                    >
+                      <option value="base">{mfgSelIngredient ? inventoryItems.find(i => i.id === mfgSelIngredient)?.unit : '-'}</option>
+                      {mfgSelIngredient && getSubUnitLabel(inventoryItems.find(i => i.id === mfgSelIngredient)?.unit || '') && (
+                        <option value="sub">{getSubUnitLabel(inventoryItems.find(i => i.id === mfgSelIngredient)?.unit || '')}</option>
+                      )}
+                    </select>
+                  </div>
                 </div>
                 <button 
                   type="button" 
@@ -7478,12 +7744,13 @@ export default function AdminDashboard({
                     
                     setActiveMfgRecipes([...activeMfgRecipes, {
                       ingredient_item_id: mfgSelIngredient,
-                      quantity: Number(mfgSelQuantity),
+                      quantity: computeFinalQty(Number(mfgSelQuantity), mfgSelUnitMode, ingItem.unit),
                       ingredient_name: ingItem.name,
                       ingredient_unit: ingItem.unit
                     }]);
                     setMfgSelIngredient('');
                     setMfgSelQuantity('');
+                    setMfgSelUnitMode('base');
                   }}
                 >
                   <Plus size={16} />
@@ -7737,10 +8004,13 @@ export default function AdminDashboard({
                 
                 {/* Add item row */}
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <select id="mfg-new-item" className="input-gold" style={{ padding: '0.5rem' }}>
-                    <option value="">{language === 'ar' ? 'اختر الصنف/الخامة...' : 'Select item...'}</option>
-                    {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                  </select>
+                  <select id="mfg-new-item" className="admin-modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="admin-modal-header">
+              <h2>{language === 'ar' ? (editingInvItem ? 'تعديل صنف' : 'إضافة صنف جديد') : (editingInvItem ? 'Edit Item' : 'Add New Item')}</h2>
+              <button className="btn-close" onClick={() => {
+                setInvModalOpen(false);
+                setEditingInvItem(null);
+              }}><X size={20} /></button>
                   <input type="number" id="mfg-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
                   <select id="mfg-new-unit" className="input-gold" style={{ padding: '0.5rem' }}>
                     <option value="kilo">{language === 'ar' ? 'كجم' : 'KG'}</option>

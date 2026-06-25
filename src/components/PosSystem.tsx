@@ -12,7 +12,8 @@ const getLocalDayStr = (d = new Date()) => {
 import { 
   ShoppingBag, Utensils, CheckCircle, X, 
   Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
-  Pizza, Coffee, ChefHat, Wine, Cake, MessageCircle, Camera, Search
+  Pizza, Coffee, ChefHat, Wine, Cake, MessageCircle, Camera, Search,
+  Bell, Globe
 } from 'lucide-react';
 import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog } from '../types';
@@ -114,12 +115,30 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     });
   };
 
+  const handleAcceptWebsiteOrder = async (order: Order) => {
+    if (!selectedWaiter) return;
+    try {
+      const updatedOrder = await db.updateOrder(order.id, {
+        waiter_id: selectedWaiter.id,
+        waiter_name: selectedWaiter.name
+      });
+      if (updatedOrder) {
+        setActiveOrders(activeOrders.map(o => o.id === order.id ? updatedOrder : o));
+        playSuccessSound();
+      }
+    } catch (err: any) {
+      console.error('Error accepting website order:', err);
+      alert(language === 'ar' ? 'فشل قبول الطلب' : 'Failed to accept order');
+    }
+  };
+
   // Item transfer state
   const [transferItem, setTransferItem] = useState<OrderItem | null>(null);
   const [transferTargetOrderId, setTransferTargetOrderId] = useState<string>('');
   const [transferQty, setTransferQty] = useState<number>(1);
   
   const previousPendingCount = useRef(0);
+  const previousWebsiteOrdersCount = useRef(0);
 
   useEffect(() => {
     loadData();
@@ -135,10 +154,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
   useEffect(() => {
     const currentPending = activeOrders.filter(o => o.status === 'pending').length;
-    if (currentPending > previousPendingCount.current) {
+    const currentWebsiteOrders = activeOrders.filter(o => o.order_type === 'website' && !o.waiter_id && o.status === 'pending').length;
+    
+    if (currentPending > previousPendingCount.current || currentWebsiteOrders > previousWebsiteOrdersCount.current) {
       playNewOrderSound();
     }
     previousPendingCount.current = currentPending;
+    previousWebsiteOrdersCount.current = currentWebsiteOrders;
   }, [activeOrders]);
 
   useEffect(() => {
@@ -859,23 +881,48 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         
         {/* Top Floating Controls */}
         <div style={{ position: 'absolute', top: '1rem', left: '1rem', right: '1rem', display: 'flex', justifyContent: 'space-between', zIndex: 100 }}>
-          {setLanguage && (
-            <button 
-              onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
-              style={{
-                background: 'rgba(0,0,0,0.5)',
-                border: '1px solid var(--gold-primary)',
-                color: 'var(--gold-primary)',
-                padding: '0.5rem 1rem',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                fontFamily: 'inherit'
-              }}
-            >
-              {language === 'ar' ? 'English' : 'عربي'}
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {setLanguage && (
+              <button 
+                onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
+                style={{
+                  background: 'rgba(0,0,0,0.5)',
+                  border: '1px solid var(--gold-primary)',
+                  color: 'var(--gold-primary)',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontFamily: 'inherit'
+                }}
+              >
+                {language === 'ar' ? 'English' : 'عربي'}
+              </button>
+            )}
+
+            {/* Website Orders Notification Bell */}
+            {selectedWaiter && (
+              <div 
+                style={{ position: 'relative', cursor: 'pointer', background: 'rgba(0,0,0,0.5)', padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--gold-primary)' }} 
+                onClick={() => setView('waiter_dashboard')}
+                title={language === 'ar' ? 'طلبات الموقع' : 'Website Orders'}
+              >
+                <Bell size={24} color="var(--gold-primary)" />
+                {activeOrders.filter(o => o.order_type === 'website' && !o.waiter_id && o.status === 'pending').length > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: -5,
+                    right: -5,
+                    width: '12px',
+                    height: '12px',
+                    background: '#ef4444',
+                    borderRadius: '50%',
+                    boxShadow: '0 0 5px #ef4444'
+                  }} />
+                )}
+              </div>
+            )}
+          </div>
           <button onClick={handleClose} style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px' }}>
             <X size={24} />
           </button>
@@ -1355,7 +1402,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem', overflowY: 'auto', flex: 1, alignContent: 'start' }}>
-                {activeOrders.filter(o => viewAllOrders || o.waiter_id === selectedWaiter?.id).map(order => (
+                {activeOrders.filter(o => viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending')).map(order => (
                   <div key={order.id} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '16px', padding: '1.5rem', position: 'relative' }}>
                     {viewAllOrders && order.waiter_id !== selectedWaiter?.id && (
                       <div style={{ position: 'absolute', top: '-10px', right: '10px', background: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>
@@ -1385,51 +1432,59 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     </div>
                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>{order.total_price.toFixed(2)} EGP</div>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#3b82f6', color: '#fff' }} onClick={() => {
-                        setEditingOrder(order);
-                        setEditOrderId(order.id);
-                        setOriginalOrderItems(order.items);
-                        setView('waiter_order_edit');
-                      }}>{language === 'ar' ? 'تعديل' : 'Edit'}</button>
-                      
-                      {order.status === 'delivered' ? (
-                        <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#2ecc71', color: '#000' }} onClick={() => {
-                          setCollectPaymentOrder(order);
-                          setPayCash('');
-                          setPayVisa('');
-                          setPayWallet('');
-                          setPayInstapay('');
-                          setPayIsDeferred(false);
-                          setPayCustomerId(order.customer_id || '');
-                        }}>{language === 'ar' ? 'تحصيل الدفع' : 'Collect Payment'}</button>
+                      {order.order_type === 'website' && !order.waiter_id ? (
+                        <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#10b981', color: '#fff' }} onClick={() => handleAcceptWebsiteOrder(order)}>
+                          {language === 'ar' ? 'قبول الطلب' : 'Accept Order'}
+                        </button>
                       ) : (
-                        <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#f39c12', color: '#000' }} onClick={async () => {
-                          await db.updateOrderStatus(order.id, 'delivered', selectedWaiter?.name);
-                          loadData();
-                        }}>{language === 'ar' ? 'تم التسليم' : 'Mark Delivered'}</button>
+                        <>
+                          <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#3b82f6', color: '#fff' }} onClick={() => {
+                            setEditingOrder(order);
+                            setEditOrderId(order.id);
+                            setOriginalOrderItems(order.items);
+                            setView('waiter_order_edit');
+                          }}>{language === 'ar' ? 'تعديل' : 'Edit'}</button>
+                          
+                          {order.status === 'delivered' ? (
+                            <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#2ecc71', color: '#000' }} onClick={() => {
+                              setCollectPaymentOrder(order);
+                              setPayCash('');
+                              setPayVisa('');
+                              setPayWallet('');
+                              setPayInstapay('');
+                              setPayIsDeferred(false);
+                              setPayCustomerId(order.customer_id || '');
+                            }}>{language === 'ar' ? 'تحصيل الدفع' : 'Collect Payment'}</button>
+                          ) : (
+                            <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#f39c12', color: '#000' }} onClick={async () => {
+                              await db.updateOrderStatus(order.id, 'delivered', selectedWaiter?.name);
+                              loadData();
+                            }}>{language === 'ar' ? 'تم التسليم' : 'Mark Delivered'}</button>
+                          )}
+                          
+                          <button className="pos-btn-outline" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={() => {
+                            triggerOtpProtectedAction('إلغاء الطلب', 'Cancel Order', async () => {
+                              await db.updateOrderStatus(order.id, 'cancelled', selectedWaiter?.name);
+                              if (settings?.telegram_chat_id) {
+                                const text = `⚠️ <b>تنبيه إلغاء طلب نشط</b>\n\n` +
+                                  `• <b>رقم الطلب:</b> <code>#${order.id.slice(0, 6)}</code>\n` +
+                                  `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
+                                  `• <b>العميل:</b> ${order.customer_name || 'غير معروف'}\n` +
+                                  `• <b>القيمة الإجمالية:</b> ${order.total_price.toFixed(2)} EGP`;
+                                
+                                import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+                                  sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
+                                });
+                              }
+                              loadData();
+                            }, order.id);
+                          }}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
+                        </>
                       )}
-                      
-                      <button className="pos-btn-outline" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={() => {
-                        triggerOtpProtectedAction('إلغاء الطلب', 'Cancel Order', async () => {
-                          await db.updateOrderStatus(order.id, 'cancelled', selectedWaiter?.name);
-                          if (settings?.telegram_chat_id) {
-                            const text = `⚠️ <b>تنبيه إلغاء طلب نشط</b>\n\n` +
-                              `• <b>رقم الطلب:</b> <code>#${order.id.slice(0, 6)}</code>\n` +
-                              `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
-                              `• <b>العميل:</b> ${order.customer_name || 'غير معروف'}\n` +
-                              `• <b>القيمة الإجمالية:</b> ${order.total_price.toFixed(2)} EGP`;
-                            
-                            import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
-                              sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
-                            });
-                          }
-                          loadData();
-                        }, order.id);
-                      }}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
                     </div>
                   </div>
                 ))}
-                {activeOrders.filter(o => viewAllOrders || o.waiter_id === selectedWaiter?.id).length === 0 && (
+                {activeOrders.filter(o => viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending')).length === 0 && (
                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem', color: '#666', fontSize: '1.2rem' }}>
                     {language === 'ar' ? 'لا توجد طلبات نشطة حالياً' : 'No active orders currently'}
                   </div>
