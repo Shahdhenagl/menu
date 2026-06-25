@@ -6,6 +6,9 @@ DROP POLICY IF EXISTS "Allow authenticated insert on manufacturing_recipes" ON p
 DROP POLICY IF EXISTS "Allow authenticated update on manufacturing_recipes" ON public.manufacturing_recipes;
 DROP POLICY IF EXISTS "Allow authenticated delete on manufacturing_recipes" ON public.manufacturing_recipes;
 
+-- Drop the new policy if it exists to avoid errors on multiple runs
+DROP POLICY IF EXISTS "Allow all for everyone" ON public.manufacturing_recipes;
+
 -- Create the standard public policies to match other tables
 CREATE POLICY "Allow all for everyone" ON public.manufacturing_recipes FOR ALL USING (true) WITH CHECK (true);
 
@@ -23,4 +26,5 @@ CREATE TABLE IF NOT EXISTS public.distribution_products (
 
 -- Enable RLS and add public policy for distribution_products
 ALTER TABLE public.distribution_products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for everyone" ON public.distribution_products;
 CREATE POLICY "Allow all for everyone" ON public.distribution_products FOR ALL USING (true) WITH CHECK (true);
