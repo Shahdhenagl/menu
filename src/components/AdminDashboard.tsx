@@ -8077,13 +8077,12 @@ export default function AdminDashboard({
                 
                 {/* Add item row */}
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <select id="mfg-new-item" className="admin-modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
-            <div className="admin-modal-header">
-              <h2>{language === 'ar' ? (editingInvItem ? 'تعديل صنف' : 'إضافة صنف جديد') : (editingInvItem ? 'Edit Item' : 'Add New Item')}</h2>
-              <button className="btn-close" onClick={() => {
-                setInvModalOpen(false);
-                setEditingInvItem(null);
-              }}><X size={20} /></button>
+                  <select id="mfg-new-item" className="input-gold" style={{ padding: '0.5rem' }}>
+                    <option value="">{language === 'ar' ? 'اختر صنف/خامة' : 'Select Item'}</option>
+                    {inventoryItems.map(item => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
                   <input type="number" id="mfg-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
                   <select id="mfg-new-unit" className="input-gold" style={{ padding: '0.5rem' }}>
                     <option value="kilo">{language === 'ar' ? 'كجم' : 'KG'}</option>
