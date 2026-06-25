@@ -131,7 +131,7 @@ export default function AdminDashboard({
   // Product Recipes states
   const [prodRecipes, setProdRecipes] = useState<ProductRecipe[]>([]);
   const [selectedInvItemId, setSelectedInvItemId] = useState('');
-  const [recipeItemQty, setRecipeItemQty] = useState<number | ''>('');
+  const [recipeItemQty, setRecipeItemQty] = useState<string | number>('');
   const [recipeItemUnitMode, setRecipeItemUnitMode] = useState<'base' | 'sub'>('base');
 
   // Products filtering
@@ -544,14 +544,14 @@ export default function AdminDashboard({
   const [invTargetType, setInvTargetType] = useState<'raw' | 'manufactured'>('raw');
   const [invRecipes, setInvRecipes] = useState<any[]>([]);
   const [invRecipeSelIngredient, setInvRecipeSelIngredient] = useState('');
-  const [invRecipeSelQuantity, setInvRecipeSelQuantity] = useState<number | ''>('');
+  const [invRecipeSelQuantity, setInvRecipeSelQuantity] = useState<string | number>('');
   
   // Manufacturing Recipe (BOM) modal
   const [mfgRecipeModalOpen, setMfgRecipeModalOpen] = useState(false);
   const [activeMfgItem, setActiveMfgItem] = useState<InventoryItem | null>(null);
   const [activeMfgRecipes, setActiveMfgRecipes] = useState<any[]>([]);
   const [mfgSelIngredient, setMfgSelIngredient] = useState('');
-  const [mfgSelQuantity, setMfgSelQuantity] = useState<number | ''>('');
+  const [mfgSelQuantity, setMfgSelQuantity] = useState<string | number>('');
   const [mfgSelUnitMode, setMfgSelUnitMode] = useState<'base' | 'sub'>('base');
   
   // Warehouse Selection & Stock Editing
@@ -6577,7 +6577,7 @@ export default function AdminDashboard({
                   </h3>
                   
                   {/* Select component & quantity */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr auto', gap: '0.5rem', alignItems: 'end', marginBottom: '1rem' }}>
                     <div>
                       <label style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.25rem' }}>{language === 'ar' ? 'اختر مادة مصنعة/خام من المخزن' : 'Select Material'}</label>
                       <select 
@@ -6607,7 +6607,7 @@ export default function AdminDashboard({
                           step="0.001" 
                           className="input-gold" 
                           value={recipeItemQty} 
-                          onChange={(e) => setRecipeItemQty(e.target.value === '' ? '' : Number(e.target.value))} 
+                          onChange={(e) => setRecipeItemQty(e.target.value)} 
                           placeholder="0.200"
                           style={{ height: '42px', width: '100%', borderTopRightRadius: language === 'ar' ? '10px' : '0', borderBottomRightRadius: language === 'ar' ? '10px' : '0', borderTopLeftRadius: language === 'en' ? '10px' : '0', borderBottomLeftRadius: language === 'en' ? '10px' : '0' }}
                         />
@@ -6615,7 +6615,7 @@ export default function AdminDashboard({
                           className="input-gold"
                           value={recipeItemUnitMode}
                           onChange={(e) => setRecipeItemUnitMode(e.target.value as 'base' | 'sub')}
-                          style={{ height: '42px', minWidth: '80px', borderTopRightRadius: language === 'en' ? '10px' : '0', borderBottomRightRadius: language === 'en' ? '10px' : '0', borderTopLeftRadius: language === 'ar' ? '10px' : '0', borderBottomLeftRadius: language === 'ar' ? '10px' : '0', borderRight: 'none' }}
+                          style={{ height: '42px', minWidth: '60px', borderTopRightRadius: language === 'en' ? '10px' : '0', borderBottomRightRadius: language === 'en' ? '10px' : '0', borderTopLeftRadius: language === 'ar' ? '10px' : '0', borderBottomLeftRadius: language === 'ar' ? '10px' : '0', borderRight: 'none' }}
                         >
                           <option value="base">{selectedInvItemId ? inventoryItems.find(i => i.id === selectedInvItemId)?.unit : '-'}</option>
                           {selectedInvItemId && getSubUnitLabel(inventoryItems.find(i => i.id === selectedInvItemId)?.unit || '') && (
@@ -7742,7 +7742,7 @@ export default function AdminDashboard({
                     <h3 style={{ marginBottom: '1rem', color: 'var(--gold-secondary)' }}>
                       {language === 'ar' ? 'مكونات المنتج من المخزن الرئيسي' : 'Product Ingredients from Main Warehouse'}
                     </h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', marginBottom: '1rem', alignItems: 'end' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr auto', gap: '0.5rem', marginBottom: '1rem', alignItems: 'end' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label>{language === 'ar' ? 'الخامة' : 'Ingredient'}</label>
                         <select className="input-gold" value={invRecipeSelIngredient} onChange={e => setInvRecipeSelIngredient(e.target.value)}>
@@ -7754,7 +7754,7 @@ export default function AdminDashboard({
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label>{language === 'ar' ? 'الكمية' : 'Quantity'}</label>
-                        <input type="number" step="0.01" className="input-gold" value={invRecipeSelQuantity} onChange={e => setInvRecipeSelQuantity(e.target.value ? Number(e.target.value) : '')} />
+                        <input type="number" step="0.01" className="input-gold" value={invRecipeSelQuantity} onChange={e => setInvRecipeSelQuantity(e.target.value)} />
                       </div>
                       <button 
                         type="button" 
@@ -7844,7 +7844,7 @@ export default function AdminDashboard({
               </div>
 
               {/* Add Ingredient Form */}
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'end' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr auto', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'end' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>{language === 'ar' ? 'الخامة' : 'Ingredient'}</label>
                   <select className="input-gold" value={mfgSelIngredient} onChange={e => setMfgSelIngredient(e.target.value)}>
@@ -7862,7 +7862,7 @@ export default function AdminDashboard({
                       step="0.01" 
                       className="input-gold" 
                       value={mfgSelQuantity} 
-                      onChange={e => setMfgSelQuantity(e.target.value ? Number(e.target.value) : '')} 
+                      onChange={e => setMfgSelQuantity(e.target.value)} 
                       style={{ borderTopRightRadius: language === 'ar' ? '10px' : '0', borderBottomRightRadius: language === 'ar' ? '10px' : '0', borderTopLeftRadius: language === 'en' ? '10px' : '0', borderBottomLeftRadius: language === 'en' ? '10px' : '0' }}
                     />
                     <select 
@@ -8288,7 +8288,7 @@ export default function AdminDashboard({
 
               <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
                 <h3 style={{ marginBottom: '1rem', color: 'var(--danger)' }}>{language === 'ar' ? 'الخامات المستهلكة (سيتم خصمها من المصنع)' : 'Consumed Raw Materials (From Factory)'}</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
                   <select id="prod-consumed-item" className="input-gold" style={{ padding: '0.5rem' }}>
                     <option value="">{language === 'ar' ? 'اختر الخامة...' : 'Select raw material...'}</option>
                     {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name} ({i.stock_factory || 0} {language === 'ar' ? 'بالمصنع' : 'in factory'})</option>)}
