@@ -1909,6 +1909,25 @@ export const db = {
   },
 
   // --- AUTOMATIC CASHIER STOCK DEDUCTION ---
+  async notifyLowStock(itemName: string, stock: number) {
+    try {
+      const settings = await this.getSettings();
+      if (settings && settings.telegram_bot_token && settings.telegram_chat_id) {
+        let text = '';
+        if (stock <= 0) {
+          text = `❌ <b>نفاد المخزون</b>\n\nالصنف "<b>${itemName}</b>" انتهى تماماً من المخزن الموزع.`;
+        } else {
+          text = `⚠️ <b>تنبيه: المخزون منخفض</b>\n\nالصنف "<b>${itemName}</b>" اقترب من النفاذ في المخزن الموزع. الكمية المتبقية: <b>${stock}</b>`;
+        }
+        import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+          sendTelegramMessage(settings.telegram_bot_token, settings.telegram_chat_id, text);
+        });
+      }
+    } catch (err) {
+      console.error('Failed to send low stock telegram notification', err);
+    }
+  },
+
   async deductInventoryForOrder(order: Order): Promise<number> {
     if (order.status !== 'completed' || order.inventory_deducted) {
       return 0;
@@ -1953,12 +1972,13 @@ export const db = {
                   description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
                 });
 
-                if (newStockDist <= (Number(itemData.low_stock_threshold) || 5000)) {
+                if (itemData.low_stock_threshold !== undefined && itemData.low_stock_threshold !== null && newStockDist <= Number(itemData.low_stock_threshold)) {
                   await this.addNotification({
                     title: 'تنبيه: اقتراب نفاذ المخزون',
                     message: `الخامة "${itemData.name}" اقتربت من النفاذ في المخزن الموزع. الكمية المتبقية: ${newStockDist}`,
                     target_role: 'admin'
                   });
+                  await this.notifyLowStock(itemData.name, newStockDist);
                 }
               }
             }
@@ -1989,12 +2009,13 @@ export const db = {
               description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
             });
 
-            if (newStockDist <= (Number(prodItem.low_stock_threshold) || 5000)) {
+            if (prodItem.low_stock_threshold !== undefined && prodItem.low_stock_threshold !== null && newStockDist <= Number(prodItem.low_stock_threshold)) {
               await this.addNotification({
                 title: 'تنبيه: اقتراب نفاذ المخزون',
                 message: `الصنف "${prodItem.name}" اقترب من النفاذ في المخزن الموزع. الكمية المتبقية: ${newStockDist}`,
                 target_role: 'admin'
               });
+              await this.notifyLowStock(prodItem.name, newStockDist);
             }
           }
         }
@@ -2024,12 +2045,13 @@ export const db = {
                 description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
               });
 
-              if (items[itemIdx].stock_distribution <= (items[itemIdx].low_stock_threshold || 5000)) {
+              if (items[itemIdx].low_stock_threshold !== undefined && items[itemIdx].low_stock_threshold !== null && items[itemIdx].stock_distribution <= items[itemIdx].low_stock_threshold!) {
                 await this.addNotification({
                   title: 'تنبيه: اقتراب نفاذ المخزون',
                   message: `الخامة "${items[itemIdx].name}" اقتربت من النفاذ في المخزن الموزع. الكمية المتبقية: ${items[itemIdx].stock_distribution}`,
                   target_role: 'admin'
                 });
+                await this.notifyLowStock(items[itemIdx].name, items[itemIdx].stock_distribution || 0);
               }
             }
           }
@@ -2051,12 +2073,13 @@ export const db = {
               description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
             });
 
-            if (items[prodItemIdx].stock_distribution <= (items[prodItemIdx].low_stock_threshold || 5000)) {
+            if (items[prodItemIdx].low_stock_threshold !== undefined && items[prodItemIdx].low_stock_threshold !== null && items[prodItemIdx].stock_distribution <= items[prodItemIdx].low_stock_threshold!) {
               await this.addNotification({
                 title: 'تنبيه: اقتراب نفاذ المخزون',
                 message: `الصنف "${items[prodItemIdx].name}" اقترب من النفاذ في المخزن الموزع. الكمية المتبقية: ${items[prodItemIdx].stock_distribution}`,
                 target_role: 'admin'
               });
+              await this.notifyLowStock(items[prodItemIdx].name, items[prodItemIdx].stock_distribution || 0);
             }
           }
         }

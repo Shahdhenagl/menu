@@ -540,6 +540,7 @@ export default function AdminDashboard({
   const [invUnit, setInvUnit] = useState('كجم');
   const [invUnitsPerCarton, setInvUnitsPerCarton] = useState<number | ''>('');
   const [invUnitsPerBox, setInvUnitsPerBox] = useState<number | ''>('');
+  const [invLowStockThreshold, setInvLowStockThreshold] = useState<number | ''>('');
   const [invTargetType, setInvTargetType] = useState<'raw' | 'manufactured'>('raw');
   const [invRecipes, setInvRecipes] = useState<any[]>([]);
   const [invRecipeSelIngredient, setInvRecipeSelIngredient] = useState('');
@@ -555,6 +556,7 @@ export default function AdminDashboard({
   
   // Warehouse Selection & Stock Editing
   const [inventoryWarehouseFilter, setInventoryWarehouseFilter] = useState<'main' | 'factory' | 'distribution'>('main');
+  const [inventoryLowStockFilter, setInventoryLowStockFilter] = useState(false);
   const [editStockModalOpen, setEditStockModalOpen] = useState(false);
   const [editStockItem, setEditStockItem] = useState<InventoryItem | null>(null);
   const [editStockAdjustment, setEditStockAdjustment] = useState<number>(0);
@@ -751,6 +753,7 @@ export default function AdminDashboard({
           unit: invUnit,
           units_per_carton: invUnitsPerCarton ? Number(invUnitsPerCarton) : undefined,
           units_per_box: invUnitsPerBox ? Number(invUnitsPerBox) : undefined,
+          low_stock_threshold: invLowStockThreshold ? Number(invLowStockThreshold) : undefined,
           is_manufactured: invTargetType === 'manufactured'
         });
         savedItemId = editingInvItem.id;
@@ -765,6 +768,7 @@ export default function AdminDashboard({
           last_purchase_price: 0,
           units_per_carton: invUnitsPerCarton ? Number(invUnitsPerCarton) : undefined,
           units_per_box: invUnitsPerBox ? Number(invUnitsPerBox) : undefined,
+          low_stock_threshold: invLowStockThreshold ? Number(invLowStockThreshold) : undefined,
           is_manufactured: invTargetType === 'manufactured'
         });
         savedItemId = newItem?.id || '';
@@ -783,6 +787,7 @@ export default function AdminDashboard({
       setInvUnit('كجم');
       setInvUnitsPerCarton('');
       setInvUnitsPerBox('');
+      setInvLowStockThreshold('');
       setInvTargetType('raw');
       setInvRecipes([]);
     } catch (err) {
@@ -1573,6 +1578,33 @@ export default function AdminDashboard({
       alert(language === 'ar' ? 'حدث خطأ أثناء التصدير' : 'Error exporting data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const exportInventoryToExcel = () => {
+    try {
+      const exportData = inventoryItems.map(item => ({
+        'رقم الصنف': item.id,
+        'اسم الصنف': item.name,
+        'الوحدة': item.unit,
+        'رصيد المخزن الأساسي': item.stock_main || 0,
+        'رصيد المصنع': item.stock_factory || 0,
+        'رصيد مخزن التوزيع': item.stock_distribution || 0,
+        'الحد الأدنى للقطعة': item.low_stock_threshold || 0,
+        'متوسط السعر': item.avg_purchase_price || 0,
+        'التكلفة الإجمالية للمخزن الأساسي': (item.stock_main || 0) * (item.avg_purchase_price || 0),
+        'التكلفة الإجمالية للمصنع': (item.stock_factory || 0) * (item.avg_purchase_price || 0),
+        'التكلفة الإجمالية لمخزن التوزيع': (item.stock_distribution || 0) * (item.avg_purchase_price || 0)
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      XLSX.utils.book_append_sheet(wb, ws, "الجرد");
+
+      XLSX.writeFile(wb, `Inventory_Export_${getLocalDayStr()}.xlsx`);
+    } catch (err) {
+      console.error(err);
+      alert(language === 'ar' ? 'حدث خطأ أثناء التصدير' : 'Error exporting data');
     }
   };
 
@@ -5229,7 +5261,17 @@ export default function AdminDashboard({
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                   <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'الأصناف والخامات' : 'Items & Raw Materials'}</h2>
                   
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#fff', cursor: 'pointer', background: 'rgba(239, 68, 68, 0.2)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #ef4444' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={inventoryLowStockFilter}
+                        onChange={(e) => setInventoryLowStockFilter(e.target.checked)}
+                        style={{ accentColor: '#ef4444' }}
+                      />
+                      {language === 'ar' ? 'النواقص فقط' : 'Low Stock Only'}
+                    </label>
+
                     <select 
                       className="input-gold" 
                       value={inventoryWarehouseFilter}
@@ -5241,12 +5283,17 @@ export default function AdminDashboard({
                       <option value="distribution">{language === 'ar' ? 'مخزن التوزيع' : 'Distribution Warehouse'}</option>
                     </select>
 
+                    <button className="btn-outline-gold" onClick={exportInventoryToExcel}>
+                      {language === 'ar' ? 'تصدير إكسيل' : 'Export Excel'}
+                    </button>
+
                     <button className="btn-gold" onClick={() => {
                       setEditingInvItem(null);
                       setInvName('');
                       setInvUnit('كجم');
                       setInvUnitsPerCarton('');
                       setInvUnitsPerBox('');
+                      setInvLowStockThreshold('');
                       setInvTargetType('raw');
                       setInvRecipes([]);
                       setInvModalOpen(true);
@@ -5258,18 +5305,30 @@ export default function AdminDashboard({
                 
                 {/* Valuation Cards */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                  <div className="stat-card">
+                  <div className="stat-card" style={{ padding: '1.5rem' }}>
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
                     <div className="stat-info">
-                      <h3>{language === 'ar' ? 'قيمة مخزون المخزن المحدد' : 'Selected Warehouse Value'}</h3>
-                      <p className="stat-value">
-                        {inventoryItems.reduce((sum, item) => {
-                          let stock = 0;
-                          if (inventoryWarehouseFilter === 'main') stock = item.stock_main || 0;
-                          if (inventoryWarehouseFilter === 'factory') stock = item.stock_factory || 0;
-                          if (inventoryWarehouseFilter === 'distribution') stock = item.stock_distribution || 0;
-                          return sum + (stock * item.avg_purchase_price);
-                        }, 0).toFixed(2)}
+                      <h3>{language === 'ar' ? 'قيمة المخزن الرئيسي' : 'Main Stock Value'}</h3>
+                      <p className="stat-value" style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                        {inventoryItems.reduce((sum, item) => sum + ((item.stock_main || 0) * (item.avg_purchase_price || 0)), 0).toFixed(0)} EGP
+                      </p>
+                    </div>
+                  </div>
+                  <div className="stat-card" style={{ padding: '1.5rem' }}>
+                    <div className="stat-icon"><Package color="#000" size={24} /></div>
+                    <div className="stat-info">
+                      <h3>{language === 'ar' ? 'قيمة المصنع' : 'Factory Stock Value'}</h3>
+                      <p className="stat-value" style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                        {inventoryItems.reduce((sum, item) => sum + ((item.stock_factory || 0) * (item.avg_purchase_price || 0)), 0).toFixed(0)} EGP
+                      </p>
+                    </div>
+                  </div>
+                  <div className="stat-card" style={{ padding: '1.5rem' }}>
+                    <div className="stat-icon"><Package color="#000" size={24} /></div>
+                    <div className="stat-info">
+                      <h3>{language === 'ar' ? 'قيمة التوزيع' : 'Distribution Stock Value'}</h3>
+                      <p className="stat-value" style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>
+                        {inventoryItems.reduce((sum, item) => sum + ((item.stock_distribution || 0) * (item.avg_purchase_price || 0)), 0).toFixed(0)} EGP
                       </p>
                     </div>
                   </div>
@@ -5288,7 +5347,16 @@ export default function AdminDashboard({
                       </tr>
                     </thead>
                     <tbody>
-                      {inventoryItems.map(item => {
+                      {inventoryItems
+                        .filter(item => {
+                          if (!inventoryLowStockFilter) return true;
+                          let stock = 0;
+                          if (inventoryWarehouseFilter === 'main') stock = item.stock_main || 0;
+                          if (inventoryWarehouseFilter === 'factory') stock = item.stock_factory || 0;
+                          if (inventoryWarehouseFilter === 'distribution') stock = item.stock_distribution || 0;
+                          return stock <= (item.low_stock_threshold || 0);
+                        })
+                        .map(item => {
                         let stock = 0;
                         if (inventoryWarehouseFilter === 'main') stock = item.stock_main || 0;
                         if (inventoryWarehouseFilter === 'factory') stock = item.stock_factory || 0;
@@ -5311,6 +5379,7 @@ export default function AdminDashboard({
                                   setInvUnit(item.unit || 'كجم');
                                   setInvUnitsPerCarton(item.units_per_carton || '');
                                   setInvUnitsPerBox(item.units_per_box || '');
+                                  setInvLowStockThreshold(item.low_stock_threshold || '');
                                   setInvTargetType(item.is_manufactured ? 'manufactured' : 'raw');
                                   
                                   if (item.is_manufactured) {
@@ -7561,6 +7630,10 @@ export default function AdminDashboard({
                 <div className="form-group">
                   <label>{language === 'ar' ? 'الوحدات في العلبة (اختياري)' : 'Units per Box (Optional)'}</label>
                   <input type="number" className="input-gold" min="1" value={invUnitsPerBox} onChange={e => setInvUnitsPerBox(e.target.value ? Number(e.target.value) : '')} />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'الحد الأدنى للقطعة' : 'Low Stock Threshold'}</label>
+                  <input type="number" className="input-gold" min="0" value={invLowStockThreshold} onChange={e => setInvLowStockThreshold(e.target.value ? Number(e.target.value) : '')} placeholder={language === 'ar' ? 'أدخل الحد الأدنى للتنبيه عند النفاذ' : 'Minimum amount for low stock alert'} />
                 </div>
                 <div className="form-group" style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                   <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
