@@ -5437,8 +5437,6 @@ export default function AdminDashboard({
                           if (inventoryLowStockFilter) {
                             return stock <= (item.low_stock_threshold || 0);
                           } else {
-                            const totalStock = (item.stock_main || 0) + (item.stock_factory || 0) + (item.stock_distribution || 0);
-                            if (stock === 0 && totalStock > 0) return false;
                             return true;
                           }
                         })
