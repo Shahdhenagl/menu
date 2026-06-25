@@ -1608,6 +1608,58 @@ export default function AdminDashboard({
     }
   };
 
+  const importInventoryFromExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const data = XLSX.utils.sheet_to_json(ws);
+          
+          let updatedCount = 0;
+          for (const row of data as any[]) {
+            const id = row['رقم الصنف'];
+            if (!id) continue;
+            
+            const updateObj: Partial<InventoryItem> = {};
+            if (row['اسم الصنف'] !== undefined) updateObj.name = row['اسم الصنف'];
+            if (row['الوحدة'] !== undefined) updateObj.unit = row['الوحدة'];
+            if (row['رصيد المخزن الأساسي'] !== undefined) updateObj.stock_main = Number(row['رصيد المخزن الأساسي']) || 0;
+            if (row['رصيد المصنع'] !== undefined) updateObj.stock_factory = Number(row['رصيد المصنع']) || 0;
+            if (row['رصيد مخزن التوزيع'] !== undefined) updateObj.stock_distribution = Number(row['رصيد مخزن التوزيع']) || 0;
+            if (row['الحد الأدنى للقطعة'] !== undefined) updateObj.low_stock_threshold = Number(row['الحد الأدنى للقطعة']) || 0;
+
+            if (Object.keys(updateObj).length > 0) {
+              if ((window as any).supabase) {
+                await (window as any).supabase.from('inventory_items').update(updateObj).eq('id', id);
+              }
+              updatedCount++;
+            }
+          }
+          await fetchInventoryData();
+          alert(language === 'ar' ? `تم تحديث ${updatedCount} صنف بنجاح` : `Updated ${updatedCount} items successfully`);
+        } catch (err) {
+          console.error(err);
+          alert(language === 'ar' ? 'خطأ في معالجة الملف' : 'Error processing file');
+        } finally {
+          setLoading(false);
+          if (e.target) e.target.value = '';
+        }
+      };
+      reader.readAsBinaryString(file);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+      alert(language === 'ar' ? 'خطأ في قراءة الملف' : 'Error reading file');
+    }
+  };
+
   const importProductsFromExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -5272,20 +5324,39 @@ export default function AdminDashboard({
                       {language === 'ar' ? 'النواقص فقط' : 'Low Stock Only'}
                     </label>
 
-                    <select 
-                      className="input-gold" 
-                      value={inventoryWarehouseFilter}
-                      onChange={(e) => setInventoryWarehouseFilter(e.target.value as any)}
-                      style={{ padding: '0.5rem' }}
-                    >
-                      <option value="main">{language === 'ar' ? 'المخزن الرئيسي' : 'Main Warehouse'}</option>
-                      <option value="factory">{language === 'ar' ? 'مخزن المصنع' : 'Factory Warehouse'}</option>
-                      <option value="distribution">{language === 'ar' ? 'مخزن التوزيع' : 'Distribution Warehouse'}</option>
-                    </select>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button 
+                        className={inventoryWarehouseFilter === 'main' ? 'btn-gold' : 'btn-outline-gold'} 
+                        onClick={() => setInventoryWarehouseFilter('main')}
+                        style={{ padding: '0.5rem 1rem' }}
+                      >
+                        {language === 'ar' ? 'المخزن الرئيسي' : 'Main Warehouse'}
+                      </button>
+                      <button 
+                        className={inventoryWarehouseFilter === 'factory' ? 'btn-gold' : 'btn-outline-gold'} 
+                        onClick={() => setInventoryWarehouseFilter('factory')}
+                        style={{ padding: '0.5rem 1rem' }}
+                      >
+                        {language === 'ar' ? 'مخزن المصنع' : 'Factory Warehouse'}
+                      </button>
+                      <button 
+                        className={inventoryWarehouseFilter === 'distribution' ? 'btn-gold' : 'btn-outline-gold'} 
+                        onClick={() => setInventoryWarehouseFilter('distribution')}
+                        style={{ padding: '0.5rem 1rem' }}
+                      >
+                        {language === 'ar' ? 'مخزن التوزيع' : 'Distribution Warehouse'}
+                      </button>
+                    </div>
 
-                    <button className="btn-outline-gold" onClick={exportInventoryToExcel}>
-                      {language === 'ar' ? 'تصدير إكسيل' : 'Export Excel'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button className="btn-outline-gold" onClick={exportInventoryToExcel}>
+                        <Download size={16} /> {language === 'ar' ? 'تصدير إكسيل' : 'Export Excel'}
+                      </button>
+                      <label className="btn-outline-gold" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}>
+                        <Upload size={16} /> {language === 'ar' ? 'استيراد جرد' : 'Import Excel'}
+                        <input type="file" accept=".xlsx, .xls" style={{ display: 'none' }} onChange={importInventoryFromExcel} />
+                      </label>
+                    </div>
 
                     <button className="btn-gold" onClick={() => {
                       setEditingInvItem(null);
@@ -5349,12 +5420,18 @@ export default function AdminDashboard({
                     <tbody>
                       {inventoryItems
                         .filter(item => {
-                          if (!inventoryLowStockFilter) return true;
                           let stock = 0;
                           if (inventoryWarehouseFilter === 'main') stock = item.stock_main || 0;
                           if (inventoryWarehouseFilter === 'factory') stock = item.stock_factory || 0;
                           if (inventoryWarehouseFilter === 'distribution') stock = item.stock_distribution || 0;
-                          return stock <= (item.low_stock_threshold || 0);
+
+                          if (inventoryLowStockFilter) {
+                            return stock <= (item.low_stock_threshold || 0);
+                          } else {
+                            const totalStock = (item.stock_main || 0) + (item.stock_factory || 0) + (item.stock_distribution || 0);
+                            if (stock === 0 && totalStock > 0) return false;
+                            return true;
+                          }
                         })
                         .map(item => {
                         let stock = 0;
