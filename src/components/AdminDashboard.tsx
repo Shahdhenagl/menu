@@ -1685,11 +1685,19 @@ export default function AdminDashboard({
             const newNameEn = row['اسم المنتج (إنجليزي)'];
 
             if (!isNaN(newPrice) && newNameAr && newNameEn) {
-              await db.updateProduct(prodId, {
-                price: newPrice,
-                name_ar: newNameAr,
-                name_en: newNameEn
-              });
+              const existingProd = products.find(p => p.id === prodId);
+              const hasChanged = !existingProd || 
+                                 existingProd.price !== newPrice || 
+                                 existingProd.name_ar !== newNameAr || 
+                                 existingProd.name_en !== newNameEn;
+
+              if (hasChanged) {
+                await db.updateProduct(prodId, {
+                  price: newPrice,
+                  name_ar: newNameAr,
+                  name_en: newNameEn
+                });
+              }
             }
 
             // Update Recipes
