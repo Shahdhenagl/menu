@@ -26,7 +26,7 @@ import {
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
   Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle, Eye,
-  UserCheck, DollarSign, WalletCards, TrendingDown
+  UserCheck, DollarSign, WalletCards, TrendingDown, Download
 } from 'lucide-react';
 import { playClickSound, playNewOrderSound } from '../utils/audioUtils';
 import FinancialsView from './FinancialsView';

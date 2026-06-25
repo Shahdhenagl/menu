@@ -13,7 +13,7 @@ import {
   ShoppingBag, Utensils, CheckCircle, X, 
   Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
   Pizza, Coffee, ChefHat, Wine, Cake, MessageCircle, Camera, Search,
-  Bell, Globe
+  Bell
 } from 'lucide-react';
 import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog } from '../types';
@@ -62,7 +62,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
-  const [orderType, setOrderType] = useState<'takeaway' | 'talabat' | 'dine_in' | 'delivery' | null>(null);
+  const [orderType, setOrderType] = useState<'takeaway' | 'talabat' | 'dine_in' | 'delivery' | 'website' | null>(null);
   const [tableNumber, setTableNumber] = useState('');
   
   // Payment and Customers
