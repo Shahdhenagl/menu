@@ -545,6 +545,7 @@ export default function AdminDashboard({
   const [invRecipes, setInvRecipes] = useState<any[]>([]);
   const [invRecipeSelIngredient, setInvRecipeSelIngredient] = useState('');
   const [invRecipeSelQuantity, setInvRecipeSelQuantity] = useState<string | number>('');
+  const [invRecipeSelUnitMode, setInvRecipeSelUnitMode] = useState<'base' | 'sub'>('base');
   
   // Manufacturing Recipe (BOM) modal
   const [mfgRecipeModalOpen, setMfgRecipeModalOpen] = useState(false);
@@ -7753,7 +7754,10 @@ export default function AdminDashboard({
                     <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr auto', gap: '0.5rem', marginBottom: '1rem', alignItems: 'end' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label>{language === 'ar' ? 'الخامة' : 'Ingredient'}</label>
-                        <select className="input-gold" value={invRecipeSelIngredient} onChange={e => setInvRecipeSelIngredient(e.target.value)}>
+                        <select className="input-gold" value={invRecipeSelIngredient} onChange={e => {
+                          setInvRecipeSelIngredient(e.target.value);
+                          setInvRecipeSelUnitMode('base');
+                        }}>
                           <option value="">{language === 'ar' ? '-- اختر الخامة --' : '-- Select Ingredient --'}</option>
                           {inventoryItems.filter(i => !i.is_manufactured).map(i => (
                             <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
@@ -7762,7 +7766,27 @@ export default function AdminDashboard({
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label>{language === 'ar' ? 'الكمية' : 'Quantity'}</label>
-                        <input type="number" step="0.01" className="input-gold" value={invRecipeSelQuantity} onChange={e => setInvRecipeSelQuantity(e.target.value)} />
+                        <div style={{ display: 'flex' }}>
+                          <input 
+                            type="number" 
+                            step="0.01" 
+                            className="input-gold" 
+                            value={invRecipeSelQuantity} 
+                            onChange={e => setInvRecipeSelQuantity(e.target.value)} 
+                            style={{ borderTopRightRadius: language === 'ar' ? '10px' : '0', borderBottomRightRadius: language === 'ar' ? '10px' : '0', borderTopLeftRadius: language === 'en' ? '10px' : '0', borderBottomLeftRadius: language === 'en' ? '10px' : '0' }}
+                          />
+                          <select 
+                            className="input-gold"
+                            value={invRecipeSelUnitMode}
+                            onChange={(e) => setInvRecipeSelUnitMode(e.target.value as 'base' | 'sub')}
+                            style={{ minWidth: '80px', borderTopRightRadius: language === 'en' ? '10px' : '0', borderBottomRightRadius: language === 'en' ? '10px' : '0', borderTopLeftRadius: language === 'ar' ? '10px' : '0', borderBottomLeftRadius: language === 'ar' ? '10px' : '0', borderRight: 'none' }}
+                          >
+                            <option value="base">{invRecipeSelIngredient ? inventoryItems.find(i => i.id === invRecipeSelIngredient)?.unit : '-'}</option>
+                            {invRecipeSelIngredient && getSubUnitLabel(inventoryItems.find(i => i.id === invRecipeSelIngredient)?.unit || '') && (
+                              <option value="sub">{getSubUnitLabel(inventoryItems.find(i => i.id === invRecipeSelIngredient)?.unit || '')}</option>
+                            )}
+                          </select>
+                        </div>
                       </div>
                       <button 
                         type="button" 
@@ -7780,12 +7804,13 @@ export default function AdminDashboard({
                           
                           setInvRecipes([...invRecipes, {
                             ingredient_item_id: invRecipeSelIngredient,
-                            quantity: Number(invRecipeSelQuantity),
+                            quantity: computeFinalQty(Number(invRecipeSelQuantity), invRecipeSelUnitMode, ingItem.unit),
                             ingredient_name: ingItem.name,
                             ingredient_unit: ingItem.unit
                           }]);
                           setInvRecipeSelIngredient('');
                           setInvRecipeSelQuantity('');
+                          setInvRecipeSelUnitMode('base');
                         }}
                       >
                         <Plus size={16} />
