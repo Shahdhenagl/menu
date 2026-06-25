@@ -555,9 +555,9 @@ export default function AdminDashboard({
   const [mfgSelQuantity, setMfgSelQuantity] = useState<string | number>('');
   const [mfgSelUnitMode, setMfgSelUnitMode] = useState<'base' | 'sub'>('base');
   
-  // Warehouse Selection & Stock Editing
   const [inventoryWarehouseFilter, setInventoryWarehouseFilter] = useState<'main' | 'factory' | 'distribution'>('main');
   const [inventoryLowStockFilter, setInventoryLowStockFilter] = useState(false);
+  const [inventoryTypeFilter, setInventoryTypeFilter] = useState<'all' | 'raw' | 'manufactured'>('all');
   const [editStockModalOpen, setEditStockModalOpen] = useState(false);
   const [editStockItem, setEditStockItem] = useState<InventoryItem | null>(null);
   const [editStockAdjustment, setEditStockAdjustment] = useState<number>(0);
@@ -5357,6 +5357,30 @@ export default function AdminDashboard({
                       </button>
                     </div>
 
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button 
+                        className={inventoryTypeFilter === 'all' ? 'btn-gold' : 'btn-outline-gold'} 
+                        onClick={() => setInventoryTypeFilter('all')}
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                      >
+                        {language === 'ar' ? 'الكل' : 'All'}
+                      </button>
+                      <button 
+                        className={inventoryTypeFilter === 'raw' ? 'btn-gold' : 'btn-outline-gold'} 
+                        onClick={() => setInventoryTypeFilter('raw')}
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                      >
+                        {language === 'ar' ? 'الخامات الأساسية' : 'Raw Materials'}
+                      </button>
+                      <button 
+                        className={inventoryTypeFilter === 'manufactured' ? 'btn-gold' : 'btn-outline-gold'} 
+                        onClick={() => setInventoryTypeFilter('manufactured')}
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                      >
+                        {language === 'ar' ? 'منتجات التوزيع والمصنعة' : 'Manufactured Products'}
+                      </button>
+                    </div>
+
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button className="btn-outline-gold" onClick={exportInventoryToExcel}>
                         <Download size={16} /> {language === 'ar' ? 'تصدير إكسيل' : 'Export Excel'}
@@ -5434,11 +5458,11 @@ export default function AdminDashboard({
                           if (inventoryWarehouseFilter === 'factory') stock = item.stock_factory || 0;
                           if (inventoryWarehouseFilter === 'distribution') stock = item.stock_distribution || 0;
 
-                          if (inventoryLowStockFilter) {
-                            return stock <= (item.low_stock_threshold || 0);
-                          } else {
-                            return true;
-                          }
+                          if (inventoryLowStockFilter && stock > (item.low_stock_threshold || 0)) return false;
+                          if (inventoryTypeFilter === 'raw' && item.is_manufactured) return false;
+                          if (inventoryTypeFilter === 'manufactured' && !item.is_manufactured) return false;
+                          
+                          return true;
                         })
                         .map(item => {
                         let stock = 0;
@@ -5448,7 +5472,21 @@ export default function AdminDashboard({
 
                         return (
                           <tr key={item.id}>
-                            <td>{item.name}</td>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span>{item.name}</span>
+                                <span style={{ 
+                                  fontSize: '0.7rem', 
+                                  padding: '0.1rem 0.4rem', 
+                                  borderRadius: '4px', 
+                                  background: item.is_manufactured ? 'rgba(59, 130, 246, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                                  color: item.is_manufactured ? '#60a5fa' : '#eab308',
+                                  border: `1px solid ${item.is_manufactured ? '#3b82f6' : '#eab308'}`
+                                }}>
+                                  {item.is_manufactured ? (language === 'ar' ? 'مصنع' : 'Mfg') : (language === 'ar' ? 'خام' : 'Raw')}
+                                </span>
+                              </div>
+                            </td>
                             <td>{item.unit}</td>
                             <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{stock}</td>
                             <td>{item.avg_purchase_price.toFixed(2)}</td>
