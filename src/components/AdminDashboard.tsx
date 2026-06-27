@@ -3738,10 +3738,10 @@ export default function AdminDashboard({
                     <PlusCircle size={16} />
                     {t.addProd}
                   </button>
-                  <button className="btn-outline-gold" onClick={exportProductsToExcel} style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '10px' }}>
+                  <button className="btn-export excel" onClick={exportProductsToExcel}>
                     <Download size={16} /> {language === 'ar' ? 'تصدير' : 'Export'}
                   </button>
-                  <label className="btn-outline-gold" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '10px', cursor: 'pointer' }}>
+                  <label className="btn-export" style={{ cursor: 'pointer' }}>
                     <Upload size={16} /> {language === 'ar' ? 'استيراد' : 'Import'}
                     <input type="file" accept=".xlsx, .xls" style={{ display: 'none' }} onChange={importProductsFromExcel} />
                   </label>
@@ -5495,10 +5495,10 @@ export default function AdminDashboard({
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="btn-outline-gold" onClick={exportInventoryToExcel}>
+                        <button className="btn-export excel" onClick={exportInventoryToExcel}>
                           <Download size={16} /> {language === 'ar' ? 'تصدير إكسيل' : 'Export Excel'}
                         </button>
-                        <label className="btn-outline-gold" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}>
+                        <label className="btn-export" style={{ cursor: 'pointer' }}>
                           <Upload size={16} /> {language === 'ar' ? 'استيراد جرد' : 'Import Excel'}
                           <input type="file" accept=".xlsx, .xls" style={{ display: 'none' }} onChange={importInventoryFromExcel} />
                         </label>

@@ -258,10 +258,10 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
           <p style={{ color: 'var(--text-gray)', fontSize: '0.82rem' }}>{periodLabel}</p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button className="btn-outline-gold" onClick={exportExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <button className="btn-export excel" onClick={exportExcel}>
             <FileSpreadsheet size={16} /> {language === 'ar' ? 'تصدير Excel' : 'Export Excel'}
           </button>
-          <button className="btn-outline-gold" onClick={exportPDF} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <button className="btn-export pdf" onClick={exportPDF}>
             <FileText size={16} /> {language === 'ar' ? 'تصدير PDF (A4)' : 'Export PDF (A4)'}
           </button>
         </div>
