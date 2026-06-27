@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/supabase';
 import type { InventoryItem, InventoryMovement } from '../types';
+import { warehouseHoldsItem } from '../lib/warehouse';
 import { Calendar, PackageOpen, TrendingDown, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 
 interface InventoryReportViewProps {
@@ -50,7 +51,10 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
     let totalOutValue = 0;
     let totalFinalValue = 0;
 
-    const itemStats = items.map(item => {
+    // كل مخزن يعرض أصنافه فقط: الرئيسي/المصنع = خام، التوزيع = مصنّع
+    const warehouseItems = items.filter(item => warehouseHoldsItem(selectedWarehouse, item));
+
+    const itemStats = warehouseItems.map(item => {
       // Filter movements for this specific item AND the selected warehouse
       const itemMovements = movements.filter(m => m.item_id === item.id && (m.warehouse === selectedWarehouse || (!m.warehouse && selectedWarehouse === 'main')));
       

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct } from '../types';
 import { db } from '../lib/supabase';
+import { warehouseHoldsItem, warehouseValue } from '../lib/warehouse';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import * as XLSX from 'xlsx';
 
@@ -557,7 +558,6 @@ export default function AdminDashboard({
   
   const [inventoryWarehouseFilter, setInventoryWarehouseFilter] = useState<'main' | 'factory' | 'distribution'>('main');
   const [inventoryLowStockFilter, setInventoryLowStockFilter] = useState(false);
-  const [inventoryTypeFilter, setInventoryTypeFilter] = useState<'all' | 'raw' | 'manufactured'>('all');
   const [editStockModalOpen, setEditStockModalOpen] = useState(false);
   const [editStockItem, setEditStockItem] = useState<InventoryItem | null>(null);
   const [editStockAdjustment, setEditStockAdjustment] = useState<number>(0);
@@ -5334,50 +5334,26 @@ export default function AdminDashboard({
                     </label>
 
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <button 
-                        className={inventoryWarehouseFilter === 'main' ? 'btn-gold' : 'btn-outline-gold'} 
+                      <button
+                        className={inventoryWarehouseFilter === 'main' ? 'btn-gold' : 'btn-outline-gold'}
                         onClick={() => setInventoryWarehouseFilter('main')}
                         style={{ padding: '0.5rem 1rem' }}
                       >
-                        {language === 'ar' ? 'المخزن الرئيسي' : 'Main Warehouse'}
+                        {language === 'ar' ? 'المخزن الرئيسي (خام)' : 'Main (Raw)'}
                       </button>
-                      <button 
-                        className={inventoryWarehouseFilter === 'factory' ? 'btn-gold' : 'btn-outline-gold'} 
+                      <button
+                        className={inventoryWarehouseFilter === 'factory' ? 'btn-gold' : 'btn-outline-gold'}
                         onClick={() => setInventoryWarehouseFilter('factory')}
                         style={{ padding: '0.5rem 1rem' }}
                       >
-                        {language === 'ar' ? 'مخزن المصنع' : 'Factory Warehouse'}
+                        {language === 'ar' ? 'مخزن المصنع / المطبخ (خام)' : 'Factory / Kitchen (Raw)'}
                       </button>
-                      <button 
-                        className={inventoryWarehouseFilter === 'distribution' ? 'btn-gold' : 'btn-outline-gold'} 
+                      <button
+                        className={inventoryWarehouseFilter === 'distribution' ? 'btn-gold' : 'btn-outline-gold'}
                         onClick={() => setInventoryWarehouseFilter('distribution')}
                         style={{ padding: '0.5rem 1rem' }}
                       >
-                        {language === 'ar' ? 'مخزن التوزيع' : 'Distribution Warehouse'}
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <button 
-                        className={inventoryTypeFilter === 'all' ? 'btn-gold' : 'btn-outline-gold'} 
-                        onClick={() => setInventoryTypeFilter('all')}
-                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
-                      >
-                        {language === 'ar' ? 'الكل' : 'All'}
-                      </button>
-                      <button 
-                        className={inventoryTypeFilter === 'raw' ? 'btn-gold' : 'btn-outline-gold'} 
-                        onClick={() => setInventoryTypeFilter('raw')}
-                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
-                      >
-                        {language === 'ar' ? 'الخامات الأساسية' : 'Raw Materials'}
-                      </button>
-                      <button 
-                        className={inventoryTypeFilter === 'manufactured' ? 'btn-gold' : 'btn-outline-gold'} 
-                        onClick={() => setInventoryTypeFilter('manufactured')}
-                        style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
-                      >
-                        {language === 'ar' ? 'منتجات التوزيع والمصنعة' : 'Manufactured Products'}
+                        {language === 'ar' ? 'مخزن التوزيع (مصنّع)' : 'Distribution (Mfg)'}
                       </button>
                     </div>
 
@@ -5412,27 +5388,27 @@ export default function AdminDashboard({
                   <div className="stat-card" style={{ padding: '1.5rem' }}>
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
                     <div className="stat-info">
-                      <h3>{language === 'ar' ? 'قيمة المخزن الرئيسي' : 'Main Stock Value'}</h3>
+                      <h3>{language === 'ar' ? 'قيمة المخزن الرئيسي (خام)' : 'Main Stock Value (Raw)'}</h3>
                       <p className="stat-value" style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
-                        {inventoryItems.reduce((sum, item) => sum + ((item.stock_main || 0) * (item.avg_purchase_price || 0)), 0).toFixed(0)} EGP
+                        {warehouseValue('main', inventoryItems).toFixed(0)} EGP
                       </p>
                     </div>
                   </div>
                   <div className="stat-card" style={{ padding: '1.5rem' }}>
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
                     <div className="stat-info">
-                      <h3>{language === 'ar' ? 'قيمة المصنع' : 'Factory Stock Value'}</h3>
+                      <h3>{language === 'ar' ? 'قيمة المصنع / المطبخ (خام)' : 'Factory Stock Value (Raw)'}</h3>
                       <p className="stat-value" style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
-                        {inventoryItems.reduce((sum, item) => sum + ((item.stock_factory || 0) * (item.avg_purchase_price || 0)), 0).toFixed(0)} EGP
+                        {warehouseValue('factory', inventoryItems).toFixed(0)} EGP
                       </p>
                     </div>
                   </div>
                   <div className="stat-card" style={{ padding: '1.5rem' }}>
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
                     <div className="stat-info">
-                      <h3>{language === 'ar' ? 'قيمة التوزيع' : 'Distribution Stock Value'}</h3>
+                      <h3>{language === 'ar' ? 'قيمة التوزيع (مصنّع)' : 'Distribution Value (Mfg)'}</h3>
                       <p className="stat-value" style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>
-                        {inventoryItems.reduce((sum, item) => sum + ((item.stock_distribution || 0) * (item.avg_purchase_price || 0)), 0).toFixed(0)} EGP
+                        {warehouseValue('distribution', inventoryItems).toFixed(0)} EGP
                       </p>
                     </div>
                   </div>
@@ -5453,15 +5429,16 @@ export default function AdminDashboard({
                     <tbody>
                       {inventoryItems
                         .filter(item => {
+                          // كل مخزن يعرض أصنافه فقط: الرئيسي/المصنع = خام، التوزيع = مصنّع
+                          if (!warehouseHoldsItem(inventoryWarehouseFilter, item)) return false;
+
                           let stock = 0;
                           if (inventoryWarehouseFilter === 'main') stock = item.stock_main || 0;
                           if (inventoryWarehouseFilter === 'factory') stock = item.stock_factory || 0;
                           if (inventoryWarehouseFilter === 'distribution') stock = item.stock_distribution || 0;
 
                           if (inventoryLowStockFilter && stock > (item.low_stock_threshold || 0)) return false;
-                          if (inventoryTypeFilter === 'raw' && item.is_manufactured) return false;
-                          if (inventoryTypeFilter === 'manufactured' && !item.is_manufactured) return false;
-                          
+
                           return true;
                         })
                         .map(item => {
@@ -5739,19 +5716,19 @@ export default function AdminDashboard({
               <div style={{ textAlign: 'center', padding: '0.5rem 1rem', background: 'rgba(212,175,55,0.2)', borderRadius: '8px' }}>
                 <div style={{ fontSize: '1.5rem' }}>📦</div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'مخزن الخامات' : 'Main Stock'}</div>
-                <div style={{ fontWeight: 'bold', color: 'var(--gold-primary)' }}>{inventoryItems.reduce((s, i) => s + (i.stock_main * i.avg_purchase_price), 0).toFixed(0)} EGP</div>
+                <div style={{ fontWeight: 'bold', color: 'var(--gold-primary)' }}>{warehouseValue('main', inventoryItems).toFixed(0)} EGP</div>
               </div>
               <div style={{ fontSize: '1.5rem', color: 'var(--gold-primary)' }}>→</div>
               <div style={{ textAlign: 'center', padding: '0.5rem 1rem', background: 'rgba(212,175,55,0.2)', borderRadius: '8px' }}>
                 <div style={{ fontSize: '1.5rem' }}>🍳</div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'المطبخ/المصنع' : 'Kitchen/Factory'}</div>
-                <div style={{ fontWeight: 'bold', color: 'var(--gold-primary)' }}>{inventoryItems.reduce((s, i) => s + (i.stock_factory * i.avg_purchase_price), 0).toFixed(0)} EGP</div>
+                <div style={{ fontWeight: 'bold', color: 'var(--gold-primary)' }}>{warehouseValue('factory', inventoryItems).toFixed(0)} EGP</div>
               </div>
               <div style={{ fontSize: '1.5rem', color: 'var(--gold-primary)' }}>→</div>
               <div style={{ textAlign: 'center', padding: '0.5rem 1rem', background: 'rgba(16,185,129,0.2)', borderRadius: '8px' }}>
                 <div style={{ fontSize: '1.5rem' }}>🚚</div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'مخزن التوزيع' : 'Distribution'}</div>
-                <div style={{ fontWeight: 'bold', color: '#10b981' }}>{inventoryItems.reduce((s, i) => s + (i.stock_distribution * i.avg_purchase_price), 0).toFixed(0)} EGP</div>
+                <div style={{ fontWeight: 'bold', color: '#10b981' }}>{warehouseValue('distribution', inventoryItems).toFixed(0)} EGP</div>
               </div>
               <div style={{ marginInlineStart: 'auto' }}>
                 <span style={{ background: 'rgba(245,158,11,0.2)', color: 'orange', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}>
@@ -5970,8 +5947,8 @@ export default function AdminDashboard({
                   <div className="stat-card">
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
                     <div className="stat-info">
-                      <h3>{language === 'ar' ? 'قيمة خام التوزيع' : 'Raw Dist. Value'}</h3>
-                      <p className="stat-value">{inventoryItems.reduce((s, i) => s + (i.stock_distribution * i.avg_purchase_price), 0).toFixed(0)} EGP</p>
+                      <h3>{language === 'ar' ? 'قيمة مخزون التوزيع المصنّع' : 'Mfg Dist. Value'}</h3>
+                      <p className="stat-value">{warehouseValue('distribution', inventoryItems).toFixed(0)} EGP</p>
                     </div>
                   </div>
                 </div>
