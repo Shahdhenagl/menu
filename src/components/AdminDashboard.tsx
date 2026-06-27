@@ -528,6 +528,11 @@ export default function AdminDashboard({
   const [producedQuantity, setProducedQuantity] = useState(1);
   const [consumedItems, setConsumedItems] = useState<{item_id: string, quantity: number}[]>([]);
   const [productionModalOpen, setProductionModalOpen] = useState(false);
+  // "تصنيع الآن" من كتالوج التوزيع
+  const [mfgNowOpen, setMfgNowOpen] = useState(false);
+  const [mfgNowItem, setMfgNowItem] = useState<InventoryItem | null>(null);
+  const [mfgNowQty, setMfgNowQty] = useState<number>(1);
+  const [mfgNowRecipe, setMfgNowRecipe] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [purchaseInvoices, setPurchaseInvoices] = useState<PurchaseInvoice[]>([]);
@@ -970,6 +975,93 @@ export default function AdminDashboard({
       setMfgNewItemId(''); setMfgItemSearch(''); setMfgShowSuggest(false);
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // فتح نافذة "تصنيع الآن" لمنتج مصنّع وتحميل وصفته
+  const openManufactureNow = async (item: InventoryItem) => {
+    setMfgNowItem(item);
+    setMfgNowQty(1);
+    setMfgNowOpen(true);
+    try {
+      const recipe = await db.getManufacturingRecipes(item.id);
+      setMfgNowRecipe(recipe);
+    } catch (err) {
+      console.error(err);
+      setMfgNowRecipe([]);
+    }
+  };
+
+  // حساب المكوّنات المطلوبة مقابل المتاح في المطبخ
+  const computeMfgNowReqs = () => mfgNowRecipe.map(r => {
+    const ing = inventoryItems.find(i => i.id === r.ingredient_item_id);
+    const required = (Number(r.quantity) || 0) * (Number(mfgNowQty) || 0);
+    const available = ing?.stock_factory || 0;
+    return {
+      id: r.ingredient_item_id,
+      name: ing?.name || r.ingredient_name || '—',
+      unit: ing?.unit || r.ingredient_unit || '',
+      required,
+      available,
+      shortage: Math.max(0, required - available),
+    };
+  });
+
+  // طلب صرف النواقص من المخزن الرئيسي إلى المطبخ
+  const handleRequestMfgShortages = async () => {
+    const reqs = computeMfgNowReqs().filter(x => x.shortage > 0);
+    if (reqs.length === 0) return;
+    setLoading(true);
+    try {
+      const items = reqs.map(x => ({
+        item_id: x.id,
+        item_name: x.name,
+        quantity: Number(x.shortage.toFixed(3)),
+        unit: x.unit,
+        calculated_main_quantity: Number(x.shortage.toFixed(3)),
+      }));
+      await db.addManufacturingOrder({ status: 'pending', items, requested_by: loggedInUser?.name || 'Unknown' });
+      await fetchInventoryData();
+      alert(language === 'ar'
+        ? `تم إنشاء طلب صرف بالنواقص (${items.length} صنف). بعد اعتماده ووصوله للمطبخ، أكمل التصنيع.`
+        : `Created a disbursement request for ${items.length} shortage item(s). After it's approved into the kitchen, complete production.`);
+    } catch (err) {
+      console.error(err);
+      alert(language === 'ar' ? 'تعذّر إنشاء طلب الصرف' : 'Failed to create disbursement request');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // تنفيذ التصنيع: خصم المكوّنات من المطبخ وإضافة المنتج لمخزن التوزيع
+  const handleManufactureNow = async () => {
+    if (!mfgNowItem || mfgNowQty <= 0) return;
+    const reqs = computeMfgNowReqs();
+    if (reqs.length === 0) {
+      alert(language === 'ar' ? 'لا توجد وصفة محفوظة لهذا المنتج. أضِف وصفته أولاً.' : 'No saved recipe for this product. Add its recipe first.');
+      return;
+    }
+    if (reqs.some(x => x.shortage > 0)) {
+      alert(language === 'ar' ? 'بعض المكوّنات غير متوفرة في المطبخ — اطلب صرف النواقص أولاً.' : 'Some components are not available in the kitchen — request the shortages first.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await db.addProductionLog({
+        produced_items: [{ item_id: mfgNowItem.id, item_name: mfgNowItem.name, quantity: mfgNowQty }],
+        consumed_items: reqs.map(x => ({ item_id: x.id, item_name: x.name, quantity: x.required })),
+        recorded_by: loggedInUser?.name || 'Unknown',
+      });
+      await fetchInventoryData();
+      setMfgNowOpen(false);
+      setMfgNowItem(null);
+      setMfgNowRecipe([]);
+      alert(language === 'ar' ? `✅ تم تصنيع ${mfgNowQty} ${mfgNowItem.unit} من ${mfgNowItem.name} وإضافتها لمخزن التوزيع.` : `✅ Manufactured ${mfgNowQty} ${mfgNowItem.unit} of ${mfgNowItem.name} into distribution.`);
+    } catch (err) {
+      console.error(err);
+      alert((language === 'ar' ? '❌ تعذّر التصنيع: ' : '❌ Production failed: ') + ((err as any)?.message || err));
     } finally {
       setLoading(false);
     }
@@ -6046,6 +6138,7 @@ export default function AdminDashboard({
                           <th>{language === 'ar' ? 'رصيد التوزيع' : 'Distribution Stock'}</th>
                           <th>{language === 'ar' ? 'متوسط التكلفة' : 'Avg Cost'}</th>
                           <th>{language === 'ar' ? 'القيمة' : 'Value'}</th>
+                          <th>{language === 'ar' ? 'إجراء' : 'Action'}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -6056,10 +6149,15 @@ export default function AdminDashboard({
                             <td style={{ color: (i.stock_distribution || 0) > 0 ? 'var(--gold-primary)' : 'var(--text-gray)', fontWeight: 'bold' }}>{(i.stock_distribution || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} {i.unit}</td>
                             <td>{(i.avg_purchase_price || 0).toFixed(2)}</td>
                             <td style={{ color: '#10b981', fontWeight: 'bold' }}>{((i.stock_distribution || 0) * (i.avg_purchase_price || 0)).toFixed(2)} EGP</td>
+                            <td>
+                              <button className="btn-gold" style={{ padding: '0.35rem 0.7rem', fontSize: '0.82rem', whiteSpace: 'nowrap' }} onClick={() => openManufactureNow(i)}>
+                                🏭 {language === 'ar' ? 'تصنيع الآن' : 'Produce Now'}
+                              </button>
+                            </td>
                           </tr>
                         ))}
                         {inventoryItems.filter(i => i.is_manufactured).length === 0 && (
-                          <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'لا توجد منتجات مصنّعة. أضِفها من إدارة المخازن (نوع: مصنّع).' : 'No manufactured products. Add them from Inventory (type: manufactured).'}</td></tr>
+                          <tr><td colSpan={6} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'لا توجد منتجات مصنّعة. أضِفها من إدارة المخازن (نوع: مصنّع).' : 'No manufactured products. Add them from Inventory (type: manufactured).'}</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -8466,6 +8564,89 @@ export default function AdminDashboard({
           </div>
         </div>
       )}
+
+      {/* Manufacture Now Modal (from distribution catalog) */}
+      {mfgNowOpen && mfgNowItem && (() => {
+        const reqs = computeMfgNowReqs();
+        const hasRecipe = reqs.length > 0;
+        const hasShortage = reqs.some(x => x.shortage > 0);
+        return (
+        <div className="admin-modal-overlay" onClick={() => setMfgNowOpen(false)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '680px' }}>
+            <div className="admin-modal-header">
+              <h2>🏭 {language === 'ar' ? `تصنيع: ${mfgNowItem.name}` : `Produce: ${mfgNowItem.name}`}</h2>
+              <button className="btn-close" onClick={() => setMfgNowOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="admin-modal-body">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                <label style={{ fontWeight: 'bold' }}>{language === 'ar' ? 'الكمية المراد تصنيعها:' : 'Quantity to produce:'}</label>
+                <input
+                  type="number"
+                  className="input-gold"
+                  style={{ width: '120px', padding: '0.5rem' }}
+                  min="0.01"
+                  step="0.01"
+                  value={mfgNowQty}
+                  onChange={(e) => setMfgNowQty(parseFloat(e.target.value) || 0)}
+                />
+                <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{mfgNowItem.unit}</span>
+              </div>
+
+              {!hasRecipe ? (
+                <p style={{ color: '#ef4444', padding: '1rem', background: 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
+                  {language === 'ar' ? '⚠ لا توجد وصفة تصنيع محفوظة لهذا المنتج. أضِف الوصفة من إدارة المخازن → وصفة التصنيع (BOM).' : '⚠ No saved recipe (BOM) for this product. Add it from Inventory → BOM.'}
+                </p>
+              ) : (
+                <>
+                  <h3 style={{ color: 'var(--gold-primary)', fontSize: '0.95rem', marginBottom: '0.5rem' }}>{language === 'ar' ? 'المكوّنات المطلوبة من المطبخ' : 'Required components (from kitchen)'}</h3>
+                  <table className="admin-table" style={{ fontSize: '0.88rem' }}>
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'المكوّن' : 'Component'}</th>
+                        <th>{language === 'ar' ? 'المطلوب' : 'Required'}</th>
+                        <th>{language === 'ar' ? 'المتاح بالمطبخ' : 'In Kitchen'}</th>
+                        <th>{language === 'ar' ? 'الناقص' : 'Shortage'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reqs.map(x => (
+                        <tr key={x.id} style={x.shortage > 0 ? { background: 'rgba(239,68,68,0.12)' } : undefined}>
+                          <td>{x.name}</td>
+                          <td style={{ fontWeight: 'bold' }}>{x.required.toLocaleString(undefined, { maximumFractionDigits: 3 })} {x.unit}</td>
+                          <td style={{ color: x.shortage > 0 ? '#ef4444' : '#10b981' }}>{x.available.toLocaleString(undefined, { maximumFractionDigits: 3 })} {x.unit}</td>
+                          <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{x.shortage > 0 ? `${x.shortage.toLocaleString(undefined, { maximumFractionDigits: 3 })} ${x.unit}` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {hasShortage ? (
+                    <p style={{ color: '#f59e0b', fontSize: '0.85rem', marginTop: '0.75rem' }}>
+                      {language === 'ar' ? '⚠ بعض المكوّنات ناقصة في المطبخ. اطلب صرف النواقص أولاً، وبعد اعتماد الإذن ووصول الخامات للمطبخ أكمل التصنيع.' : '⚠ Some components are short in the kitchen. Request the shortages first, then produce after they arrive.'}
+                    </p>
+                  ) : (
+                    <p style={{ color: '#10b981', fontSize: '0.85rem', marginTop: '0.75rem' }}>
+                      {language === 'ar' ? '✅ كل المكوّنات متوفرة في المطبخ — جاهز للتصنيع.' : '✅ All components available — ready to produce.'}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="admin-modal-footer" style={{ gap: '0.5rem' }}>
+              <button type="button" className="btn-outline-gold" onClick={() => setMfgNowOpen(false)}>{t.close}</button>
+              {hasShortage && (
+                <button type="button" className="btn-gold" style={{ background: '#f59e0b' }} disabled={loading || mfgNowQty <= 0} onClick={handleRequestMfgShortages}>
+                  📦 {language === 'ar' ? 'طلب صرف النواقص' : 'Request Shortages'}
+                </button>
+              )}
+              <button type="button" className="btn-gold" disabled={loading || !hasRecipe || hasShortage || mfgNowQty <= 0} onClick={handleManufactureNow}>
+                🏭 {loading ? (language === 'ar' ? 'جارٍ...' : '...') : (language === 'ar' ? 'تصنيع' : 'Produce')}
+              </button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
 
       {/* 5. Production Modal */}
       {productionModalOpen && (
