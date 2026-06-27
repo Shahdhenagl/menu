@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/supabase';
 import type { InventoryItem, InventoryMovement } from '../types';
 import { warehouseHoldsItem, warehouseStock } from '../lib/warehouse';
-import { Calendar, PackageOpen, TrendingDown, ArrowDownRight, ArrowUpRight, Search } from 'lucide-react';
+import { Calendar, PackageOpen, TrendingDown, ArrowDownRight, ArrowUpRight, Search, FileText, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface InventoryReportViewProps {
   language: 'ar' | 'en';
@@ -115,15 +116,154 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
   ];
 
   const monthName = (i: number) => new Date(0, i).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', { month: 'long' });
+  const whName = warehouses.find(w => w.key === selectedWarehouse)?.[language === 'ar' ? 'ar' : 'en'] || '';
+  const periodLabel = `${monthName(selectedMonth)} ${selectedYear} — ${whName}`;
+  const fileBase = `Inventory_${selectedWarehouse}_${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+
+  const exportExcel = () => {
+    if (visibleStats.length === 0) {
+      alert(language === 'ar' ? 'لا توجد بيانات للتصدير' : 'No data to export');
+      return;
+    }
+    const r2 = (n: number) => Number(n.toFixed(2));
+    const rows: any[] = visibleStats.map(s => ({
+      [language === 'ar' ? 'الصنف' : 'Item']: s.item.name,
+      [language === 'ar' ? 'الوحدة' : 'Unit']: s.item.unit,
+      [language === 'ar' ? 'الافتتاحي' : 'Opening']: r2(s.openingQty),
+      [language === 'ar' ? 'قيمة الافتتاحي' : 'Opening Value']: r2(s.openingVal),
+      [language === 'ar' ? 'الوارد' : 'In']: r2(s.inQty),
+      [language === 'ar' ? 'قيمة الوارد' : 'In Value']: r2(s.inVal),
+      [language === 'ar' ? 'المستهلك' : 'Out']: r2(s.outQty),
+      [language === 'ar' ? 'قيمة المستهلك' : 'Out Value']: r2(s.outVal),
+      [language === 'ar' ? 'النهائي' : 'Final']: r2(s.finalQty),
+      [language === 'ar' ? 'قيمة النهائي' : 'Final Value']: r2(s.finalVal),
+    }));
+    rows.push({
+      [language === 'ar' ? 'الصنف' : 'Item']: language === 'ar' ? 'الإجمالي' : 'Total',
+      [language === 'ar' ? 'الوحدة' : 'Unit']: '',
+      [language === 'ar' ? 'الافتتاحي' : 'Opening']: '',
+      [language === 'ar' ? 'قيمة الافتتاحي' : 'Opening Value']: r2(visibleStats.reduce((s, x) => s + x.openingVal, 0)),
+      [language === 'ar' ? 'الوارد' : 'In']: '',
+      [language === 'ar' ? 'قيمة الوارد' : 'In Value']: r2(visibleStats.reduce((s, x) => s + x.inVal, 0)),
+      [language === 'ar' ? 'المستهلك' : 'Out']: '',
+      [language === 'ar' ? 'قيمة المستهلك' : 'Out Value']: r2(visibleStats.reduce((s, x) => s + x.outVal, 0)),
+      [language === 'ar' ? 'النهائي' : 'Final']: '',
+      [language === 'ar' ? 'قيمة النهائي' : 'Final Value']: r2(visibleStats.reduce((s, x) => s + x.finalVal, 0)),
+    });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'الجرد');
+    XLSX.writeFile(wb, `${fileBase}.xlsx`);
+  };
+
+  const exportPDF = () => {
+    if (visibleStats.length === 0) {
+      alert(language === 'ar' ? 'لا توجد بيانات للتصدير' : 'No data to export');
+      return;
+    }
+    const esc = (s: string) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
+    const rtl = language === 'ar';
+    const t = {
+      title: rtl ? 'الجرد الشهري للمخازن' : 'Monthly Inventory Report',
+      item: rtl ? 'الصنف' : 'Item', unit: rtl ? 'الوحدة' : 'Unit',
+      opening: rtl ? 'الافتتاحي' : 'Opening', inn: rtl ? 'الوارد' : 'In',
+      out: rtl ? 'المستهلك' : 'Out', final: rtl ? 'النهائي' : 'Final',
+      total: rtl ? 'الإجمالي' : 'Total', qty: rtl ? 'كمية' : 'Qty', val: rtl ? 'قيمة' : 'Value',
+      generated: rtl ? 'تاريخ الطباعة' : 'Generated',
+    };
+    const tot = {
+      o: visibleStats.reduce((s, x) => s + x.openingVal, 0),
+      i: visibleStats.reduce((s, x) => s + x.inVal, 0),
+      u: visibleStats.reduce((s, x) => s + x.outVal, 0),
+      f: visibleStats.reduce((s, x) => s + x.finalVal, 0),
+    };
+    const cell = (q: number, v: number, color: string) => `<td class="numcell"><div style="color:${color};font-weight:600">${num(q)}</div><div class="sub">${num(v)}</div></td>`;
+    const body = visibleStats.map(s => `
+      <tr>
+        <td><b>${esc(s.item.name)}</b><div class="sub">${esc(s.item.unit)}</div></td>
+        ${cell(s.openingQty, s.openingVal, '#111')}
+        ${cell(s.inQty, s.inVal, '#0a7d4d')}
+        ${cell(s.outQty, s.outVal, '#c0392b')}
+        ${cell(s.finalQty, s.finalVal, '#b8860b')}
+      </tr>`).join('');
+
+    const html = `<!doctype html><html dir="${rtl ? 'rtl' : 'ltr'}" lang="${rtl ? 'ar' : 'en'}"><head><meta charset="utf-8"><title>${t.title}</title>
+      <style>
+        @page { size: A4 ${'portrait'}; margin: 12mm; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; color: #1a1a1a; margin: 0; }
+        .head { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:3px solid #b8860b; padding-bottom:8px; margin-bottom:14px; }
+        .head h1 { font-size: 20px; margin: 0; color:#000; }
+        .head .meta { font-size: 12px; color:#555; text-align:${rtl ? 'left' : 'right'}; }
+        .head .period { font-size: 13px; color:#b8860b; font-weight:700; margin-top:4px; }
+        .cards { display:flex; gap:8px; margin-bottom:12px; }
+        .card { flex:1; border:1px solid #e0c97a; border-radius:8px; padding:8px 10px; }
+        .card .lbl { font-size:11px; color:#666; }
+        .card .v { font-size:15px; font-weight:700; }
+        table { width:100%; border-collapse:collapse; font-size:12px; }
+        th, td { border:1px solid #ddd; padding:6px 8px; text-align:${rtl ? 'right' : 'left'}; }
+        th { background:#f4ecd2; color:#5a4a10; }
+        .numcell { text-align:center; }
+        .sub { font-size:10px; color:#888; }
+        tfoot td { background:#faf6e8; font-weight:700; border-top:2px solid #b8860b; }
+        .printbtn { margin:16px 0; }
+        @media print { .printbtn { display:none; } }
+      </style></head><body>
+      <div class="head">
+        <div><h1>${t.title}</h1><div class="period">${esc(periodLabel)}</div></div>
+        <div class="meta">Meridien<br>${t.generated}: ${new Date().toLocaleDateString(rtl ? 'ar-EG' : 'en-US')}</div>
+      </div>
+      <div class="cards">
+        <div class="card"><div class="lbl">${t.opening}</div><div class="v">${num(tot.o)} EGP</div></div>
+        <div class="card"><div class="lbl">${t.inn}</div><div class="v" style="color:#0a7d4d">${num(tot.i)} EGP</div></div>
+        <div class="card"><div class="lbl">${t.out}</div><div class="v" style="color:#c0392b">${num(tot.u)} EGP</div></div>
+        <div class="card"><div class="lbl">${t.final}</div><div class="v" style="color:#b8860b">${num(tot.f)} EGP</div></div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>${t.item}</th>
+          <th class="numcell">${t.opening}<div class="sub">${t.qty} / ${t.val}</div></th>
+          <th class="numcell">${t.inn}<div class="sub">${t.qty} / ${t.val}</div></th>
+          <th class="numcell">${t.out}<div class="sub">${t.qty} / ${t.val}</div></th>
+          <th class="numcell">${t.final}<div class="sub">${t.qty} / ${t.val}</div></th>
+        </tr></thead>
+        <tbody>${body}</tbody>
+        <tfoot><tr>
+          <td>${t.total} (${visibleStats.length})</td>
+          <td class="numcell">${num(tot.o)} EGP</td>
+          <td class="numcell">${num(tot.i)} EGP</td>
+          <td class="numcell">${num(tot.u)} EGP</td>
+          <td class="numcell">${num(tot.f)} EGP</td>
+        </tr></tfoot>
+      </table>
+      <button class="printbtn" onclick="window.print()">🖨 ${rtl ? 'طباعة / حفظ PDF' : 'Print / Save PDF'}</button>
+      <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 300); };</script>
+      </body></html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) {
+      alert(language === 'ar' ? 'مُنعت النافذة المنبثقة — اسمح بالنوافذ المنبثقة لطباعة الـ PDF' : 'Popup blocked — allow popups to print the PDF');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  };
 
   return (
     <div className="admin-content-section fade-in">
-      <div className="section-header" style={{ flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+      <div className="section-header" style={{ flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem', justifyContent: 'space-between' }}>
         <div>
           <h2 style={{ marginBottom: '0.2rem' }}>{language === 'ar' ? 'الجرد الشهري للمخازن' : 'Monthly Inventory Report'}</h2>
-          <p style={{ color: 'var(--text-gray)', fontSize: '0.82rem' }}>
-            {language === 'ar' ? `${monthName(selectedMonth)} ${selectedYear} — ${warehouses.find(w => w.key === selectedWarehouse)?.ar}` : `${monthName(selectedMonth)} ${selectedYear} — ${warehouses.find(w => w.key === selectedWarehouse)?.en}`}
-          </p>
+          <p style={{ color: 'var(--text-gray)', fontSize: '0.82rem' }}>{periodLabel}</p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="btn-outline-gold" onClick={exportExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <FileSpreadsheet size={16} /> {language === 'ar' ? 'تصدير Excel' : 'Export Excel'}
+          </button>
+          <button className="btn-outline-gold" onClick={exportPDF} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <FileText size={16} /> {language === 'ar' ? 'تصدير PDF (A4)' : 'Export PDF (A4)'}
+          </button>
         </div>
       </div>
 
