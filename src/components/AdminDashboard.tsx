@@ -8637,9 +8637,21 @@ export default function AdminDashboard({
                   📦 {language === 'ar' ? 'طلب صرف النواقص' : 'Request Shortages'}
                 </button>
               )}
-              <button type="button" className="btn-gold" disabled={loading || !hasRecipe || hasShortage || mfgNowQty <= 0} onClick={handleManufactureNow}>
-                🏭 {loading ? (language === 'ar' ? 'جارٍ...' : '...') : (language === 'ar' ? 'تصنيع' : 'Produce')}
-              </button>
+              {(() => {
+                const canProduce = hasRecipe && !hasShortage && mfgNowQty > 0 && !loading;
+                return (
+                  <button
+                    type="button"
+                    className="btn-gold"
+                    disabled={!canProduce}
+                    onClick={handleManufactureNow}
+                    title={!canProduce ? (language === 'ar' ? 'وفّر كل المكوّنات في المطبخ أولاً' : 'Provide all components in the kitchen first') : ''}
+                    style={!canProduce ? { opacity: 0.4, cursor: 'not-allowed', filter: 'grayscale(0.6)', pointerEvents: 'none' } : undefined}
+                  >
+                    🏭 {loading ? (language === 'ar' ? 'جارٍ...' : '...') : (language === 'ar' ? 'تصنيع' : 'Produce')}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>
