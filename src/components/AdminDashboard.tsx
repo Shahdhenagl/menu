@@ -8465,46 +8465,44 @@ export default function AdminDashboard({
                   const availMain = selRaw?.stock_main || 0;
                   return (
                   <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr auto auto', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
-                    {/* searchable combobox */}
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="text"
-                        className="input-gold"
-                        style={{ padding: '0.55rem', width: '100%' }}
-                        placeholder={language === 'ar' ? '🔍 ابحث باسم الخامة...' : '🔍 Search material by name...'}
-                        value={mfgItemSearch}
-                        onChange={(e) => { setMfgItemSearch(e.target.value); setMfgNewItemId(''); setMfgShowSuggest(true); }}
-                        onFocus={() => setMfgShowSuggest(true)}
-                        onBlur={() => setTimeout(() => setMfgShowSuggest(false), 150)}
-                      />
-                      {mfgShowSuggest && mfgItemSearch.trim() !== '' && !mfgNewItemId && (
-                        <div style={{ position: 'absolute', top: '100%', insetInlineStart: 0, insetInlineEnd: 0, zIndex: 20, background: '#15171c', border: '1px solid var(--gold-primary)', borderRadius: '8px', marginTop: '4px', maxHeight: '240px', overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
-                          {inventoryItems.filter(i => !i.is_manufactured && i.name.toLowerCase().includes(mfgItemSearch.trim().toLowerCase())).slice(0, 12).map(i => (
-                            <div
-                              key={i.id}
-                              onMouseDown={(e) => { e.preventDefault(); setMfgNewItemId(i.id); setMfgItemSearch(i.name); setMfgShowSuggest(false); }}
-                              style={{ padding: '0.55rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(212,175,55,0.15)')}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                            >
-                              <span>{i.name}</span>
-                              <span style={{ color: 'var(--text-gray)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{language === 'ar' ? 'المتاح:' : 'Avail:'} {i.stock_main || 0} · {i.unit}</span>
-                            </div>
-                          ))}
-                          {inventoryItems.filter(i => !i.is_manufactured && i.name.toLowerCase().includes(mfgItemSearch.trim().toLowerCase())).length === 0 && (
-                            <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'لا توجد خامة بهذا الاسم' : 'No matching material'}</div>
-                          )}
+                  {/* search input (full width) */}
+                  <input
+                    type="text"
+                    className="input-gold"
+                    style={{ padding: '0.55rem', width: '100%', marginBottom: '0.4rem' }}
+                    placeholder={language === 'ar' ? '🔍 ابحث باسم الخامة...' : '🔍 Search material by name...'}
+                    value={mfgItemSearch}
+                    onChange={(e) => { setMfgItemSearch(e.target.value); setMfgNewItemId(''); setMfgShowSuggest(true); }}
+                    onFocus={() => setMfgShowSuggest(true)}
+                  />
+                  {/* inline suggestions (in normal flow so the modal never clips them) */}
+                  {mfgShowSuggest && mfgItemSearch.trim() !== '' && !mfgNewItemId && (
+                    <div style={{ background: '#15171c', border: '1px solid var(--gold-primary)', borderRadius: '8px', marginBottom: '0.5rem', maxHeight: '220px', overflowY: 'auto' }}>
+                      {inventoryItems.filter(i => !i.is_manufactured && i.name.toLowerCase().includes(mfgItemSearch.trim().toLowerCase())).slice(0, 30).map(i => (
+                        <div
+                          key={i.id}
+                          onClick={() => { setMfgNewItemId(i.id); setMfgItemSearch(i.name); setMfgShowSuggest(false); }}
+                          style={{ padding: '0.55rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(212,175,55,0.15)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <span>{i.name}</span>
+                          <span style={{ color: 'var(--text-gray)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{language === 'ar' ? 'المتاح:' : 'Avail:'} {i.stock_main || 0} · {i.unit}</span>
                         </div>
+                      ))}
+                      {inventoryItems.filter(i => !i.is_manufactured && i.name.toLowerCase().includes(mfgItemSearch.trim().toLowerCase())).length === 0 && (
+                        <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'لا توجد خامة بهذا الاسم' : 'No matching material'}</div>
                       )}
                     </div>
+                  )}
+                  {/* qty + unit + add */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
                     <input type="number" id="mfg-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.55rem' }} step="0.01" min="0.01" onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('mfg-add-btn') as HTMLButtonElement)?.click(); }} />
                     <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold', minWidth: '3rem', textAlign: 'center' }}>{selRaw?.unit || '—'}</span>
                     <button id="mfg-add-btn" type="button" className="btn-gold" style={{ padding: '0.55rem 1rem', whiteSpace: 'nowrap' }} onClick={() => {
                       const qtyEl = document.getElementById('mfg-new-qty') as HTMLInputElement;
                       const qty = parseFloat(qtyEl.value);
                       if (mfgNewItemId && qty > 0 && selRaw) {
-                        // الكمية بوحدة الصنف نفسها = نفس وحدة المخزون الرئيسي، فالكمية المخصومة = الكمية
                         setMfgCart([...mfgCart, { item_id: mfgNewItemId, item_name: selRaw.name, quantity: qty, unit: selRaw.unit, calculated_main_quantity: qty }]);
                         setMfgNewItemId(''); setMfgItemSearch(''); qtyEl.value = '';
                       } else {
