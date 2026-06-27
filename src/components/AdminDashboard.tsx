@@ -27,7 +27,7 @@ import {
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
   Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle, Eye,
-  UserCheck, DollarSign, WalletCards, TrendingDown, Download
+  UserCheck, DollarSign, WalletCards, TrendingDown, Download, ChevronDown
 } from 'lucide-react';
 import { playClickSound, playNewOrderSound } from '../utils/audioUtils';
 import FinancialsView from './FinancialsView';
@@ -102,6 +102,7 @@ export default function AdminDashboard({
   });
   
   const [activeTab, setActiveTab] = useState<TabType>('analytics');
+  const [openNavGroups, setOpenNavGroups] = useState<string[]>([]);
   const [financialsDateFilter, setFinancialsDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('today');
 
   // --- CRUD States ---
@@ -587,6 +588,7 @@ export default function AdminDashboard({
   const [manufacturingOrders, setManufacturingOrders] = useState<ManufacturingOrder[]>([]);
   const [mfgModalOpen, setMfgModalOpen] = useState(false);
   const [mfgCart, setMfgCart] = useState<{item_id: string, item_name: string, quantity: number, unit: string, calculated_main_quantity: number}[]>([]);
+  const [mfgNewItemId, setMfgNewItemId] = useState('');
 
   // Transfer Requests (Kitchen → Distribution)
   const [transferRequests, setTransferRequests] = useState<TransferRequest[]>([]);
@@ -2882,7 +2884,7 @@ export default function AdminDashboard({
 
 
           {hasPermission('analytics') && (
-            <button 
+            <button
               className={`admin-nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
               onClick={() => setActiveTab('analytics')}
             >
@@ -2891,197 +2893,101 @@ export default function AdminDashboard({
             </button>
           )}
 
-          {hasPermission('financials') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'financials' ? 'active' : ''}`}
-              onClick={() => setActiveTab('financials')}
-            >
-              <WalletCards size={18} />
-              <span>{language === 'ar' ? 'المعاملات المالية' : 'Financials'}</span>
-            </button>
-          )}
+          {(() => {
+            const emoji = (e: string) => (
+              <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>{e}</span>
+            );
+            const navGroups = [
+              {
+                id: 'sales', titleAr: 'المنتجات والمبيعات', titleEn: 'Products & Sales', groupIcon: emoji('🛒'),
+                items: [
+                  { id: 'categories', show: hasPermission('categories'), icon: <FolderOpen size={18} />, label: t.categoriesTab },
+                  { id: 'products', show: hasPermission('products'), icon: <Coffee size={18} />, label: t.productsTab },
+                  { id: 'orders', show: hasPermission('orders'), icon: <Calendar size={18} />, label: t.ordersTab },
+                  { id: 'customers', show: hasPermission('customers'), icon: <Users size={18} />, label: t.customersTab },
+                  { id: 'recipes', show: hasPermission('recipes'), icon: emoji('👨‍🍳'), label: language === 'ar' ? 'وصفات الشيف' : 'Chef Recipes' },
+                ],
+              },
+              {
+                id: 'finance', titleAr: 'المالية', titleEn: 'Finance', groupIcon: emoji('💰'),
+                items: [
+                  { id: 'financials', show: hasPermission('financials'), icon: <WalletCards size={18} />, label: language === 'ar' ? 'المعاملات المالية' : 'Financials' },
+                  { id: 'partners', show: hasPermission('partners'), icon: <Users size={18} />, label: language === 'ar' ? 'العهد والشركاء' : 'Partners' },
+                  { id: 'debts', show: hasPermission('customers'), icon: emoji('💳'), label: language === 'ar' ? 'الحسابات الآجلة' : 'Debts' },
+                  { id: 'invoices', show: hasPermission('orders'), icon: emoji('🧾'), label: language === 'ar' ? 'الفواتير والأرباح' : 'Invoices & Profit' },
+                  { id: 'expenses', show: hasPermission('expenses'), icon: emoji('💸'), label: language === 'ar' ? 'التكاليف والمصروفات' : 'Costs & Expenses' },
+                ],
+              },
+              {
+                id: 'warehouse', titleAr: 'المخازن والمصنع', titleEn: 'Warehouses & Factory', groupIcon: emoji('🏭'),
+                items: [
+                  { id: 'inventory', show: loggedInUser?.role === 'admin' || loggedInUser?.role === 'inventory_manager' || loggedInUser?.role === 'manager', icon: <Package size={18} />, label: language === 'ar' ? 'إدارة المخازن' : 'Inventory' },
+                  { id: 'inventory_report', show: loggedInUser?.role === 'admin' || loggedInUser?.role === 'inventory_manager' || loggedInUser?.role === 'manager', icon: <TrendingDown size={18} />, label: language === 'ar' ? 'الجرد الشهري' : 'Monthly Report' },
+                  { id: 'factory', show: loggedInUser?.role === 'admin' || loggedInUser?.role === 'kitchen_manager', icon: emoji('🏭'), label: language === 'ar' ? 'المصنع والمطبخ' : 'Factory & Kitchen' },
+                ],
+              },
+              {
+                id: 'management', titleAr: 'الإدارة والموظفين', titleEn: 'Management & Staff', groupIcon: <Users size={16} />,
+                items: [
+                  { id: 'employees', show: hasPermission('employees'), icon: <DollarSign size={18} />, label: language === 'ar' ? 'الموظفين والرواتب' : 'Employees & Payroll' },
+                  { id: 'attendance', show: hasPermission('attendance'), icon: <UserCheck size={18} />, label: language === 'ar' ? 'سجل الحضور والانصراف' : 'Daily Attendance' },
+                  { id: 'system_users', show: hasPermission('system_users'), icon: <Users size={18} />, label: language === 'ar' ? 'مستخدمين النظام' : 'System Users' },
+                  { id: 'waiters', show: hasPermission('system_users'), icon: <Coffee size={18} />, label: language === 'ar' ? 'إدارة الويترز' : 'Waiters Management' },
+                  { id: 'settings', show: hasPermission('settings'), icon: <Gear size={18} />, label: t.settingsTab },
+                ],
+              },
+            ];
 
-          {hasPermission('partners') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'partners' ? 'active' : ''}`}
-              onClick={() => setActiveTab('partners')}
-            >
-              <Users size={18} />
-              <span>{language === 'ar' ? 'العهد والشركاء' : 'Partners'}</span>
-            </button>
-          )}
-          
-          {hasPermission('categories') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'categories' ? 'active' : ''}`}
-              onClick={() => setActiveTab('categories')}
-            >
-              <FolderOpen size={18} />
-              <span>{t.categoriesTab}</span>
-            </button>
-          )}
+            return navGroups.map(group => {
+              const visibleItems = group.items.filter(it => it.show);
+              if (visibleItems.length === 0) return null;
+              const containsActive = visibleItems.some(it => it.id === activeTab);
+              const isOpen = openNavGroups.includes(group.id) || containsActive;
+              return (
+                <div key={group.id} style={{ marginBottom: '0.25rem' }}>
+                  <button
+                    className="admin-nav-item"
+                    onClick={() => setOpenNavGroups(prev => prev.includes(group.id) ? prev.filter(g => g !== group.id) : [...prev, group.id])}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                      opacity: 0.75, fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.5px',
+                      textTransform: 'uppercase', color: 'var(--gold-primary)',
+                    }}
+                  >
+                    {group.groupIcon}
+                    <span style={{ flex: 1, textAlign: language === 'ar' ? 'right' : 'left' }}>{language === 'ar' ? group.titleAr : group.titleEn}</span>
+                    <ChevronDown size={16} style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                  </button>
+                  {isOpen && (
+                    <div style={{ paddingInlineStart: '0.5rem', borderInlineStart: '2px solid rgba(212,175,55,0.2)', marginInlineStart: '0.5rem' }}>
+                      {visibleItems.map(it => (
+                        <button
+                          key={it.id}
+                          className={`admin-nav-item ${activeTab === it.id ? 'active' : ''}`}
+                          onClick={() => setActiveTab(it.id as TabType)}
+                        >
+                          {it.icon}
+                          <span>{it.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            });
+          })()}
 
-          {hasPermission('products') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'products' ? 'active' : ''}`}
-              onClick={() => setActiveTab('products')}
-            >
-              <Coffee size={18} />
-              <span>{t.productsTab}</span>
-            </button>
-          )}
-
-          {hasPermission('orders') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
-              onClick={() => setActiveTab('orders')}
-            >
-              <Calendar size={18} />
-              <span>{t.ordersTab}</span>
-            </button>
-          )}
-
-          {hasPermission('customers') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'customers' ? 'active' : ''}`}
-              onClick={() => setActiveTab('customers')}
-            >
-              <Users size={18} />
-              <span>{t.customersTab}</span>
-            </button>
-          )}
-
-          {hasPermission('customers') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'debts' ? 'active' : ''}`}
-              onClick={() => setActiveTab('debts')}
-            >
-              <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>💳</span>
-              <span>{language === 'ar' ? 'الحسابات الآجلة' : 'Debts'}</span>
-            </button>
-          )}
-
-          {hasPermission('orders') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'invoices' ? 'active' : ''}`}
-              onClick={() => setActiveTab('invoices')}
-            >
-              <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>🧾</span>
-              <span>{language === 'ar' ? 'الفواتير والأرباح' : 'Invoices & Profit'}</span>
-            </button>
-          )}
-
-          {hasPermission('expenses') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'expenses' ? 'active' : ''}`}
-              onClick={() => setActiveTab('expenses')}
-            >
-              <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>💰</span>
-              <span>{language === 'ar' ? 'التكاليف والمصروفات' : 'Costs & Expenses'}</span>
-            </button>
-          )}
-
-          {hasPermission('employees') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'employees' ? 'active' : ''}`}
-              onClick={() => setActiveTab('employees')}
-            >
-              <DollarSign size={18} />
-              <span>{language === 'ar' ? 'الموظفين والرواتب' : 'Employees & Payroll'}</span>
-            </button>
-          )}
-
-          {hasPermission('attendance') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'attendance' ? 'active' : ''}`}
-              onClick={() => setActiveTab('attendance')}
-            >
-              <UserCheck size={18} />
-              <span>{language === 'ar' ? 'سجل الحضور والانصراف' : 'Daily Attendance'}</span>
-            </button>
-          )}
-
-          {hasPermission('recipes') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'recipes' ? 'active' : ''}`}
-              onClick={() => setActiveTab('recipes')}
-            >
-              <span style={{ fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>👨‍🍳</span>
-              <span>{language === 'ar' ? 'وصفات الشيف' : 'Chef Recipes'}</span>
-            </button>
-          )}
-
-          {hasPermission('system_users') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'system_users' ? 'active' : ''}`}
-              onClick={() => setActiveTab('system_users')}
-            >
-              <Users size={18} />
-              <span>{language === 'ar' ? 'مستخدمين النظام' : 'System Users'}</span>
-            </button>
-          )}
-
-          {hasPermission('system_users') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'waiters' ? 'active' : ''}`}
-              onClick={() => setActiveTab('waiters')}
-            >
-              <Coffee size={18} />
-              <span>{language === 'ar' ? 'إدارة الويترز' : 'Waiters Management'}</span>
-            </button>
-          )}
-
-          {hasPermission('settings') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('settings')}
-            >
-              <Gear size={18} />
-              <span>{t.settingsTab}</span>
-            </button>
-          )}
-
-          {(loggedInUser?.role === 'admin' || loggedInUser?.role === 'inventory_manager' || loggedInUser?.role === 'manager') && (
-            <>
-              <button 
-                className={`admin-nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
-                onClick={() => setActiveTab('inventory')}
-              >
-                <Package size={18} />
-                <span>{language === 'ar' ? 'إدارة المخازن' : 'Inventory'}</span>
-              </button>
-
-              <button 
-                className={`admin-nav-item ${activeTab === 'inventory_report' ? 'active' : ''}`}
-                onClick={() => setActiveTab('inventory_report')}
-              >
-                <TrendingDown size={18} />
-                <span>{language === 'ar' ? 'الجرد الشهري' : 'Monthly Report'}</span>
-              </button>
-            </>
-          )}
-
-          {(loggedInUser?.role === 'admin' || loggedInUser?.role === 'kitchen_manager') && (
-            <button 
-              className={`admin-nav-item ${activeTab === 'factory' ? 'active' : ''}`}
-              onClick={() => setActiveTab('factory')}
-            >
-              <Coffee size={18} />
-              <span>{language === 'ar' ? 'المصنع والمطبخ' : 'Factory & Kitchen'}</span>
-            </button>
-          )}
+          <button className="btn-outline-gold" onClick={() => {
+            localStorage.removeItem('meridien_admin_auth');
+            localStorage.removeItem('meridien_logged_in_user');
+            setIsAuthenticated(false);
+            setLoggedInUser(null);
+            onClose();
+          }} style={{ width: '100%', marginTop: '1rem' }}>
+            <LogOut size={16} />
+            {t.exitBtn}
+          </button>
         </nav>
-
-        <button className="btn-outline-gold" onClick={() => {
-          localStorage.removeItem('meridien_admin_auth');
-          localStorage.removeItem('meridien_logged_in_user');
-          setIsAuthenticated(false);
-          setLoggedInUser(null);
-          onClose();
-        }} style={{ marginTop: 'auto', width: '100%' }}>
-          <LogOut size={16} />
-          {t.exitBtn}
-        </button>
       </aside>
 
       {/* 2. Main content area */}
@@ -8228,37 +8134,41 @@ export default function AdminDashboard({
               <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
                 <h3 style={{ marginBottom: '1rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تفاصيل الأصناف' : 'Order Items'}</h3>
                 
-                {/* Add item row */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <select id="mfg-new-item" className="input-gold" style={{ padding: '0.5rem' }}>
-                    <option value="">{language === 'ar' ? 'اختر صنف/خامة' : 'Select Item'}</option>
-                    {inventoryItems.map(item => (
-                      <option key={item.id} value={item.id}>{item.name}</option>
-                    ))}
-                  </select>
-                  <input type="number" id="mfg-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
-                  <select id="mfg-new-unit" className="input-gold" style={{ padding: '0.5rem' }}>
-                    <option value="kilo">{language === 'ar' ? 'كجم' : 'KG'}</option>
-                    <option value="gram">{language === 'ar' ? 'جرام' : 'Gram'}</option>
-                    <option value="piece">{language === 'ar' ? 'قطعة' : 'Piece'}</option>
-                    <option value="carton">{language === 'ar' ? 'كرتونة' : 'Carton'}</option>
-                    <option value="box">{language === 'ar' ? 'علبة' : 'Box'}</option>
-                  </select>
-                  <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
-                    const idEl = document.getElementById('mfg-new-item') as HTMLSelectElement;
-                    const qtyEl = document.getElementById('mfg-new-qty') as HTMLInputElement;
-                    const unitEl = document.getElementById('mfg-new-unit') as HTMLSelectElement;
-                    const itemId = idEl.value;
-                    const qty = parseFloat(qtyEl.value);
-                    const unit = unitEl.value as 'kilo'|'gram'|'piece'|'carton'|'box';
-                    if (itemId && qty > 0) {
-                      setMfgCart([...mfgCart, { item_id: itemId, item_name: inventoryItems.find(i=>i.id===itemId)?.name || '', quantity: qty, unit, calculated_main_quantity: 0 }]);
-                      idEl.value = ''; qtyEl.value = ''; unitEl.value = 'kilo';
-                    }
-                  }}>
-                    <Plus size={16} />
-                  </button>
-                </div>
+                {/* Add item row — اختر الخامة فيظهر المتاح بالرئيسي، والكمية بوحدة الصنف نفسه */}
+                {(() => {
+                  const selRaw = inventoryItems.find(i => i.id === mfgNewItemId);
+                  const availMain = selRaw?.stock_main || 0;
+                  return (
+                  <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto auto', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                    <select id="mfg-new-item" className="input-gold" style={{ padding: '0.5rem' }} value={mfgNewItemId} onChange={(e) => setMfgNewItemId(e.target.value)}>
+                      <option value="">{language === 'ar' ? 'اختر الخامة...' : 'Select raw material...'}</option>
+                      {inventoryItems.filter(i => !i.is_manufactured).map(item => (
+                        <option key={item.id} value={item.id}>{item.name} — {language === 'ar' ? 'المتاح بالرئيسي:' : 'In main:'} {item.stock_main || 0} {item.unit}</option>
+                      ))}
+                    </select>
+                    <input type="number" id="mfg-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
+                    <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold', minWidth: '3rem', textAlign: 'center' }}>{selRaw?.unit || '—'}</span>
+                    <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
+                      const qtyEl = document.getElementById('mfg-new-qty') as HTMLInputElement;
+                      const qty = parseFloat(qtyEl.value);
+                      if (mfgNewItemId && qty > 0 && selRaw) {
+                        // الكمية بوحدة الصنف نفسها = نفس وحدة المخزون الرئيسي، فالكمية المخصومة = الكمية
+                        setMfgCart([...mfgCart, { item_id: mfgNewItemId, item_name: selRaw.name, quantity: qty, unit: selRaw.unit, calculated_main_quantity: qty }]);
+                        setMfgNewItemId(''); qtyEl.value = '';
+                      }
+                    }}>
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                  {selRaw && (
+                    <p style={{ fontSize: '0.8rem', marginBottom: '1rem', color: availMain > 0 ? '#10b981' : '#ef4444' }}>
+                      {language === 'ar' ? `المتاح من «${selRaw.name}» بالمخزن الرئيسي: ${availMain} ${selRaw.unit}` : `Available of "${selRaw.name}" in main: ${availMain} ${selRaw.unit}`}
+                    </p>
+                  )}
+                  </>
+                  );
+                })()}
 
                 {/* Cart list */}
                 {mfgCart.length > 0 && (
@@ -8266,24 +8176,29 @@ export default function AdminDashboard({
                     <thead>
                       <tr>
                         <th>{language === 'ar' ? 'الصنف' : 'Item'}</th>
-                        <th>{language === 'ar' ? 'الكمية' : 'Qty'}</th>
-                        <th>{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
+                        <th>{language === 'ar' ? 'الكمية المطلوبة' : 'Requested Qty'}</th>
+                        <th>{language === 'ar' ? 'المتاح بالرئيسي' : 'In Main'}</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {mfgCart.map((c, idx) => (
-                        <tr key={idx}>
+                      {mfgCart.map((c, idx) => {
+                        const it = inventoryItems.find(i => i.id === c.item_id);
+                        const available = it?.stock_main || 0;
+                        const short = c.quantity > available;
+                        return (
+                        <tr key={idx} style={short ? { background: 'rgba(239,68,68,0.12)' } : undefined}>
                           <td>{c.item_name}</td>
-                          <td>{c.quantity}</td>
-                          <td>{language === 'ar' && c.unit === 'kilo' ? 'كجم' : c.unit === 'gram' ? 'جرام' : c.unit === 'carton' ? 'كرتونة' : c.unit === 'box' ? 'علبة' : c.unit}</td>
+                          <td style={{ color: short ? '#ef4444' : undefined, fontWeight: short ? 'bold' : undefined }}>{c.quantity} {c.unit}</td>
+                          <td style={{ color: short ? '#ef4444' : '#10b981' }}>{available} {c.unit}{short ? (language === 'ar' ? ' ⚠ غير كافٍ' : ' ⚠ short') : ''}</td>
                           <td>
                             <button type="button" style={{ background: 'transparent', border: 'none', color: '#ff4d4d', cursor: 'pointer' }} onClick={() => setMfgCart(mfgCart.filter((_, i) => i !== idx))}>
                               <Trash2 size={14} />
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -8333,33 +8248,54 @@ export default function AdminDashboard({
                       }
                     }}
                   >
-                    <option value="">{language === 'ar' ? 'اختر المنتج...' : 'Select produced item...'}</option>
-                    {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                    <option value="">{language === 'ar' ? 'اختر المنتج المصنّع...' : 'Select produced item...'}</option>
+                    {inventoryItems.filter(i => i.is_manufactured).map(i => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
                   </select>
-                  <input 
-                    type="number" 
-                    className="input-gold" 
-                    placeholder={language === 'ar' ? 'الكمية المنتجة' : 'Produced Qty'} 
-                    style={{ padding: '0.5rem' }} 
-                    step="0.01" 
-                    min="0.01"
-                    value={producedQuantity}
-                    onChange={async (e) => {
-                      const qty = parseFloat(e.target.value) || 0;
-                      setProducedQuantity(qty);
-                      if (producedItemId) {
-                        const item = inventoryItems.find(i => i.id === producedItemId);
-                        if (item?.is_manufactured) {
-                          const recipes = await db.getManufacturingRecipes(producedItemId);
-                          setConsumedItems(recipes.map(r => ({
-                            item_id: r.ingredient_item_id,
-                            quantity: Number((r.quantity * qty).toFixed(2))
-                          })));
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <input
+                      type="number"
+                      className="input-gold"
+                      placeholder={language === 'ar' ? 'الكمية المنتجة' : 'Produced Qty'}
+                      style={{ padding: '0.5rem', flex: 1 }}
+                      step="0.01"
+                      min="0.01"
+                      value={producedQuantity}
+                      onChange={async (e) => {
+                        const qty = parseFloat(e.target.value) || 0;
+                        setProducedQuantity(qty);
+                        if (producedItemId) {
+                          const item = inventoryItems.find(i => i.id === producedItemId);
+                          if (item?.is_manufactured) {
+                            const recipes = await db.getManufacturingRecipes(producedItemId);
+                            setConsumedItems(recipes.map(r => ({
+                              item_id: r.ingredient_item_id,
+                              quantity: Number((r.quantity * qty).toFixed(2))
+                            })));
+                          }
                         }
-                      }
-                    }}
-                  />
+                      }}
+                    />
+                    <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold', minWidth: '2.5rem' }}>
+                      {inventoryItems.find(i => i.id === producedItemId)?.unit || '—'}
+                    </span>
+                  </div>
                 </div>
+                {inventoryItems.filter(i => i.is_manufactured).length === 0 && (
+                  <p style={{ color: 'var(--text-gray)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
+                    {language === 'ar' ? 'لا توجد منتجات مصنّعة بعد. أضِفها من إدارة المخازن (نوع: مصنّع) مع وصفتها.' : 'No manufactured products yet. Add them from Inventory (type: manufactured) with their recipe.'}
+                  </p>
+                )}
+                {producedItemId && (() => {
+                  const sel = inventoryItems.find(i => i.id === producedItemId);
+                  const recipeLoaded = consumedItems.length > 0;
+                  return (
+                    <p style={{ color: 'var(--text-gray)', fontSize: '0.8rem', marginTop: '0.5rem' }}>
+                      {recipeLoaded
+                        ? (language === 'ar' ? `تم تحميل وصفة ${sel?.name} وحساب الخامات المطلوبة تلقائياً حسب الكمية.` : `Recipe loaded; raw materials auto-calculated by quantity.`)
+                        : (language === 'ar' ? 'لا توجد وصفة محفوظة لهذا المنتج — أضِف الخامات يدوياً بالأسفل.' : 'No saved recipe — add raw materials manually below.')}
+                    </p>
+                  );
+                })()}
               </div>
 
               <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
@@ -8367,7 +8303,7 @@ export default function AdminDashboard({
                 <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
                   <select id="prod-consumed-item" className="input-gold" style={{ padding: '0.5rem' }}>
                     <option value="">{language === 'ar' ? 'اختر الخامة...' : 'Select raw material...'}</option>
-                    {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name} ({i.stock_factory || 0} {language === 'ar' ? 'بالمصنع' : 'in factory'})</option>)}
+                    {inventoryItems.filter(i => !i.is_manufactured).map(i => <option key={i.id} value={i.id}>{i.name} — {language === 'ar' ? 'المتاح بالمطبخ:' : 'In kitchen:'} {i.stock_factory || 0} {i.unit}</option>)}
                   </select>
                   <input type="number" id="prod-consumed-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية المستهلكة' : 'Consumed Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
                   <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
@@ -8391,30 +8327,50 @@ export default function AdminDashboard({
                   </button>
                 </div>
 
-                {consumedItems.length > 0 && (
+                {consumedItems.length > 0 && (() => {
+                  const hasShortage = consumedItems.some(c => {
+                    const it = inventoryItems.find(i => i.id === c.item_id);
+                    return c.quantity > (it?.stock_factory || 0);
+                  });
+                  return (
+                  <>
                   <table className="admin-table" style={{ marginTop: '1rem', fontSize: '0.9rem' }}>
                     <thead>
                       <tr>
                         <th>{language === 'ar' ? 'الخامة' : 'Item'}</th>
                         <th>{language === 'ar' ? 'الكمية المخصومة' : 'Deducted Qty'}</th>
+                        <th>{language === 'ar' ? 'المتاح بالمطبخ' : 'In Kitchen'}</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {consumedItems.map((c, idx) => (
-                        <tr key={idx}>
-                          <td>{inventoryItems.find(i => i.id === c.item_id)?.name}</td>
-                          <td>{c.quantity}</td>
+                      {consumedItems.map((c, idx) => {
+                        const it = inventoryItems.find(i => i.id === c.item_id);
+                        const available = it?.stock_factory || 0;
+                        const short = c.quantity > available;
+                        return (
+                        <tr key={idx} style={short ? { background: 'rgba(239,68,68,0.12)' } : undefined}>
+                          <td>{it?.name}</td>
+                          <td style={{ color: short ? '#ef4444' : undefined, fontWeight: short ? 'bold' : undefined }}>{c.quantity} {it?.unit}</td>
+                          <td style={{ color: short ? '#ef4444' : '#10b981' }}>{available} {it?.unit}{short ? (language === 'ar' ? ' ⚠ غير كافٍ' : ' ⚠ short') : ''}</td>
                           <td>
                             <button type="button" style={{ background: 'transparent', border: 'none', color: '#ff4d4d', cursor: 'pointer' }} onClick={() => setConsumedItems(consumedItems.filter((_, i) => i !== idx))}>
                               <Trash2 size={14} />
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
-                )}
+                  {hasShortage && (
+                    <p style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '0.5rem' }}>
+                      {language === 'ar' ? '⚠ بعض الخامات أكبر من المتاح في المطبخ — راجع الكميات أو حوّل خامات إضافية للمطبخ أولاً.' : '⚠ Some materials exceed kitchen stock — review quantities or transfer more to the kitchen first.'}
+                    </p>
+                  )}
+                  </>
+                  );
+                })()}
               </div>
 
             </div>
