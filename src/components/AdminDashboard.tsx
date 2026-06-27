@@ -1582,12 +1582,30 @@ export default function AdminDashboard({
     }
   };
 
+  // الأصناف بعد تطبيق فلتر المخزن والنواقص — يُستخدم في الجدول والتصدير والاستيراد
+  const filteredInventoryItems = inventoryItems.filter(item => {
+    if (!warehouseHoldsItem(inventoryWarehouseFilter, item)) return false;
+    const stock = inventoryWarehouseFilter === 'factory' ? (item.stock_factory || 0)
+      : inventoryWarehouseFilter === 'distribution' ? (item.stock_distribution || 0)
+      : (item.stock_main || 0);
+    if (inventoryLowStockFilter && stock > (item.low_stock_threshold || 0)) return false;
+    return true;
+  });
+
+  const warehouseLabel = (wh: 'main' | 'factory' | 'distribution') => (
+    wh === 'factory' ? (language === 'ar' ? 'المصنع' : 'Factory')
+      : wh === 'distribution' ? (language === 'ar' ? 'التوزيع' : 'Distribution')
+      : (language === 'ar' ? 'الرئيسي' : 'Main')
+  );
+
   const exportInventoryToExcel = () => {
     try {
-      const exportData = inventoryItems.map(item => ({
+      // التصدير يحترم الفلتر النشط (المخزن + النواقص)
+      const exportData = filteredInventoryItems.map(item => ({
         'رقم الصنف': item.id,
         'اسم الصنف': item.name,
         'الوحدة': item.unit,
+        'النوع': item.is_manufactured ? 'مصنّع' : 'خام',
         'رصيد المخزن الأساسي': item.stock_main || 0,
         'رصيد المصنع': item.stock_factory || 0,
         'رصيد مخزن التوزيع': item.stock_distribution || 0,
@@ -1598,11 +1616,16 @@ export default function AdminDashboard({
         'التكلفة الإجمالية لمخزن التوزيع': (item.stock_distribution || 0) * (item.avg_purchase_price || 0)
       }));
 
+      if (exportData.length === 0) {
+        alert(language === 'ar' ? 'لا توجد أصناف في الفلتر الحالي للتصدير' : 'No items in the current filter to export');
+        return;
+      }
+
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(exportData);
       XLSX.utils.book_append_sheet(wb, ws, "الجرد");
 
-      XLSX.writeFile(wb, `Inventory_Export_${getLocalDayStr()}.xlsx`);
+      XLSX.writeFile(wb, `Inventory_${warehouseLabel(inventoryWarehouseFilter)}_${getLocalDayStr()}.xlsx`);
     } catch (err) {
       console.error(err);
       alert(language === 'ar' ? 'حدث خطأ أثناء التصدير' : 'Error exporting data');
@@ -1622,12 +1645,17 @@ export default function AdminDashboard({
           const wsname = wb.SheetNames[0];
           const ws = wb.Sheets[wsname];
           const data = XLSX.utils.sheet_to_json(ws);
-          
+
+          // الاستيراد يحترم الفلتر النشط: يحدّث فقط الأصناف الموجودة في الفلتر الحالي
+          const allowedIds = new Set(filteredInventoryItems.map(i => i.id));
+
           let updatedCount = 0;
+          let skippedCount = 0;
           for (const row of data as any[]) {
             const id = row['رقم الصنف'];
             if (!id) continue;
-            
+            if (!allowedIds.has(id)) { skippedCount++; continue; }
+
             const updateObj: Partial<InventoryItem> = {};
             if (row['اسم الصنف'] !== undefined) updateObj.name = row['اسم الصنف'];
             if (row['الوحدة'] !== undefined) updateObj.unit = row['الوحدة'];
@@ -1644,7 +1672,10 @@ export default function AdminDashboard({
             }
           }
           await fetchInventoryData();
-          alert(language === 'ar' ? `تم تحديث ${updatedCount} صنف بنجاح` : `Updated ${updatedCount} items successfully`);
+          const skipNote = skippedCount > 0
+            ? (language === 'ar' ? ` (تم تجاهل ${skippedCount} صنف خارج الفلتر الحالي)` : ` (skipped ${skippedCount} items outside current filter)`)
+            : '';
+          alert((language === 'ar' ? `تم تحديث ${updatedCount} صنف بنجاح` : `Updated ${updatedCount} items successfully`) + skipNote);
         } catch (err) {
           console.error(err);
           alert(language === 'ar' ? 'خطأ في معالجة الملف' : 'Error processing file');
@@ -5333,38 +5364,50 @@ export default function AdminDashboard({
                       {language === 'ar' ? 'النواقص فقط' : 'Low Stock Only'}
                     </label>
 
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <button
-                        className={inventoryWarehouseFilter === 'main' ? 'btn-gold' : 'btn-outline-gold'}
-                        onClick={() => setInventoryWarehouseFilter('main')}
-                        style={{ padding: '0.5rem 1rem' }}
-                      >
-                        {language === 'ar' ? 'المخزن الرئيسي (خام)' : 'Main (Raw)'}
-                      </button>
-                      <button
-                        className={inventoryWarehouseFilter === 'factory' ? 'btn-gold' : 'btn-outline-gold'}
-                        onClick={() => setInventoryWarehouseFilter('factory')}
-                        style={{ padding: '0.5rem 1rem' }}
-                      >
-                        {language === 'ar' ? 'مخزن المصنع / المطبخ (خام)' : 'Factory / Kitchen (Raw)'}
-                      </button>
-                      <button
-                        className={inventoryWarehouseFilter === 'distribution' ? 'btn-gold' : 'btn-outline-gold'}
-                        onClick={() => setInventoryWarehouseFilter('distribution')}
-                        style={{ padding: '0.5rem 1rem' }}
-                      >
-                        {language === 'ar' ? 'مخزن التوزيع (مصنّع)' : 'Distribution (Mfg)'}
-                      </button>
+                    {/* فلتر المخزن — segmented control */}
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', border: '1px solid rgba(212,175,55,0.25)', flexWrap: 'wrap' }}>
+                      {([
+                        { key: 'main', ar: 'الرئيسي', en: 'Main', sub: language === 'ar' ? 'خام' : 'Raw' },
+                        { key: 'factory', ar: 'المصنع / المطبخ', en: 'Factory', sub: language === 'ar' ? 'خام' : 'Raw' },
+                        { key: 'distribution', ar: 'التوزيع', en: 'Distribution', sub: language === 'ar' ? 'مصنّع' : 'Mfg' },
+                      ] as const).map(w => {
+                        const active = inventoryWarehouseFilter === w.key;
+                        return (
+                          <button
+                            key={w.key}
+                            onClick={() => setInventoryWarehouseFilter(w.key)}
+                            style={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.1,
+                              padding: '0.4rem 0.9rem', borderRadius: '8px', cursor: 'pointer',
+                              border: 'none', transition: 'all 0.15s',
+                              background: active ? 'var(--gold-primary)' : 'transparent',
+                              color: active ? '#000' : 'var(--text-light)',
+                              fontWeight: active ? 700 : 500,
+                            }}
+                          >
+                            <span style={{ fontSize: '0.85rem' }}>{language === 'ar' ? w.ar : w.en}</span>
+                            <span style={{ fontSize: '0.62rem', opacity: 0.8 }}>{w.sub}</span>
+                          </button>
+                        );
+                      })}
+                      <span style={{ padding: '0 0.6rem', fontSize: '0.8rem', color: 'var(--gold-primary)', fontWeight: 700 }}>
+                        {filteredInventoryItems.length} {language === 'ar' ? 'صنف' : 'items'}
+                      </span>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button className="btn-outline-gold" onClick={exportInventoryToExcel}>
-                        <Download size={16} /> {language === 'ar' ? 'تصدير إكسيل' : 'Export Excel'}
-                      </button>
-                      <label className="btn-outline-gold" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}>
-                        <Upload size={16} /> {language === 'ar' ? 'استيراد جرد' : 'Import Excel'}
-                        <input type="file" accept=".xlsx, .xls" style={{ display: 'none' }} onChange={importInventoryFromExcel} />
-                      </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="btn-outline-gold" onClick={exportInventoryToExcel}>
+                          <Download size={16} /> {language === 'ar' ? 'تصدير إكسيل' : 'Export Excel'}
+                        </button>
+                        <label className="btn-outline-gold" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}>
+                          <Upload size={16} /> {language === 'ar' ? 'استيراد جرد' : 'Import Excel'}
+                          <input type="file" accept=".xlsx, .xls" style={{ display: 'none' }} onChange={importInventoryFromExcel} />
+                        </label>
+                      </div>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-gray)', textAlign: 'center' }}>
+                        {language === 'ar' ? '⓵ التصدير/الاستيراد يطبّق على الفلتر الحالي فقط' : '⓵ Export/Import applies to current filter only'}
+                      </span>
                     </div>
 
                     <button className="btn-gold" onClick={() => {
@@ -5427,20 +5470,7 @@ export default function AdminDashboard({
                       </tr>
                     </thead>
                     <tbody>
-                      {inventoryItems
-                        .filter(item => {
-                          // كل مخزن يعرض أصنافه فقط: الرئيسي/المصنع = خام، التوزيع = مصنّع
-                          if (!warehouseHoldsItem(inventoryWarehouseFilter, item)) return false;
-
-                          let stock = 0;
-                          if (inventoryWarehouseFilter === 'main') stock = item.stock_main || 0;
-                          if (inventoryWarehouseFilter === 'factory') stock = item.stock_factory || 0;
-                          if (inventoryWarehouseFilter === 'distribution') stock = item.stock_distribution || 0;
-
-                          if (inventoryLowStockFilter && stock > (item.low_stock_threshold || 0)) return false;
-
-                          return true;
-                        })
+                      {filteredInventoryItems
                         .map(item => {
                         let stock = 0;
                         if (inventoryWarehouseFilter === 'main') stock = item.stock_main || 0;
