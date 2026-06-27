@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct, InventoryMovement } from '../types';
 import { db } from '../lib/supabase';
-import { warehouseHoldsItem, warehouseValue } from '../lib/warehouse';
+import { warehouseHoldsItem, warehouseValue, warehouseStock } from '../lib/warehouse';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import * as XLSX from 'xlsx';
 
@@ -522,6 +522,7 @@ export default function AdminDashboard({
   const [inventorySubTab, setInventorySubTab] = useState<'suppliers' | 'items' | 'invoices' | 'mfg_orders'>('items');
   const [factorySubTab, setFactorySubTab] = useState<'mfg_requests' | 'production' | 'transfer_requests' | 'distribution'>('mfg_requests');
   const [productionLogs, setProductionLogs] = useState<ProductionLog[]>([]);
+  const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>([]);
   const [producedItemId, setProducedItemId] = useState('');
   const [producedQuantity, setProducedQuantity] = useState(1);
   const [consumedItems, setConsumedItems] = useState<{item_id: string, quantity: number}[]>([]);
@@ -621,8 +622,10 @@ export default function AdminDashboard({
       setProductionLogs(prodLogs);
       const transferReqs = await db.getTransferRequests();
       const distProds = await db.getDistributionProducts();
+      const movements = await db.getInventoryMovements();
       setTransferRequests(transferReqs);
       setDistributionProducts(distProds);
+      setInventoryMovements(movements);
       
       if (loggedInUser) {
         const notifs = await db.getNotifications(loggedInUser.role);
@@ -1600,14 +1603,51 @@ export default function AdminDashboard({
       : (language === 'ar' ? 'الرئيسي' : 'Main')
   );
 
-  const exportInventoryToExcel = () => {
+  // رصيد الصنف "نهاية الشهر الماضي" لمخزن معيّن = مجموع الحركات قبل أول يوم في الشهر الحالي.
+  // لو مفيش حركات أصلاً، نعتبر الرصيد الحالي هو المُرحّل من قبل بداية الشهر.
+  const lastMonthClosing = (item: InventoryItem, wh: 'main' | 'factory' | 'distribution') => {
+    const now = new Date();
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const movs = inventoryMovements.filter(m => m.item_id === item.id && (m.warehouse === wh || (!m.warehouse && wh === 'main')));
+    if (movs.length === 0) return warehouseStock(wh, item);
+    let q = 0;
+    movs.filter(m => new Date(m.created_at || 0) < startOfThisMonth).forEach(m => {
+      if (m.type === 'in' || m.type === 'adjustment') q += Number(m.quantity);
+      else q -= Number(m.quantity);
+    });
+    return q;
+  };
+
+  // اسم عمود الوصفة في ملف إكسيل المخزون (للمنتجات المصنّعة)
+  const RECIPE_COL = 'الوصفة (مكوّن:كمية | ...)';
+
+  const exportInventoryToExcel = async () => {
     try {
       // التصدير يحترم الفلتر النشط (المخزن + النواقص)
+      if (filteredInventoryItems.length === 0) {
+        alert(language === 'ar' ? 'لا توجد أصناف في الفلتر الحالي للتصدير' : 'No items in the current filter to export');
+        return;
+      }
+
+      // تحميل وصفات المنتجات المصنّعة الظاهرة في الفلتر
+      const recipeMap = new Map<string, string>();
+      for (const m of filteredInventoryItems.filter(i => i.is_manufactured)) {
+        const recs = await db.getManufacturingRecipes(m.id);
+        const txt = recs.map((r: any) => {
+          const nm = r.ingredient_name || inventoryItems.find(i => i.id === r.ingredient_item_id)?.name || '';
+          return `${nm}:${r.quantity}`;
+        }).filter((s: string) => !s.startsWith(':')).join(' | ');
+        recipeMap.set(m.id, txt);
+      }
+
+      const wh = inventoryWarehouseFilter;
       const exportData = filteredInventoryItems.map(item => ({
         'رقم الصنف': item.id,
         'اسم الصنف': item.name,
         'الوحدة': item.unit,
         'النوع': item.is_manufactured ? 'مصنّع' : 'خام',
+        'نهاية الشهر الماضي': lastMonthClosing(item, wh),
+        'الكمية الحالية': warehouseStock(wh, item),
         'رصيد المخزن الأساسي': item.stock_main || 0,
         'رصيد المصنع': item.stock_factory || 0,
         'رصيد مخزن التوزيع': item.stock_distribution || 0,
@@ -1615,13 +1655,9 @@ export default function AdminDashboard({
         'متوسط السعر': item.avg_purchase_price || 0,
         'التكلفة الإجمالية للمخزن الأساسي': (item.stock_main || 0) * (item.avg_purchase_price || 0),
         'التكلفة الإجمالية للمصنع': (item.stock_factory || 0) * (item.avg_purchase_price || 0),
-        'التكلفة الإجمالية لمخزن التوزيع': (item.stock_distribution || 0) * (item.avg_purchase_price || 0)
+        'التكلفة الإجمالية لمخزن التوزيع': (item.stock_distribution || 0) * (item.avg_purchase_price || 0),
+        [RECIPE_COL]: item.is_manufactured ? (recipeMap.get(item.id) || '') : ''
       }));
-
-      if (exportData.length === 0) {
-        alert(language === 'ar' ? 'لا توجد أصناف في الفلتر الحالي للتصدير' : 'No items in the current filter to export');
-        return;
-      }
 
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(exportData);
@@ -1653,6 +1689,7 @@ export default function AdminDashboard({
 
           let updatedCount = 0;
           let skippedCount = 0;
+          let recipeCount = 0;
           for (const row of data as any[]) {
             const id = row['رقم الصنف'];
             if (!id) continue;
@@ -1672,12 +1709,35 @@ export default function AdminDashboard({
               }
               updatedCount++;
             }
+
+            // تحديث وصفة المنتج المصنّع لو عمود الوصفة موجود
+            const item = inventoryItems.find(i => i.id === id);
+            if (item?.is_manufactured && row[RECIPE_COL] !== undefined) {
+              const recipeStr = String(row[RECIPE_COL] || '').trim();
+              const recipes: { ingredient_item_id: string; quantity: number }[] = [];
+              if (recipeStr) {
+                for (const part of recipeStr.split('|')) {
+                  const sep = part.lastIndexOf(':');
+                  if (sep === -1) continue;
+                  const nm = part.slice(0, sep).trim();
+                  const qty = Number(part.slice(sep + 1).trim());
+                  const ing = inventoryItems.find(i => i.name.trim() === nm);
+                  if (ing && !isNaN(qty) && qty > 0) recipes.push({ ingredient_item_id: ing.id, quantity: qty });
+                  else if (!ing && nm) console.warn(`Recipe ingredient "${nm}" not found for ${item.name}`);
+                }
+              }
+              await db.saveManufacturingRecipe(id, recipes);
+              recipeCount++;
+            }
           }
           await fetchInventoryData();
           const skipNote = skippedCount > 0
             ? (language === 'ar' ? ` (تم تجاهل ${skippedCount} صنف خارج الفلتر الحالي)` : ` (skipped ${skippedCount} items outside current filter)`)
             : '';
-          alert((language === 'ar' ? `تم تحديث ${updatedCount} صنف بنجاح` : `Updated ${updatedCount} items successfully`) + skipNote);
+          const recipeNote = recipeCount > 0
+            ? (language === 'ar' ? ` + تحديث ${recipeCount} وصفة` : ` + ${recipeCount} recipes updated`)
+            : '';
+          alert((language === 'ar' ? `تم تحديث ${updatedCount} صنف بنجاح` : `Updated ${updatedCount} items successfully`) + recipeNote + skipNote);
         } catch (err) {
           console.error(err);
           alert(language === 'ar' ? 'خطأ في معالجة الملف' : 'Error processing file');
@@ -5369,7 +5429,8 @@ export default function AdminDashboard({
                       <tr>
                         <th>{language === 'ar' ? 'الصنف' : 'Item'}</th>
                         <th>{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
-                        <th>{language === 'ar' ? 'رصيد المخزن المحدد' : 'Selected Stock'}</th>
+                        <th title={language === 'ar' ? 'الرصيد المتبقي عند بداية الشهر الحالي (المُرحّل من الشهر الماضي)' : 'Closing balance carried from last month'}>{language === 'ar' ? 'نهاية الشهر الماضي' : 'Last Month'}</th>
+                        <th>{language === 'ar' ? 'الكمية الحالية' : 'Current Qty'}</th>
                         <th>{language === 'ar' ? 'متوسط السعر' : 'Avg Price'}</th>
                         <th>{language === 'ar' ? 'آخر سعر شراء' : 'Last Price'}</th>
                         <th>{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
@@ -5378,10 +5439,8 @@ export default function AdminDashboard({
                     <tbody>
                       {filteredInventoryItems
                         .map(item => {
-                        let stock = 0;
-                        if (inventoryWarehouseFilter === 'main') stock = item.stock_main || 0;
-                        if (inventoryWarehouseFilter === 'factory') stock = item.stock_factory || 0;
-                        if (inventoryWarehouseFilter === 'distribution') stock = item.stock_distribution || 0;
+                        const stock = warehouseStock(inventoryWarehouseFilter, item);
+                        const closing = lastMonthClosing(item, inventoryWarehouseFilter);
 
                         return (
                           <tr key={item.id}>
@@ -5401,7 +5460,8 @@ export default function AdminDashboard({
                               </div>
                             </td>
                             <td>{item.unit}</td>
-                            <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{stock}</td>
+                            <td style={{ color: 'var(--text-gray)' }}>{closing.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                            <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{stock.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                             <td>{item.avg_purchase_price.toFixed(2)}</td>
                             <td>{item.last_purchase_price.toFixed(2)}</td>
                             <td>
@@ -5464,8 +5524,8 @@ export default function AdminDashboard({
                           </tr>
                         );
                       })}
-                      {inventoryItems.length === 0 && (
-                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد بيانات' : 'No data'}</td></tr>
+                      {filteredInventoryItems.length === 0 && (
+                        <tr><td colSpan={7} style={{ textAlign: 'center', padding: '1rem' }}>{language === 'ar' ? 'لا توجد أصناف في هذا المخزن' : 'No items in this warehouse'}</td></tr>
                       )}
                     </tbody>
                   </table>
