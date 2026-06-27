@@ -520,7 +520,8 @@ export default function AdminDashboard({
 
   // --- INVENTORY STATES ---
   const [inventorySubTab, setInventorySubTab] = useState<'suppliers' | 'items' | 'invoices' | 'mfg_orders'>('items');
-  const [factorySubTab, setFactorySubTab] = useState<'mfg_requests' | 'production' | 'transfer_requests' | 'distribution'>('mfg_requests');
+  const [factorySubTab, setFactorySubTab] = useState<'mfg_requests' | 'production' | 'transfer_requests' | 'distribution' | 'kitchen_stock'>('mfg_requests');
+  const [kitchenSearch, setKitchenSearch] = useState('');
   const [productionLogs, setProductionLogs] = useState<ProductionLog[]>([]);
   const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>([]);
   const [producedItemId, setProducedItemId] = useState('');
@@ -596,6 +597,8 @@ export default function AdminDashboard({
   const [mfgModalOpen, setMfgModalOpen] = useState(false);
   const [mfgCart, setMfgCart] = useState<{item_id: string, item_name: string, quantity: number, unit: string, calculated_main_quantity: number}[]>([]);
   const [mfgNewItemId, setMfgNewItemId] = useState('');
+  const [mfgItemSearch, setMfgItemSearch] = useState('');
+  const [mfgShowSuggest, setMfgShowSuggest] = useState(false);
 
   // Transfer Requests (Kitchen → Distribution)
   const [transferRequests, setTransferRequests] = useState<TransferRequest[]>([]);
@@ -964,6 +967,7 @@ export default function AdminDashboard({
       await fetchInventoryData();
       setMfgModalOpen(false);
       setMfgCart([]);
+      setMfgNewItemId(''); setMfgItemSearch(''); setMfgShowSuggest(false);
     } catch (err) {
       console.error(err);
     } finally {
@@ -5778,7 +5782,14 @@ export default function AdminDashboard({
               >
                 📦 {language === 'ar' ? 'أذون صرف الخامات' : 'Material Requests'}
               </button>
-              <button 
+              <button
+                className={`btn-outline-gold ${factorySubTab === 'kitchen_stock' ? 'active' : ''}`}
+                onClick={() => setFactorySubTab('kitchen_stock')}
+                style={{ background: factorySubTab === 'kitchen_stock' ? 'var(--gold-primary)' : 'transparent', color: factorySubTab === 'kitchen_stock' ? '#000' : 'var(--gold-primary)' }}
+              >
+                🍳 {language === 'ar' ? 'المخزون الآن في المطبخ' : 'Kitchen Stock Now'}
+              </button>
+              <button
                 className={`btn-outline-gold ${(factorySubTab as string) === 'transfer_requests' ? 'active' : ''}`}
                 onClick={() => setFactorySubTab('transfer_requests' as any)}
                 style={{ background: (factorySubTab as string) === 'transfer_requests' ? 'var(--gold-primary)' : 'transparent', color: (factorySubTab as string) === 'transfer_requests' ? '#000' : 'var(--gold-primary)', position: 'relative' }}
@@ -5950,6 +5961,67 @@ export default function AdminDashboard({
             )}
 
             {/* SUB-TAB: DISTRIBUTION CATALOG */}
+            {/* SUB-TAB: KITCHEN STOCK NOW (raw + mfg currently in kitchen) */}
+            {factorySubTab === 'kitchen_stock' && (() => {
+              const kitchenItems = inventoryItems
+                .filter(i => (i.stock_factory || 0) > 0)
+                .filter(i => kitchenSearch.trim() === '' || i.name.toLowerCase().includes(kitchenSearch.trim().toLowerCase()));
+              const kitchenValue = kitchenItems.reduce((s, i) => s + (i.stock_factory || 0) * (i.avg_purchase_price || 0), 0);
+              return (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div>
+                    <h2 style={{ color: 'var(--gold-primary)', marginBottom: '0.25rem' }}>{language === 'ar' ? '🍳 المخزون الآن في المطبخ' : '🍳 Current Kitchen Stock'}</h2>
+                    <p style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'الخامات المصروفة والموجودة حالياً في المطبخ — يُخصم منها عند التصنيع' : 'Materials disbursed and currently in the kitchen — deducted on production'}</p>
+                  </div>
+                  <button className="btn-gold" onClick={() => setProductionModalOpen(true)}>
+                    <Plus size={18} /> {language === 'ar' ? 'تحويل / تصنيع منتج' : 'Convert / Produce'}
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div className="stat-card"><div className="stat-icon"><Package color="#000" size={24} /></div><div className="stat-info"><h3>{language === 'ar' ? 'أصناف في المطبخ' : 'Items in Kitchen'}</h3><p className="stat-value">{kitchenItems.length}</p></div></div>
+                  <div className="stat-card"><div className="stat-icon"><Package color="#000" size={24} /></div><div className="stat-info"><h3>{language === 'ar' ? 'قيمة مخزون المطبخ' : 'Kitchen Stock Value'}</h3><p className="stat-value" style={{ color: 'var(--gold-primary)' }}>{kitchenValue.toFixed(0)} EGP</p></div></div>
+                </div>
+                <div style={{ position: 'relative', maxWidth: '320px', marginBottom: '1rem' }}>
+                  <Search size={15} style={{ position: 'absolute', insetInlineStart: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-gray)' }} />
+                  <input className="input-gold" value={kitchenSearch} onChange={e => setKitchenSearch(e.target.value)} placeholder={language === 'ar' ? 'ابحث باسم الصنف...' : 'Search item...'} style={{ width: '100%', paddingInlineStart: '2rem' }} />
+                </div>
+                <div className="table-responsive">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>{language === 'ar' ? 'الصنف' : 'Item'}</th>
+                        <th>{language === 'ar' ? 'النوع' : 'Type'}</th>
+                        <th>{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
+                        <th>{language === 'ar' ? 'الكمية بالمطبخ' : 'Qty in Kitchen'}</th>
+                        <th>{language === 'ar' ? 'متوسط السعر' : 'Avg Price'}</th>
+                        <th>{language === 'ar' ? 'القيمة' : 'Value'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {kitchenItems.map(i => (
+                        <tr key={i.id}>
+                          <td style={{ fontWeight: 'bold' }}>{i.name}</td>
+                          <td><span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: i.is_manufactured ? 'rgba(59,130,246,0.2)' : 'rgba(234,179,8,0.2)', color: i.is_manufactured ? '#60a5fa' : '#eab308' }}>{i.is_manufactured ? (language === 'ar' ? 'مصنّع' : 'Mfg') : (language === 'ar' ? 'خام' : 'Raw')}</span></td>
+                          <td>{i.unit}</td>
+                          <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{(i.stock_factory || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} {i.unit}</td>
+                          <td>{(i.avg_purchase_price || 0).toFixed(2)}</td>
+                          <td style={{ color: '#10b981', fontWeight: 'bold' }}>{((i.stock_factory || 0) * (i.avg_purchase_price || 0)).toFixed(2)} EGP</td>
+                        </tr>
+                      ))}
+                      {kitchenItems.length === 0 && (
+                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-gray)' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🍳</div>
+                          {language === 'ar' ? 'لا توجد خامات في المطبخ حالياً — اصرف خامات من المخزن الرئيسي أولاً.' : 'No materials in the kitchen yet — disburse from main first.'}
+                        </td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              );
+            })()}
+
             {(factorySubTab as string) === 'distribution' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
@@ -5961,6 +6033,40 @@ export default function AdminDashboard({
                     <Plus size={18} /> {language === 'ar' ? 'إضافة منتج توزيع' : 'Add Distribution Product'}
                   </button>
                 </div>
+
+                {/* المنتجات المصنّعة (من المخزون) — رصيد التوزيع */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h3 style={{ color: 'var(--gold-primary)', marginBottom: '0.5rem', fontSize: '1rem' }}>🏭 {language === 'ar' ? 'المنتجات المصنّعة' : 'Manufactured Products'}</h3>
+                  <div className="table-responsive">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>{language === 'ar' ? 'المنتج' : 'Product'}</th>
+                          <th>{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
+                          <th>{language === 'ar' ? 'رصيد التوزيع' : 'Distribution Stock'}</th>
+                          <th>{language === 'ar' ? 'متوسط التكلفة' : 'Avg Cost'}</th>
+                          <th>{language === 'ar' ? 'القيمة' : 'Value'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryItems.filter(i => i.is_manufactured).map(i => (
+                          <tr key={i.id}>
+                            <td style={{ fontWeight: 'bold' }}>{i.name}</td>
+                            <td>{i.unit}</td>
+                            <td style={{ color: (i.stock_distribution || 0) > 0 ? 'var(--gold-primary)' : 'var(--text-gray)', fontWeight: 'bold' }}>{(i.stock_distribution || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} {i.unit}</td>
+                            <td>{(i.avg_purchase_price || 0).toFixed(2)}</td>
+                            <td style={{ color: '#10b981', fontWeight: 'bold' }}>{((i.stock_distribution || 0) * (i.avg_purchase_price || 0)).toFixed(2)} EGP</td>
+                          </tr>
+                        ))}
+                        {inventoryItems.filter(i => i.is_manufactured).length === 0 && (
+                          <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'لا توجد منتجات مصنّعة. أضِفها من إدارة المخازن (نوع: مصنّع).' : 'No manufactured products. Add them from Inventory (type: manufactured).'}</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <h3 style={{ color: 'var(--gold-primary)', marginBottom: '0.5rem', fontSize: '1rem' }}>🎪 {language === 'ar' ? 'منتجات توزيع إضافية (يدوية)' : 'Extra Distribution Products (manual)'}</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                   <div className="stat-card">
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
@@ -8261,25 +8367,53 @@ export default function AdminDashboard({
                   const availMain = selRaw?.stock_main || 0;
                   return (
                   <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto auto', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
-                    <select id="mfg-new-item" className="input-gold" style={{ padding: '0.5rem' }} value={mfgNewItemId} onChange={(e) => setMfgNewItemId(e.target.value)}>
-                      <option value="">{language === 'ar' ? 'اختر الخامة...' : 'Select raw material...'}</option>
-                      {inventoryItems.filter(i => !i.is_manufactured).map(item => (
-                        <option key={item.id} value={item.id}>{item.name} — {language === 'ar' ? 'المتاح بالرئيسي:' : 'In main:'} {item.stock_main || 0} {item.unit}</option>
-                      ))}
-                    </select>
-                    <input type="number" id="mfg-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
+                  <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr auto auto', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                    {/* searchable combobox */}
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="text"
+                        className="input-gold"
+                        style={{ padding: '0.55rem', width: '100%' }}
+                        placeholder={language === 'ar' ? '🔍 ابحث باسم الخامة...' : '🔍 Search material by name...'}
+                        value={mfgItemSearch}
+                        onChange={(e) => { setMfgItemSearch(e.target.value); setMfgNewItemId(''); setMfgShowSuggest(true); }}
+                        onFocus={() => setMfgShowSuggest(true)}
+                        onBlur={() => setTimeout(() => setMfgShowSuggest(false), 150)}
+                      />
+                      {mfgShowSuggest && mfgItemSearch.trim() !== '' && !mfgNewItemId && (
+                        <div style={{ position: 'absolute', top: '100%', insetInlineStart: 0, insetInlineEnd: 0, zIndex: 20, background: '#15171c', border: '1px solid var(--gold-primary)', borderRadius: '8px', marginTop: '4px', maxHeight: '240px', overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                          {inventoryItems.filter(i => !i.is_manufactured && i.name.toLowerCase().includes(mfgItemSearch.trim().toLowerCase())).slice(0, 12).map(i => (
+                            <div
+                              key={i.id}
+                              onMouseDown={(e) => { e.preventDefault(); setMfgNewItemId(i.id); setMfgItemSearch(i.name); setMfgShowSuggest(false); }}
+                              style={{ padding: '0.55rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(212,175,55,0.15)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              <span>{i.name}</span>
+                              <span style={{ color: 'var(--text-gray)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{language === 'ar' ? 'المتاح:' : 'Avail:'} {i.stock_main || 0} · {i.unit}</span>
+                            </div>
+                          ))}
+                          {inventoryItems.filter(i => !i.is_manufactured && i.name.toLowerCase().includes(mfgItemSearch.trim().toLowerCase())).length === 0 && (
+                            <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'لا توجد خامة بهذا الاسم' : 'No matching material'}</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <input type="number" id="mfg-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.55rem' }} step="0.01" min="0.01" onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('mfg-add-btn') as HTMLButtonElement)?.click(); }} />
                     <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold', minWidth: '3rem', textAlign: 'center' }}>{selRaw?.unit || '—'}</span>
-                    <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
+                    <button id="mfg-add-btn" type="button" className="btn-gold" style={{ padding: '0.55rem 1rem', whiteSpace: 'nowrap' }} onClick={() => {
                       const qtyEl = document.getElementById('mfg-new-qty') as HTMLInputElement;
                       const qty = parseFloat(qtyEl.value);
                       if (mfgNewItemId && qty > 0 && selRaw) {
                         // الكمية بوحدة الصنف نفسها = نفس وحدة المخزون الرئيسي، فالكمية المخصومة = الكمية
                         setMfgCart([...mfgCart, { item_id: mfgNewItemId, item_name: selRaw.name, quantity: qty, unit: selRaw.unit, calculated_main_quantity: qty }]);
-                        setMfgNewItemId(''); qtyEl.value = '';
+                        setMfgNewItemId(''); setMfgItemSearch(''); qtyEl.value = '';
+                      } else {
+                        alert(language === 'ar' ? 'ابحث واختر خامة وأدخل كمية صحيحة' : 'Search & pick a material and enter a valid quantity');
                       }
                     }}>
-                      <Plus size={16} />
+                      <Plus size={16} /> {language === 'ar' ? 'إضافة' : 'Add'}
                     </button>
                   </div>
                   {selRaw && (
