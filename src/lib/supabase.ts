@@ -1062,7 +1062,27 @@ export const db = {
     return getLocalData('meridien_purchase_invoices', initialPurchaseInvoices);
   },
   async addPurchaseInvoice(invoice: Omit<PurchaseInvoice, 'id'>): Promise<PurchaseInvoice> {
-    await triggerTelegramLog('إضافة فاتورة مشتريات', 'Add Purchase Invoice', `تم إضافة فاتورة مورد (${invoice.supplier_id}) بقيمة ${invoice.total_amount}`);
+    {
+      const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const fmt = (n: any) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const itemsLines = (invoice.items || []).map((it: any) => `• ${esc(it.item_name)} — ${fmt(it.quantity)} × ${fmt(it.unit_price)} = ${fmt(it.total_price)} ج.م`).join('\n');
+      const pay: string[] = [];
+      if (Number(invoice.paid_cash)) pay.push(`كاش ${fmt(invoice.paid_cash)}`);
+      if (Number(invoice.paid_visa)) pay.push(`فيزا ${fmt(invoice.paid_visa)}`);
+      if (Number(invoice.paid_wallet)) pay.push(`محفظة ${fmt(invoice.paid_wallet)}`);
+      if (Number(invoice.paid_instapay)) pay.push(`إنستاباي ${fmt(invoice.paid_instapay)}`);
+      let dateStr = '';
+      try { dateStr = invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('ar-EG') : ''; } catch (e) {}
+      const remaining = Number(invoice.remaining_amount) || 0;
+      const details =
+        `🏬 <b>المورد:</b> ${esc(invoice.supplier_name || '—')}\n` +
+        (dateStr ? `📅 <b>التاريخ:</b> ${dateStr}\n` : '') +
+        `\n📦 <b>الأصناف:</b>\n${itemsLines || '—'}\n` +
+        `\n💵 <b>إجمالي الفاتورة:</b> ${fmt(invoice.total_amount)} ج.م` +
+        (pay.length ? `\n💳 <b>المدفوع:</b> ${pay.join(' | ')}` : '') +
+        (remaining > 0 ? `\n🔴 <b>المتبقي (آجل):</b> ${fmt(remaining)} ج.م` : '\n✅ <b>مدفوعة بالكامل</b>');
+      await triggerTelegramLog('إضافة فاتورة مشتريات', 'Add Purchase Invoice', details);
+    }
     if (supabase) {
       try {
         const { data, error } = await supabase
