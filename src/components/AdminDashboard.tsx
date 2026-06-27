@@ -569,6 +569,12 @@ export default function AdminDashboard({
   const [invoiceSupplierId, setInvoiceSupplierId] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(() => getLocalDayStr());
   const [invoiceCart, setInvoiceCart] = useState<{item_id: string, quantity: number, unit_price: number}[]>([]);
+  // صف إضافة صنف (بحث بالاسم)
+  const [invItemSearch, setInvItemSearch] = useState('');
+  const [invNewItemId, setInvNewItemId] = useState('');
+  const [invNewQty, setInvNewQty] = useState('');
+  const [invNewPrice, setInvNewPrice] = useState('');
+  const [invShowSuggest, setInvShowSuggest] = useState(false);
   const [invoicePaidCash, setInvoicePaidCash] = useState<number | ''>('');
   const [invoicePaidVisa, setInvoicePaidVisa] = useState<number | ''>('');
   const [invoicePaidWallet, setInvoicePaidWallet] = useState<number | ''>('');
@@ -859,17 +865,44 @@ export default function AdminDashboard({
     } catch(err) { console.error(err); }
   };
 
+  // الصنف الجاهز في صف الإضافة (لو مكتمل) — يُستخدم للإضافة وللحفظ التلقائي
+  const buildPendingInvoiceItem = () => {
+    const qty = parseFloat(invNewQty);
+    const price = parseFloat(invNewPrice);
+    if (invNewItemId && qty > 0 && !isNaN(price) && price >= 0) {
+      return { item_id: invNewItemId, quantity: qty, unit_price: price };
+    }
+    return null;
+  };
+
+  const addInvoiceItemToCart = () => {
+    const pending = buildPendingInvoiceItem();
+    if (!pending) {
+      alert(language === 'ar' ? 'اختر صنفاً وأدخل كمية وسعراً صحيحين أولاً' : 'Select an item and enter a valid quantity and price first');
+      return;
+    }
+    setInvoiceCart(prev => [...prev, pending]);
+    setInvNewItemId(''); setInvItemSearch(''); setInvNewQty(''); setInvNewPrice(''); setInvShowSuggest(false);
+  };
+
   const handleSavePurchaseInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!invoiceSupplierId || invoiceCart.length === 0) {
-      alert("Please select a supplier and add at least one item.");
+    // لو فيه صنف مكتمل في صف الإضافة بس المستخدم نسي يضغط +، نضيفه تلقائياً
+    const pending = buildPendingInvoiceItem();
+    const cart = pending ? [...invoiceCart, pending] : invoiceCart;
+    if (!invoiceSupplierId) {
+      alert(language === 'ar' ? 'اختر المورد أولاً' : 'Please select a supplier first.');
+      return;
+    }
+    if (cart.length === 0) {
+      alert(language === 'ar' ? 'أضف صنفاً واحداً على الأقل للفاتورة' : 'Add at least one item to the invoice.');
       return;
     }
     setLoading(true);
     try {
       const sup = suppliers.find(s => s.id === invoiceSupplierId);
       let total = 0;
-      const itemsToSave = invoiceCart.map(c => {
+      const itemsToSave = cart.map(c => {
         const itemObj = inventoryItems.find(i => i.id === c.item_id);
         const itemTotal = c.quantity * c.unit_price;
         total += itemTotal;
@@ -905,12 +938,15 @@ export default function AdminDashboard({
       setInvoiceModalOpen(false);
       setInvoiceCart([]);
       setInvoiceSupplierId('');
+      setInvNewItemId(''); setInvItemSearch(''); setInvNewQty(''); setInvNewPrice(''); setInvShowSuggest(false);
       setInvoicePaidCash('');
       setInvoicePaidVisa('');
       setInvoicePaidWallet('');
       setInvoicePaidInstapay('');
+      alert(language === 'ar' ? '✅ تم حفظ الفاتورة بنجاح' : '✅ Invoice saved successfully');
     } catch (err) {
       console.error(err);
+      alert((language === 'ar' ? '❌ تعذّر حفظ الفاتورة: ' : '❌ Failed to save invoice: ') + ((err as any)?.message || err));
     } finally {
       setLoading(false);
     }
@@ -8077,39 +8113,60 @@ export default function AdminDashboard({
                 </div>
               </div>
               
-              <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                <h3 style={{ marginBottom: '1rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تفاصيل الأصناف' : 'Invoice Items'}</h3>
-                
-                {/* Add item row */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <select id="inv-new-item" className="input-gold" style={{ padding: '0.5rem' }}>
-                    <option value="">{language === 'ar' ? 'اختر الصنف...' : 'Select item...'}</option>
-                    {inventoryItems.map(i => (
-                      <option key={i.id} value={i.id}>
-                        {i.name} ({language === 'ar' ? 'متوسط:' : 'Avg:'} {i.avg_purchase_price.toFixed(2)} | {language === 'ar' ? 'آخر شراء:' : 'Last:'} {i.last_purchase_price.toFixed(2)})
-                      </option>
-                    ))}
-                  </select>
-                  <input type="number" id="inv-new-qty" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.5rem' }} step="0.01" min="0.01" />
-                  <input type="number" id="inv-new-price" className="input-gold" placeholder={language === 'ar' ? 'سعر الوحدة' : 'Unit Price'} style={{ padding: '0.5rem' }} step="0.01" min="0" />
-                  <button type="button" className="btn-gold" style={{ padding: '0.5rem 1rem' }} onClick={() => {
-                    const idEl = document.getElementById('inv-new-item') as HTMLSelectElement;
-                    const qtyEl = document.getElementById('inv-new-qty') as HTMLInputElement;
-                    const priceEl = document.getElementById('inv-new-price') as HTMLInputElement;
-                    const itemId = idEl.value;
-                    const qty = parseFloat(qtyEl.value);
-                    const price = parseFloat(priceEl.value);
-                    if (itemId && qty > 0 && price >= 0) {
-                      setInvoiceCart([...invoiceCart, { item_id: itemId, quantity: qty, unit_price: price }]);
-                      idEl.value = ''; qtyEl.value = ''; priceEl.value = '';
-                    }
-                  }}>
-                    <Plus size={16} />
+              <div style={{ background: 'var(--surface-color, #1c1c1c)', padding: '1.25rem', borderRadius: '12px', marginBottom: '1rem', border: '1px solid rgba(212,175,55,0.2)' }}>
+                <h3 style={{ marginBottom: '1rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? '➕ إضافة صنف' : '➕ Add Item'}</h3>
+
+                {/* Add item row — بحث بالاسم */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 1.2fr auto', gap: '0.6rem', alignItems: 'start' }}>
+                  {/* searchable combobox */}
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      className="input-gold"
+                      style={{ padding: '0.6rem', width: '100%' }}
+                      placeholder={language === 'ar' ? '🔍 ابحث باسم الصنف...' : '🔍 Search item by name...'}
+                      value={invItemSearch}
+                      onChange={(e) => { setInvItemSearch(e.target.value); setInvNewItemId(''); setInvShowSuggest(true); }}
+                      onFocus={() => setInvShowSuggest(true)}
+                      onBlur={() => setTimeout(() => setInvShowSuggest(false), 150)}
+                    />
+                    {invShowSuggest && invItemSearch.trim() !== '' && !invNewItemId && (
+                      <div style={{ position: 'absolute', top: '100%', insetInlineStart: 0, insetInlineEnd: 0, zIndex: 20, background: '#15171c', border: '1px solid var(--gold-primary)', borderRadius: '8px', marginTop: '4px', maxHeight: '240px', overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                        {inventoryItems.filter(i => i.name.toLowerCase().includes(invItemSearch.trim().toLowerCase())).slice(0, 12).map(i => (
+                          <div
+                            key={i.id}
+                            onMouseDown={(e) => { e.preventDefault(); setInvNewItemId(i.id); setInvItemSearch(i.name); setInvNewPrice(String(i.last_purchase_price || i.avg_purchase_price || '')); setInvShowSuggest(false); }}
+                            style={{ padding: '0.55rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(212,175,55,0.15)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <span>{i.name}</span>
+                            <span style={{ color: 'var(--text-gray)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{language === 'ar' ? 'آخر:' : 'Last:'} {i.last_purchase_price.toFixed(2)} · {i.unit}</span>
+                          </div>
+                        ))}
+                        {inventoryItems.filter(i => i.name.toLowerCase().includes(invItemSearch.trim().toLowerCase())).length === 0 && (
+                          <div style={{ padding: '0.6rem 0.75rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'لا يوجد صنف بهذا الاسم' : 'No matching item'}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <input type="number" className="input-gold" placeholder={language === 'ar' ? 'الكمية' : 'Qty'} style={{ padding: '0.6rem' }} step="0.01" min="0.01" value={invNewQty} onChange={(e) => setInvNewQty(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addInvoiceItemToCart(); }} />
+                  <input type="number" className="input-gold" placeholder={language === 'ar' ? 'سعر الوحدة' : 'Unit Price'} style={{ padding: '0.6rem' }} step="0.01" min="0" value={invNewPrice} onChange={(e) => setInvNewPrice(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addInvoiceItemToCart(); }} />
+                  <button type="button" className="btn-gold" style={{ padding: '0.6rem 1rem', whiteSpace: 'nowrap' }} onClick={addInvoiceItemToCart}>
+                    <Plus size={16} /> {language === 'ar' ? 'إضافة' : 'Add'}
                   </button>
                 </div>
+                {invNewItemId && (() => {
+                  const sel = inventoryItems.find(i => i.id === invNewItemId);
+                  return (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-gray)', marginTop: '0.5rem' }}>
+                      {language === 'ar' ? `الصنف المختار: ${sel?.name} — الوحدة: ${sel?.unit} — المتاح بالرئيسي: ${sel?.stock_main || 0}` : `Selected: ${sel?.name} — unit: ${sel?.unit} — in main: ${sel?.stock_main || 0}`}
+                    </p>
+                  );
+                })()}
 
                 {/* Cart list */}
-                {invoiceCart.length > 0 && (
+                {invoiceCart.length > 0 ? (
                   <table className="admin-table" style={{ marginTop: '1rem', fontSize: '0.9rem' }}>
                     <thead>
                       <tr>
@@ -8125,10 +8182,10 @@ export default function AdminDashboard({
                         const item = inventoryItems.find(i => i.id === c.item_id);
                         return (
                           <tr key={idx}>
-                            <td>{item?.name}</td>
+                            <td>{item?.name} <span style={{ color: 'var(--text-gray)', fontSize: '0.78rem' }}>({item?.unit})</span></td>
                             <td>{c.quantity}</td>
                             <td>{c.unit_price}</td>
-                            <td>{(c.quantity * c.unit_price).toFixed(2)}</td>
+                            <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{(c.quantity * c.unit_price).toFixed(2)}</td>
                             <td>
                               <button type="button" style={{ background: 'transparent', border: 'none', color: '#ff4d4d', cursor: 'pointer' }} onClick={() => setInvoiceCart(invoiceCart.filter((_, i) => i !== idx))}>
                                 <Trash2 size={14} />
@@ -8139,6 +8196,10 @@ export default function AdminDashboard({
                       })}
                     </tbody>
                   </table>
+                ) : (
+                  <p style={{ marginTop: '1rem', color: 'var(--text-gray)', fontSize: '0.85rem', textAlign: 'center' }}>
+                    {language === 'ar' ? 'لم تتم إضافة أصناف بعد — ابحث عن الصنف وحدّد الكمية والسعر ثم اضغط «إضافة».' : 'No items yet — search an item, set qty & price, then click "Add".'}
+                  </p>
                 )}
               </div>
               <div style={{ textAlign: 'left', marginTop: '1rem' }}>
@@ -8176,7 +8237,7 @@ export default function AdminDashboard({
             </div>
             <div className="admin-modal-footer">
               <button type="button" className="btn-outline-gold" onClick={() => setInvoiceModalOpen(false)}>{t.close}</button>
-              <button type="button" className="btn-gold" onClick={handleSavePurchaseInvoice} disabled={loading || invoiceCart.length === 0}>{t.save}</button>
+              <button type="button" className="btn-gold" onClick={handleSavePurchaseInvoice} disabled={loading || (invoiceCart.length === 0 && !buildPendingInvoiceItem())}>{loading ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : t.save}</button>
             </div>
           </div>
         </div>
