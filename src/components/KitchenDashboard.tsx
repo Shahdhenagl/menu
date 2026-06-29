@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, db } from '../lib/supabase';
 import type { Order, InventoryItem, ProductRecipe } from '../types';
-import { ChefHat, CheckCircle2, AlertTriangle, Clock, X, Package } from 'lucide-react';
+import { ChefHat, CheckCircle2, AlertTriangle, Clock, X, Package, Search } from 'lucide-react';
 
 interface KitchenDashboardProps {
   onClose?: () => void;
@@ -16,6 +16,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
   const [loading, setLoading] = useState(true);
   const [requestedOrders, setRequestedOrders] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<'orders' | 'inventory'>('orders');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchData = async () => {
     try {
@@ -346,6 +347,16 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
               <h2 style={{ color: 'var(--gold-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Package size={24} /> {language === 'ar' ? 'مخزون المطبخ' : 'Kitchen Stock'}
               </h2>
+              <div style={{ marginBottom: '1rem', position: 'relative' }}>
+                <Search size={18} style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', left: language === 'ar' ? 'auto' : '10px', right: language === 'ar' ? '10px' : 'auto', color: '#9ca3af' }} />
+                <input 
+                  type="text" 
+                  placeholder={language === 'ar' ? 'ابحث باسم الصنف...' : 'Search by item name...'}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ width: '100%', padding: '0.6rem 2.5rem', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '8px' }}
+                />
+              </div>
               <table style={{ width: '100%', color: 'white', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #444' }}>
@@ -354,13 +365,19 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                   </tr>
                 </thead>
                 <tbody>
-                  {inventory.filter(i => Number(i.stock_factory) > 0 || mfgOrders.some(m => m.items.some((it:any)=>it.item_id===i.id))).map(item => (
+                  {inventory
+                    .filter(i => Number(i.stock_factory) > 0 || mfgOrders.some(m => m.items.some((it:any)=>it.item_id===i.id)))
+                    .filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map(item => (
                     <tr key={item.id} style={{ borderBottom: '1px solid #333' }}>
                       <td style={{ padding: '0.5rem' }}>{item.name}</td>
                       <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>{Number(item.stock_factory).toFixed(4).replace(/\.?0+$/, '')} {item.unit}</td>
                     </tr>
                   ))}
-                  {inventory.filter(i => Number(i.stock_factory) > 0 || mfgOrders.some(m => m.items.some((it:any)=>it.item_id===i.id))).length === 0 && (
+                  {inventory
+                    .filter(i => Number(i.stock_factory) > 0 || mfgOrders.some(m => m.items.some((it:any)=>it.item_id===i.id)))
+                    .filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .length === 0 && (
                      <tr><td colSpan={2} style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>{language === 'ar' ? 'المخزون فارغ' : 'Stock is empty'}</td></tr>
                   )}
                 </tbody>

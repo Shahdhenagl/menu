@@ -1268,8 +1268,9 @@ export const db = {
                 .eq('id', itemReq.item_id)
                 .single();
               if (itemData) {
-                const newStockMain = (Number(itemData.stock_main) || 0) - itemReq.calculated_main_quantity;
-                const newStockFactory = (Number(itemData.stock_factory) || 0) + itemReq.calculated_main_quantity;
+                const qtyToMove = itemReq.calculated_main_quantity ?? itemReq.quantity ?? 0;
+                const newStockMain = (Number(itemData.stock_main) || 0) - qtyToMove;
+                const newStockFactory = (Number(itemData.stock_factory) || 0) + qtyToMove;
                 await supabase
                   .from('inventory_items')
                   .update({ stock_main: newStockMain, stock_factory: newStockFactory })
@@ -1280,18 +1281,18 @@ export const db = {
                   item_id: itemReq.item_id,
                   warehouse: 'main',
                   type: 'out',
-                  quantity: itemReq.calculated_main_quantity,
+                  quantity: qtyToMove,
                   unit_price: Number(itemData.avg_purchase_price || 0),
-                  total_price: Number(itemData.avg_purchase_price || 0) * itemReq.calculated_main_quantity,
+                  total_price: Number(itemData.avg_purchase_price || 0) * qtyToMove,
                   description: `صرف للمصنع/المطبخ (أمر #${id.slice(0, 6)})`
                 });
                 await this.addInventoryMovement({
                   item_id: itemReq.item_id,
                   warehouse: 'factory',
                   type: 'in',
-                  quantity: itemReq.calculated_main_quantity,
+                  quantity: qtyToMove,
                   unit_price: Number(itemData.avg_purchase_price || 0),
-                  total_price: Number(itemData.avg_purchase_price || 0) * itemReq.calculated_main_quantity,
+                  total_price: Number(itemData.avg_purchase_price || 0) * qtyToMove,
                   description: `استلام من المخزن الرئيسي (أمر #${id.slice(0, 6)})`
                 });
               }
