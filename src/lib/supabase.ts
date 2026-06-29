@@ -1970,35 +1970,35 @@ export const db = {
               
               const { data: itemData } = await supabase
                 .from('inventory_items')
-                .select('name, stock_distribution, avg_purchase_price, low_stock_threshold')
+                .select('name, stock_factory, avg_purchase_price, low_stock_threshold')
                 .eq('id', rec.inventory_item_id)
                 .single();
               
               if (itemData) {
                 total_cost += (Number(itemData.avg_purchase_price) || 0) * deductQty;
-                const newStockDist = Math.max(0, (Number(itemData.stock_distribution) || 0) - deductQty);
+                const newStockFactory = Math.max(0, (Number(itemData.stock_factory) || 0) - deductQty);
                 await supabase
                   .from('inventory_items')
-                  .update({ stock_distribution: newStockDist })
+                  .update({ stock_factory: newStockFactory })
                   .eq('id', rec.inventory_item_id);
 
                 await this.addInventoryMovement({
                   item_id: rec.inventory_item_id,
-                  warehouse: 'distribution',
+                  warehouse: 'factory',
                   type: 'out',
                   quantity: deductQty,
                   unit_price: Number(itemData.avg_purchase_price) || 0,
                   total_price: ((Number(itemData.avg_purchase_price) || 0) * deductQty),
-                  description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
+                  description: `استهلاك مكونات طلب ${order.id.slice(0, 6)}`
                 });
 
-                if (itemData.low_stock_threshold !== undefined && itemData.low_stock_threshold !== null && newStockDist <= Number(itemData.low_stock_threshold)) {
+                if (itemData.low_stock_threshold !== undefined && itemData.low_stock_threshold !== null && newStockFactory <= Number(itemData.low_stock_threshold)) {
                   await this.addNotification({
-                    title: 'تنبيه: اقتراب نفاذ المخزون',
-                    message: `الخامة "${itemData.name}" اقتربت من النفاذ في المخزن الموزع. الكمية المتبقية: ${newStockDist}`,
+                    title: 'تنبيه: اقتراب نفاذ المخزون بالمطبخ',
+                    message: `الخامة "${itemData.name}" اقتربت من النفاذ في المطبخ. الكمية المتبقية: ${newStockFactory}`,
                     target_role: 'admin'
                   });
-                  await this.notifyLowStock(itemData.name, newStockDist);
+                  await this.notifyLowStock(itemData.name, newStockFactory);
                 }
               }
             }
@@ -2052,26 +2052,26 @@ export const db = {
             const itemIdx = items.findIndex(i => i.id === rec.inventory_item_id);
             if (itemIdx > -1) {
               total_cost += (items[itemIdx].avg_purchase_price || 0) * deductQty;
-              items[itemIdx].stock_distribution = Math.max(0, (items[itemIdx].stock_distribution || 0) - deductQty);
+              items[itemIdx].stock_factory = Math.max(0, (items[itemIdx].stock_factory || 0) - deductQty);
               updated = true;
 
               await this.addInventoryMovement({
                 item_id: items[itemIdx].id,
-                warehouse: 'distribution',
+                warehouse: 'factory',
                 type: 'out',
                 quantity: deductQty,
                 unit_price: items[itemIdx].avg_purchase_price || 0,
                 total_price: (items[itemIdx].avg_purchase_price || 0) * deductQty,
-                description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
+                description: `استهلاك مكونات طلب ${order.id.slice(0, 6)}`
               });
 
-              if (items[itemIdx].low_stock_threshold !== undefined && items[itemIdx].low_stock_threshold !== null && items[itemIdx].stock_distribution <= items[itemIdx].low_stock_threshold!) {
+              if (items[itemIdx].low_stock_threshold !== undefined && items[itemIdx].low_stock_threshold !== null && items[itemIdx].stock_factory <= items[itemIdx].low_stock_threshold!) {
                 await this.addNotification({
-                  title: 'تنبيه: اقتراب نفاذ المخزون',
-                  message: `الخامة "${items[itemIdx].name}" اقتربت من النفاذ في المخزن الموزع. الكمية المتبقية: ${items[itemIdx].stock_distribution}`,
+                  title: 'تنبيه: اقتراب نفاذ المخزون بالمطبخ',
+                  message: `الخامة "${items[itemIdx].name}" اقتربت من النفاذ في المطبخ. الكمية المتبقية: ${items[itemIdx].stock_factory}`,
                   target_role: 'admin'
                 });
-                await this.notifyLowStock(items[itemIdx].name, items[itemIdx].stock_distribution || 0);
+                await this.notifyLowStock(items[itemIdx].name, items[itemIdx].stock_factory || 0);
               }
             }
           }
