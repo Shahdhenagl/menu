@@ -50,11 +50,24 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
           setOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing'));
         });
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'manufacturing_orders' }, (payload: any) => {
+        if (payload.new && payload.new.status === 'approved') {
+          // Play a sound or show an alert (optional)
+          // We'll rely on the visual update mainly, but an alert is nice
+          setTimeout(() => {
+            alert(language === 'ar' ? '✅ تم الموافقة على طلب النواقص وتحديث المخزون في المطبخ!' : '✅ Shortage request approved and inventory updated!');
+          }, 500);
+          db.getInventoryItems().then(setInventory);
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, () => {
+        db.getInventoryItems().then(setInventory);
+      })
       .subscribe();
     return () => {
       supabase?.removeChannel(channel);
     };
-  }, []);
+  }, [language]);
 
   const getOrderShortages = (order: Order) => {
     const shortages: { item: InventoryItem, missingQty: number }[] = [];
@@ -86,18 +99,18 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
         item_id: s.item.id,
         item_name: s.item.name,
         quantity: s.missingQty,
-        unit: s.item.unit
+        unit: s.item.unit || 'unit',
+        calculated_main_quantity: s.missingQty
       }));
 
-      await db.addTransferRequest({
+      await db.addManufacturingOrder({
         status: 'pending',
         items,
-        requested_by: 'Kitchen (Auto for Order)',
-        notes: `عجز لمكونات الطلب رقم ${order.id.slice(-4)}`
-      } as any);
+        requested_by: 'المطبخ (نواقص الطلب ' + order.id.slice(-4) + ')'
+      });
 
       setRequestedOrders(prev => new Set(prev).add(order.id));
-      alert(language === 'ar' ? 'تم إنشاء إذن صرف النواقص بنجاح' : 'Shortage request created successfully');
+      alert(language === 'ar' ? 'تم إنشاء طلب صرف النواقص بنجاح بانتظار موافقة المخزن' : 'Shortage request sent to warehouse');
     } catch (err) {
       console.error(err);
       alert('Error creating request');
