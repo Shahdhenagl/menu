@@ -58,7 +58,6 @@ export default function FinancialsView({
   );
   
   const filteredExpenses = expenses.filter(e => filterDate(e.expense_date || e.created_at || ''));
-  const filteredTxs = financialTransactions.filter(t => filterDate(t.created_at));
 
   const totalRevenue = filteredOrders.reduce((sum, o) => sum + o.total_price, 0);
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
@@ -84,33 +83,43 @@ export default function FinancialsView({
     }
   });
 
-  // Calculate actual Vault/Bank balances (All Time, not just filtered date to show true balances)
-  // For precise balances, we shouldn't use filtered, we should calculate overall. But for this view, we can calculate period balances.
-  // We will calculate period balances:
-  const balances = { cash: 0, visa: 0, wallet: 0, instapay: 0, deferred: 0 };
+  // Actual Vault/Bank balances (All Time)
+  const actualBalances = { cash: 0, visa: 0, wallet: 0, instapay: 0, deferred: 0 };
   
-  // 1. Add Revenues
-  balances.cash += revenueByType.cash;
-  balances.visa += revenueByType.visa;
-  balances.wallet += revenueByType.wallet;
-  balances.instapay += revenueByType.instapay;
-  balances.deferred += revenueByType.deferred;
-
-  // 2. Subtract Expenses
-  filteredExpenses.forEach(e => {
-    const method = e.payment_method || 'cash';
-    if (balances[method as keyof typeof balances] !== undefined) {
-      balances[method as keyof typeof balances] -= e.amount;
+  // 1. Add All Revenues
+  const allCompletedOrders = orders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality');
+  allCompletedOrders.forEach(o => {
+    if (o.payment_method === 'split' && o.payment_details) {
+      actualBalances.cash += (o.payment_details.cash || 0);
+      actualBalances.visa += (o.payment_details.visa || 0);
+      actualBalances.wallet += (o.payment_details.wallet || 0);
+      actualBalances.instapay += (o.payment_details.instapay || 0);
+      actualBalances.deferred += (o.payment_details.deferred || 0);
+    } else {
+      const method = o.payment_method || 'cash';
+      if (actualBalances[method as keyof typeof actualBalances] !== undefined) {
+        actualBalances[method as keyof typeof actualBalances] += o.total_price;
+      } else {
+        actualBalances.cash += o.total_price; // fallback
+      }
     }
   });
 
-  // 3. Apply Financial Transactions (Transfers & Debt Settlements)
-  filteredTxs.forEach(tx => {
-    if (tx.from_method && balances[tx.from_method as keyof typeof balances] !== undefined) {
-      balances[tx.from_method as keyof typeof balances] -= tx.amount;
+  // 2. Subtract All Expenses
+  expenses.forEach(e => {
+    const method = e.payment_method || 'cash';
+    if (actualBalances[method as keyof typeof actualBalances] !== undefined) {
+      actualBalances[method as keyof typeof actualBalances] -= e.amount;
     }
-    if (tx.to_method && balances[tx.to_method as keyof typeof balances] !== undefined) {
-      balances[tx.to_method as keyof typeof balances] += tx.amount;
+  });
+
+  // 3. Apply All Financial Transactions (Transfers & Debt Settlements)
+  financialTransactions.forEach(tx => {
+    if (tx.from_method && actualBalances[tx.from_method as keyof typeof actualBalances] !== undefined) {
+      actualBalances[tx.from_method as keyof typeof actualBalances] -= tx.amount;
+    }
+    if (tx.to_method && actualBalances[tx.to_method as keyof typeof actualBalances] !== undefined) {
+      actualBalances[tx.to_method as keyof typeof actualBalances] += tx.amount;
     }
   });
 
@@ -243,9 +252,9 @@ export default function FinancialsView({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
             {['cash', 'visa', 'wallet', 'instapay', 'deferred'].map(method => (
               <div key={method} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '12px', border: `1px solid ${getMethodColor(method)}` }}>
-                <div style={{ color: 'var(--text-gray)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{getMethodLabel(method)}</div>
-                <div className="font-en" style={{ fontSize: '1.5rem', fontWeight: 'bold', color: getMethodColor(method) }}>
-                  {formatCurrency(balances[method as keyof typeof balances])}
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-gray)' }}>{getMethodLabel(method)}</div>
+                <div className="font-en" style={{ fontSize: '1.4rem', fontWeight: '800', color: getMethodColor(method) }}>
+                  {formatCurrency(actualBalances[method as keyof typeof actualBalances])}
                 </div>
               </div>
             ))}
