@@ -7,11 +7,14 @@ import AdminDashboard from './components/AdminDashboard';
 import { PosSystem } from './components/PosSystem';
 import { Sparkles } from 'lucide-react';
 
+import KitchenDashboard from './components/KitchenDashboard';
+
 function App() {
-  const [currentView, setCurrentView] = useState<'menu' | 'admin' | 'pos'>(() => {
+  const [currentView, setCurrentView] = useState<'menu' | 'admin' | 'pos' | 'kitchen'>(() => {
     const path = window.location.pathname;
     if (path.endsWith('/admin') || path.endsWith('/admin/')) return 'admin';
     if (path.endsWith('/pos') || path.endsWith('/pos/')) return 'pos';
+    if (path.endsWith('/kitchen') || path.endsWith('/kitchen/')) return 'kitchen';
     return 'menu';
   });
 
@@ -22,6 +25,8 @@ function App() {
         setCurrentView('admin');
       } else if (path.endsWith('/pos') || path.endsWith('/pos/')) {
         setCurrentView('pos');
+      } else if (path.endsWith('/kitchen') || path.endsWith('/kitchen/')) {
+        setCurrentView('kitchen');
       } else {
         setCurrentView('menu');
       }
@@ -255,6 +260,14 @@ function App() {
           }}
           language={language}
           setLanguage={setLanguage}
+        />
+      ) : currentView === 'kitchen' ? (
+        <KitchenDashboard 
+          onClose={() => {
+            window.history.pushState({}, '', '/');
+            setCurrentView('menu');
+          }}
+          language={language}
         />
       ) : (
         <AdminDashboard 

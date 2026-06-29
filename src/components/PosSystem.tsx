@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 
 
@@ -149,6 +150,28 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       }
     };
     document.addEventListener('click', handleGlobalClick);
+    
+    if (supabase) {
+      const channel = supabase.channel('realtime_pos_orders')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+          if (payload.eventType === 'UPDATE' && payload.old.status !== 'prepared' && payload.new.status === 'prepared') {
+            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2870/2870-preview.mp3');
+            audio.play().catch(() => {});
+            setPreparedNotifications(prev => [...prev, {
+              id: payload.new.id,
+              waiter_name: payload.new.waiter_name,
+              time: new Date().toLocaleTimeString()
+            }]);
+          }
+          loadData();
+        })
+        .subscribe();
+      return () => {
+        document.removeEventListener('click', handleGlobalClick);
+        supabase?.removeChannel(channel);
+      };
+    }
+    
     return () => document.removeEventListener('click', handleGlobalClick);
   }, []);
 
@@ -162,6 +185,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     previousPendingCount.current = currentPending;
     previousWebsiteOrdersCount.current = currentWebsiteOrders;
   }, [activeOrders]);
+
+  const [preparedNotifications, setPreparedNotifications] = useState<{id: string, waiter_name?: string, time: string}[]>([]);
 
   useEffect(() => {
     setMobileShowCart(false);
@@ -188,7 +213,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     }));
     setProducts(prods);
     setWaiters(users.filter(u => u.role === 'waiter'));
-    setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing' || o.status === 'delivered'));
+    setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing' || o.status === 'prepared' || o.status === 'delivered'));
     setPrinters(prnts);
     setSettings(sets);
     setCustomers(custs);
@@ -1416,11 +1441,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           {order.order_type?.toUpperCase()}
                         </span>
                         <span style={{ 
-                          background: order.status === 'delivered' ? 'rgba(46,204,113,0.15)' : 'rgba(243,156,18,0.15)', 
-                          color: order.status === 'delivered' ? '#2ecc71' : '#f39c12', 
+                          background: order.status === 'delivered' ? 'rgba(46,204,113,0.15)' : order.status === 'prepared' ? 'rgba(155,89,182,0.15)' : 'rgba(243,156,18,0.15)', 
+                          color: order.status === 'delivered' ? '#2ecc71' : order.status === 'prepared' ? '#9b59b6' : '#f39c12', 
                           padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' 
                         }}>
                           {order.status === 'delivered' ? (language === 'ar' ? 'تم التسليم' : 'Delivered') : 
+                           order.status === 'prepared' ? (language === 'ar' ? 'تم التحضير' : 'Prepared') : 
                            order.status === 'preparing' ? (language === 'ar' ? 'جاري التحضير' : 'Preparing') : 
                            (language === 'ar' ? 'معلق' : 'Pending')}
                         </span>
@@ -2407,6 +2433,42 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
         </AnimatePresence>
       </div>
+
+      {/* Prepared Order Notifications Toast */}
+      <div style={{ position: 'fixed', bottom: '20px', left: '20px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <AnimatePresence>
+          {preparedNotifications.map((notif, idx) => (
+            <motion.div 
+              key={`${notif.id}-${idx}`}
+              initial={{ opacity: 0, x: -50, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -50, scale: 0.9 }}
+              style={{
+                background: '#9b59b6', color: '#fff', padding: '15px 20px', borderRadius: '12px',
+                boxShadow: '0 8px 30px rgba(155,89,182,0.4)', display: 'flex', alignItems: 'center', gap: '15px', minWidth: '300px'
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+                  {language === 'ar' ? 'تم تحضير الأوردر!' : 'Order Prepared!'}
+                </div>
+                <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>
+                  {language === 'ar' 
+                    ? `الأوردر جاهز للتسليم بواسطة الكابتن: ${notif.waiter_name || 'Guest'}` 
+                    : `Order ready for delivery by Captain: ${notif.waiter_name || 'Guest'}`}
+                </div>
+              </div>
+              <button 
+                onClick={() => setPreparedNotifications(prev => prev.filter((_, i) => i !== idx))}
+                style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '5px' }}
+              >
+                X
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
     </div>
   );
 };

@@ -52,7 +52,7 @@ export interface Order {
   items: OrderItem[];
   total_price: number;
   total_cost?: number; // COGS for profit calculation
-  status: 'pending' | 'preparing' | 'delivered' | 'completed' | 'cancelled';
+  status: 'pending' | 'preparing' | 'prepared' | 'delivered' | 'completed' | 'cancelled';
   order_type?: 'takeaway' | 'talabat' | 'dine_in' | 'delivery' | 'website';
   waiter_id?: string;
   waiter_name?: string;
