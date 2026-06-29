@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, db } from '../lib/supabase';
 import type { Order, InventoryItem, ProductRecipe } from '../types';
-import { ChefHat, CheckCircle2, AlertTriangle, Clock, X } from 'lucide-react';
+import { ChefHat, CheckCircle2, AlertTriangle, Clock, X, Package } from 'lucide-react';
 
 interface KitchenDashboardProps {
   onClose?: () => void;
@@ -12,18 +12,22 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
   const [orders, setOrders] = useState<Order[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [recipes, setRecipes] = useState<ProductRecipe[]>([]);
+  const [mfgOrders, setMfgOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [requestedOrders, setRequestedOrders] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<'orders' | 'inventory'>('orders');
 
   const fetchData = async () => {
     try {
-      const [ords, inv, recps] = await Promise.all([
+      const [ords, inv, recps, mOrds] = await Promise.all([
         db.getOrders(),
         db.getInventoryItems(),
-        supabase ? supabase.from('product_recipes').select('*').then(res => res.data || []) : Promise.resolve([])
+        supabase ? supabase.from('product_recipes').select('*').then(res => res.data || []) : Promise.resolve([]),
+        db.getManufacturingOrders()
       ]);
       setOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing'));
       setInventory(inv);
+      setMfgOrders(mOrds.filter(o => o.requested_by.includes('المطبخ') || o.requested_by.includes('Kitchen')));
       
       if (Array.isArray(recps) && recps.length > 0) {
         setRecipes(recps);
@@ -50,15 +54,15 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
           setOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing'));
         });
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'manufacturing_orders' }, (payload: any) => {
-        if (payload.new && payload.new.status === 'approved') {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'manufacturing_orders' }, (payload: any) => {
+        if (payload.new && payload.new.status === 'approved' && payload.eventType === 'UPDATE') {
           // Play a sound or show an alert (optional)
-          // We'll rely on the visual update mainly, but an alert is nice
           setTimeout(() => {
-            alert(language === 'ar' ? '✅ تم الموافقة على طلب النواقص وتحديث المخزون في المطبخ!' : '✅ Shortage request approved and inventory updated!');
+            alert(language === 'ar' ? '✅ تمت الموافقة على طلب النواقص وتحديث المخزون في المطبخ!' : '✅ Shortage request approved and inventory updated!');
           }, 500);
-          db.getInventoryItems().then(setInventory);
         }
+        db.getManufacturingOrders().then(mOrds => setMfgOrders(mOrds.filter(o => o.requested_by.includes('المطبخ') || o.requested_by.includes('Kitchen'))));
+        db.getInventoryItems().then(setInventory);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, () => {
         db.getInventoryItems().then(setInventory);
@@ -84,8 +88,11 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
     Object.entries(requiredAmounts).forEach(([itemId, required]) => {
       const invItem = inventory.find(i => i.id === itemId);
       if (invItem) {
-        if (invItem.stock_factory < required) {
-          shortages.push({ item: invItem, missingQty: required - invItem.stock_factory });
+        const requiredFloat = Number(required.toFixed(4));
+        const stockFloat = Number((Number(invItem.stock_factory) || 0).toFixed(4));
+        if (stockFloat + 0.0001 < requiredFloat) {
+          const diff = Number((requiredFloat - stockFloat).toFixed(4));
+          shortages.push({ item: invItem, missingQty: diff });
         }
       }
     });
@@ -139,7 +146,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', color: 'white', padding: '1.5rem', fontFamily: 'Cairo, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#0f0f0f', color: 'white', padding: '1.5rem', fontFamily: 'Cairo, sans-serif', direction: language === 'ar' ? 'rtl' : 'ltr' }}>
       
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', background: '#1a1a1a', padding: '1rem 1.5rem', borderRadius: '15px', border: '1px solid rgba(212,175,55,0.2)' }}>
@@ -156,23 +163,37 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
             </p>
           </div>
         </div>
-        {onClose && (
-          <button onClick={onClose} style={{ padding: '0.6rem', background: 'rgba(239,68,68,0.2)', color: '#ef4444', borderRadius: '10px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <X size={24} />
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', background: '#222', padding: '0.5rem', borderRadius: '12px' }}>
+            <button 
+              onClick={() => setActiveTab('orders')}
+              style={{ padding: '0.5rem 1rem', background: activeTab === 'orders' ? 'var(--gold-primary)' : 'transparent', color: activeTab === 'orders' ? '#000' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease' }}>
+              {language === 'ar' ? 'الطلبات' : 'Orders'}
+            </button>
+            <button 
+              onClick={() => setActiveTab('inventory')}
+              style={{ padding: '0.5rem 1rem', background: activeTab === 'inventory' ? 'var(--gold-primary)' : 'transparent', color: activeTab === 'inventory' ? '#000' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease' }}>
+              {language === 'ar' ? 'المخزون والنواقص' : 'Inventory & Shortages'}
+            </button>
+          </div>
+          {onClose && (
+            <button onClick={onClose} style={{ padding: '0.6rem', background: 'rgba(239,68,68,0.2)', color: '#ef4444', borderRadius: '10px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={24} />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Orders Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
-        {orders.map(order => {
-          const shortages = getOrderShortages(order);
-          const hasShortages = shortages.length > 0;
-          const hasRequested = requestedOrders.has(order.id);
-          const isPreparing = order.status === 'preparing';
+      {activeTab === 'orders' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
+          {orders.map(order => {
+            const shortages = getOrderShortages(order);
+            const hasShortages = shortages.length > 0;
+            const hasRequested = requestedOrders.has(order.id);
+            const isPreparing = order.status === 'preparing';
 
-          return (
-            <div key={order.id} style={{ 
+            return (
+              <div key={order.id} style={{ 
               background: '#1a1a1a', 
               borderRadius: '15px', 
               display: 'flex', 
@@ -308,14 +329,77 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
             </div>
           );
         })}
-        
         {orders.length === 0 && (
           <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem 2rem', color: 'var(--text-gray)' }}>
             <CheckCircle2 size={64} style={{ marginBottom: '1rem', opacity: 0.2 }} />
             <p style={{ fontSize: '1.2rem' }}>{language === 'ar' ? 'لا يوجد طلبات حالياً في المطبخ' : 'No active orders in kitchen'}</p>
           </div>
         )}
-      </div>
+        </div>
+      )}
+
+        {/* Inventory Tab */}
+        {activeTab === 'inventory' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'start' }}>
+            {/* Section 1: Kitchen Inventory */}
+            <div style={{ background: '#1a1a1a', padding: '1.5rem', borderRadius: '16px', border: '1px solid #333' }}>
+              <h2 style={{ color: 'var(--gold-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Package size={24} /> {language === 'ar' ? 'مخزون المطبخ' : 'Kitchen Stock'}
+              </h2>
+              <table style={{ width: '100%', color: 'white', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #444' }}>
+                    <th style={{ textAlign: language==='ar'?'right':'left', padding: '0.5rem' }}>{language === 'ar' ? 'الصنف' : 'Item'}</th>
+                    <th style={{ textAlign: language==='ar'?'right':'left', padding: '0.5rem' }}>{language === 'ar' ? 'الكمية' : 'Quantity'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inventory.filter(i => Number(i.stock_factory) > 0 || mfgOrders.some(m => m.items.some((it:any)=>it.item_id===i.id))).map(item => (
+                    <tr key={item.id} style={{ borderBottom: '1px solid #333' }}>
+                      <td style={{ padding: '0.5rem' }}>{item.name}</td>
+                      <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>{Number(item.stock_factory).toFixed(4).replace(/\.?0+$/, '')} {item.unit}</td>
+                    </tr>
+                  ))}
+                  {inventory.filter(i => Number(i.stock_factory) > 0 || mfgOrders.some(m => m.items.some((it:any)=>it.item_id===i.id))).length === 0 && (
+                     <tr><td colSpan={2} style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>{language === 'ar' ? 'المخزون فارغ' : 'Stock is empty'}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Section 2: Mfg Orders (Shortages requested) */}
+            <div style={{ background: '#1a1a1a', padding: '1.5rem', borderRadius: '16px', border: '1px solid #333' }}>
+              <h2 style={{ color: 'var(--gold-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Clock size={24} /> {language === 'ar' ? 'أذون النواقص المرسلة' : 'Shortage Requests'}
+              </h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {mfgOrders.map(mo => (
+                  <div key={mo.id} style={{ background: '#222', padding: '1rem', borderRadius: '8px', borderLeft: mo.status === 'approved' ? '4px solid #10b981' : mo.status === 'rejected' ? '4px solid #ef4444' : '4px solid #f59e0b' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ color: '#aaa', fontSize: '0.9rem' }}>{new Date(mo.created_at).toLocaleString()}</span>
+                      <span style={{ 
+                        color: mo.status === 'approved' ? '#10b981' : mo.status === 'rejected' ? '#ef4444' : '#f59e0b',
+                        fontWeight: 'bold', fontSize: '0.9rem'
+                      }}>
+                        {mo.status === 'approved' ? (language === 'ar' ? 'تم القبول' : 'Approved') : mo.status === 'rejected' ? (language === 'ar' ? 'مرفوض' : 'Rejected') : (language === 'ar' ? 'قيد الانتظار' : 'Pending')}
+                      </span>
+                    </div>
+                    <div>
+                      {mo.items.map((i:any, idx:number) => (
+                        <div key={idx} style={{ color: 'white', fontSize: '0.9rem' }}>
+                          • {i.item_name} ({Number(i.quantity).toFixed(4).replace(/\.?0+$/, '')} {i.unit})
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {mfgOrders.length === 0 && (
+                  <p style={{ color: '#aaa', textAlign: 'center', padding: '2rem 0' }}>{language === 'ar' ? 'لا يوجد طلبات سابقة' : 'No previous requests'}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }

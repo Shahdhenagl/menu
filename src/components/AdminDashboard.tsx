@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct, InventoryMovement } from '../types';
-import { db } from '../lib/supabase';
+import { db, supabase } from '../lib/supabase';
 import { warehouseHoldsItem, warehouseValue, warehouseStock } from '../lib/warehouse';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import * as XLSX from 'xlsx';
@@ -654,7 +654,24 @@ export default function AdminDashboard({
 
   useEffect(() => {
     fetchInventoryData();
-  }, [loggedInUser]);
+    
+    if (supabase) {
+      const channel = supabase.channel('realtime_admin_requests')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'manufacturing_orders' }, () => {
+          setTimeout(() => {
+            alert(language === 'ar' ? '⚠️ إشعار: طلب صرف خامات جديد من المطبخ!' : '⚠️ Alert: New raw material request from Kitchen!');
+          }, 500);
+          fetchInventoryData();
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transfer_requests' }, () => {
+          fetchInventoryData();
+        })
+        .subscribe();
+      return () => {
+        supabase?.removeChannel(channel);
+      };
+    }
+  }, [loggedInUser, language]);
 
   useEffect(() => {
     const currentUnread = notifications.filter(n => !n.is_read).length;
