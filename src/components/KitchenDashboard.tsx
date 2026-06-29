@@ -4,7 +4,7 @@ import type { Order, InventoryItem, ProductRecipe } from '../types';
 import { ChefHat, CheckCircle2, AlertTriangle, Clock, X } from 'lucide-react';
 
 interface KitchenDashboardProps {
-  onClose: () => void;
+  onClose?: () => void;
   language: 'ar' | 'en';
 }
 
@@ -118,34 +118,40 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#070707] flex items-center justify-center text-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#d4af37]"></div>
+      <div style={{ minHeight: '100vh', background: '#070707', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+        <div style={{ width: '50px', height: '50px', borderTop: '3px solid var(--gold-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-white p-6 font-cairo">
-      <div className="flex justify-between items-center mb-8 bg-[#1a1a1a] p-4 rounded-xl border border-[#d4af37]/20">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-[#d4af37]/20 rounded-lg">
-            <ChefHat size={32} className="text-[#d4af37]" />
+    <div style={{ minHeight: '100vh', background: '#0f0f0f', color: 'white', padding: '1.5rem', fontFamily: 'Cairo, sans-serif' }}>
+      
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', background: '#1a1a1a', padding: '1rem 1.5rem', borderRadius: '15px', border: '1px solid rgba(212,175,55,0.2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ padding: '0.8rem', background: 'rgba(212,175,55,0.2)', borderRadius: '10px' }}>
+            <ChefHat size={32} color="var(--gold-primary)" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-[#d4af37]">
-              {language === 'ar' ? 'شاشة المطبخ' : 'Kitchen Dashboard'}
+            <h1 style={{ fontSize: '1.8rem', margin: 0, color: 'var(--gold-primary)', fontWeight: 'bold' }}>
+              {language === 'ar' ? 'شاشة المطبخ (Kitchen Display)' : 'Kitchen Dashboard'}
             </h1>
-            <p className="text-gray-400 text-sm">
-              {language === 'ar' ? 'متابعة الطلبات والنواقص' : 'Track orders and shortages'}
+            <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-gray)', fontSize: '0.9rem' }}>
+              {language === 'ar' ? 'متابعة الطلبات وتجهيزها وطلب النواقص بشكل فوري' : 'Track orders, preparation, and request shortages instantly'}
             </p>
           </div>
         </div>
-        <button onClick={onClose} className="p-2 bg-red-500/20 text-red-400 hover:bg-red-500/40 rounded-lg transition-colors">
-          <X size={24} />
-        </button>
+        {onClose && (
+          <button onClick={onClose} style={{ padding: '0.6rem', background: 'rgba(239,68,68,0.2)', color: '#ef4444', borderRadius: '10px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={24} />
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      {/* Orders Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
         {orders.map(order => {
           const shortages = getOrderShortages(order);
           const hasShortages = shortages.length > 0;
@@ -153,65 +159,107 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
           const isPreparing = order.status === 'preparing';
 
           return (
-            <div key={order.id} className={`bg-[#1a1a1a] rounded-xl border-2 overflow-hidden flex flex-col ${isPreparing ? 'border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'border-[#d4af37]/30'}`}>
-              <div className={`p-4 flex justify-between items-center ${isPreparing ? 'bg-blue-500/10' : 'bg-[#d4af37]/10'}`}>
+            <div key={order.id} style={{ 
+              background: '#1a1a1a', 
+              borderRadius: '15px', 
+              display: 'flex', 
+              flexDirection: 'column',
+              overflow: 'hidden',
+              border: isPreparing ? '2px solid rgba(59,130,246,0.6)' : '1px solid rgba(212,175,55,0.3)',
+              boxShadow: isPreparing ? '0 0 20px rgba(59,130,246,0.2)' : 'none',
+              transition: 'all 0.3s ease'
+            }}>
+              
+              {/* Order Header */}
+              <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isPreparing ? 'rgba(59,130,246,0.1)' : 'rgba(212,175,55,0.05)' }}>
                 <div>
-                  <span className="text-xs text-gray-400 block">#{order.id.slice(-6)}</span>
-                  <span className="font-bold text-lg">{order.order_type === 'takeaway' ? (language === 'ar' ? 'تيك أواي' : 'Takeaway') : order.order_type === 'delivery' ? (language === 'ar' ? 'دليفري' : 'Delivery') : order.order_type === 'website' ? (language === 'ar' ? 'موقع إلكتروني' : 'Website') : `${language === 'ar' ? 'طاولة' : 'Table'} ${order.table_number}`}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-gray)', display: 'block', marginBottom: '0.2rem' }}>#{order.id.slice(-6)}</span>
+                  <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>
+                    {order.order_type === 'takeaway' ? (language === 'ar' ? 'تيك أواي' : 'Takeaway') : order.order_type === 'delivery' ? (language === 'ar' ? 'دليفري' : 'Delivery') : order.order_type === 'website' ? (language === 'ar' ? 'موقع إلكتروني' : 'Website') : `${language === 'ar' ? 'طاولة' : 'Table'} ${order.table_number}`}
+                  </span>
                 </div>
-                <div className="text-right">
-                  <span className={`px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1 ${isPreparing ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
-                    {isPreparing ? <ChefHat size={14} /> : <Clock size={14} />}
+                <div>
+                  <span style={{ 
+                    padding: '0.3rem 0.8rem', 
+                    borderRadius: '20px', 
+                    fontSize: '0.85rem', 
+                    fontWeight: 'bold', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.4rem',
+                    background: isPreparing ? 'rgba(59,130,246,0.2)' : 'rgba(245,158,11,0.2)',
+                    color: isPreparing ? '#60a5fa' : '#fbbf24'
+                  }}>
+                    {isPreparing ? <ChefHat size={16} /> : <Clock size={16} />}
                     {isPreparing ? (language === 'ar' ? 'جاري التحضير' : 'Preparing') : (language === 'ar' ? 'قيد الانتظار' : 'Pending')}
                   </span>
                 </div>
               </div>
 
-              <div className="p-4 flex-1">
-                <ul className="space-y-3 mb-4">
+              {/* Order Items */}
+              <div style={{ padding: '1.2rem', flex: 1 }}>
+                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1rem 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {order.items.map((item, idx) => (
-                    <li key={idx} className="flex justify-between items-center bg-[#222] p-2 rounded">
-                      <span className="font-semibold text-[1.1rem]">
-                        <span className="text-[#d4af37] mx-2">{item.quantity}x</span>
+                    <li key={idx} style={{ display: 'flex', alignItems: 'center', background: '#222', padding: '0.8rem', borderRadius: '8px' }}>
+                      <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'white' }}>
+                        <span style={{ color: 'var(--gold-primary)', marginInlineEnd: '0.8rem' }}>{item.quantity}x</span>
                         {language === 'ar' ? item.name_ar : item.name_en}
                       </span>
                     </li>
                   ))}
                 </ul>
 
+                {/* Shortages Section */}
                 {hasShortages && order.status === 'pending' && (
-                  <div className="mb-4 bg-red-900/20 border border-red-500/30 p-3 rounded-lg">
-                    <div className="flex items-center gap-2 text-red-400 font-bold mb-2">
+                  <div style={{ marginBottom: '1rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', padding: '1rem', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', fontWeight: 'bold', marginBottom: '0.5rem' }}>
                       <AlertTriangle size={18} />
-                      {language === 'ar' ? 'نواقص في الخامات' : 'Material Shortages'}
+                      {language === 'ar' ? 'نواقص في خامات مطبخ التصنيع' : 'Kitchen Material Shortages'}
                     </div>
-                    <ul className="text-sm text-red-300 space-y-1 mb-3">
+                    <ul style={{ fontSize: '0.85rem', color: '#fca5a5', margin: '0 0 1rem 0', paddingInlineStart: '1rem' }}>
                       {shortages.map((s, idx) => (
-                        <li key={idx}>- {s.item.name}: {s.missingQty} {s.item.unit}</li>
+                        <li key={idx} style={{ marginBottom: '0.2rem' }}>{s.item.name} (مطلوب: {s.missingQty} {s.item.unit})</li>
                       ))}
                     </ul>
+                    
                     {!hasRequested ? (
                       <button 
                         onClick={() => handleCreateRequest(order, shortages)}
-                        className="w-full bg-red-600 hover:bg-red-500 text-white py-2 rounded-lg text-sm font-bold transition"
+                        style={{ width: '100%', background: '#ef4444', color: 'white', border: 'none', padding: '0.8rem', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.9rem' }}
                       >
-                        {language === 'ar' ? 'إنشاء إذن صرف نواقص' : 'Create Shortage Request'}
+                        {language === 'ar' ? 'إرسال إذن صرف نواقص للمخزن' : 'Send Shortage Request'}
                       </button>
                     ) : (
-                      <div className="text-center text-green-400 text-sm font-bold p-2 bg-green-500/10 rounded">
-                        {language === 'ar' ? 'تم طلب النواقص ✓' : 'Shortages requested ✓'}
+                      <div style={{ textAlign: 'center', color: '#4ade80', fontSize: '0.9rem', fontWeight: 'bold', padding: '0.5rem', background: 'rgba(74,222,128,0.1)', borderRadius: '5px' }}>
+                        {language === 'ar' ? 'تم إرسال طلب النواقص للمخزن ✓' : 'Shortages requested ✓'}
                       </div>
                     )}
                   </div>
                 )}
               </div>
 
-              <div className="p-4 bg-[#222] border-t border-gray-800 grid grid-cols-2 gap-3">
+              {/* Actions Footer */}
+              <div style={{ padding: '1rem', background: '#222', borderTop: '1px solid #333' }}>
                 {order.status === 'pending' && (
                   <button
                     onClick={() => updateOrderStatus(order.id, 'preparing')}
                     disabled={hasShortages && !hasRequested}
-                    className={`col-span-2 py-3 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all ${hasShortages && !hasRequested ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                    style={{
+                      width: '100%',
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      fontWeight: 'bold',
+                      fontSize: '1.1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      border: 'none',
+                      cursor: hasShortages && !hasRequested ? 'not-allowed' : 'pointer',
+                      background: hasShortages && !hasRequested ? '#4b5563' : '#3b82f6',
+                      color: hasShortages && !hasRequested ? '#9ca3af' : 'white',
+                      transition: 'all 0.2s ease'
+                    }}
                   >
                     <ChefHat size={20} />
                     {language === 'ar' ? 'بدء التحضير' : 'Start Preparing'}
@@ -220,21 +268,38 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                 {order.status === 'preparing' && (
                   <button
                     onClick={() => updateOrderStatus(order.id, 'prepared')}
-                    className="col-span-2 py-4 bg-[#2ecc71] hover:bg-[#27ae60] text-white rounded-xl font-bold text-xl flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(46,204,113,0.3)]"
+                    style={{
+                      width: '100%',
+                      padding: '1rem',
+                      background: '#10b981',
+                      color: 'white',
+                      borderRadius: '12px',
+                      fontWeight: 'bold',
+                      fontSize: '1.1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      border: 'none',
+                      cursor: 'pointer',
+                      boxShadow: '0 0 20px rgba(16,185,129,0.4)',
+                      transition: 'all 0.2s ease'
+                    }}
                   >
                     <CheckCircle2 size={24} />
-                    {language === 'ar' ? 'تم التحضير (تسليم)' : 'Prepared (Deliver)'}
+                    {language === 'ar' ? 'تم التحضير (جاهز للتسليم)' : 'Prepared (Ready)'}
                   </button>
                 )}
               </div>
+
             </div>
           );
         })}
         
         {orders.length === 0 && (
-          <div className="col-span-full flex flex-col items-center justify-center text-gray-500 py-20">
-            <CheckCircle2 size={64} className="mb-4 opacity-20" />
-            <p className="text-xl">{language === 'ar' ? 'لا يوجد طلبات حالياً' : 'No active orders'}</p>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem 2rem', color: 'var(--text-gray)' }}>
+            <CheckCircle2 size={64} style={{ marginBottom: '1rem', opacity: 0.2 }} />
+            <p style={{ fontSize: '1.2rem' }}>{language === 'ar' ? 'لا يوجد طلبات حالياً في المطبخ' : 'No active orders in kitchen'}</p>
           </div>
         )}
       </div>
