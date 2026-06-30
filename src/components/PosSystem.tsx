@@ -1494,11 +1494,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               setPayIsDeferred(false);
                               setPayCustomerId(order.customer_id || '');
                             }}>{language === 'ar' ? 'تحصيل الدفع' : 'Collect Payment'}</button>
-                          ) : (
+                          ) : order.status === 'prepared' ? (
                             <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#f39c12', color: '#000' }} onClick={async () => {
                               await db.updateOrderStatus(order.id, 'delivered', selectedWaiter?.name);
                               loadData();
                             }}>{language === 'ar' ? 'تم التسليم' : 'Mark Delivered'}</button>
+                          ) : (
+                            <button className="pos-btn" disabled style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#4b5563', color: '#9ca3af', cursor: 'not-allowed' }} title={language === 'ar' ? 'بانتظار تجهيز المطبخ' : 'Waiting for kitchen'}>
+                              {order.status === 'preparing' ? (language === 'ar' ? 'جاري التحضير بالمطبخ' : 'Preparing in kitchen') : (language === 'ar' ? 'بانتظار المطبخ' : 'Waiting for kitchen')}
+                            </button>
                           )}
                           
                           <button className="pos-btn-outline" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={() => {

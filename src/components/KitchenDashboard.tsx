@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase, db } from '../lib/supabase';
 import type { Order, InventoryItem, ProductRecipe } from '../types';
 import { ChefHat, CheckCircle2, AlertTriangle, Clock, X, Package, Search } from 'lucide-react';
@@ -74,32 +74,53 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
     };
   }, [language]);
 
-  const getOrderShortages = (order: Order) => {
-    const shortages: { item: InventoryItem, missingQty: number }[] = [];
-    const requiredAmounts: Record<string, number> = {};
+  // حساب النواقص بشكل تراكمي (FIFO): الطلبات الأقدم تحجز الخامة أولاً، فالطلب الأحدث
+  // يشوف الرصيد المتبقي فعلاً بعد خصم احتياجات الطلبات اللي قبله — يمنع إظهار نفس الكمية
+  // كأنها متاحة لأكتر من طلب في نفس الوقت.
+  const shortagesByOrder = useMemo(() => {
+    const result: Record<string, { item: InventoryItem, missingQty: number }[]> = {};
+    const remaining: Record<string, number> = {};
+    inventory.forEach(i => { remaining[i.id] = Number(i.stock_factory) || 0; });
 
-    order.items.forEach(orderItem => {
-      const productRecipes = recipes.filter(r => r.product_id === orderItem.id);
-      productRecipes.forEach(recipe => {
-        const totalNeeded = recipe.quantity * orderItem.quantity;
-        requiredAmounts[recipe.inventory_item_id] = (requiredAmounts[recipe.inventory_item_id] || 0) + totalNeeded;
+    // معالجة من الأقدم للأحدث عشان الأولوية للطلب الأقدم
+    const ordered = [...orders].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+    ordered.forEach(order => {
+      const requiredAmounts: Record<string, number> = {};
+      order.items.forEach(orderItem => {
+        recipes.filter(r => r.product_id === orderItem.id).forEach(recipe => {
+          requiredAmounts[recipe.inventory_item_id] =
+            (requiredAmounts[recipe.inventory_item_id] || 0) + recipe.quantity * orderItem.quantity;
+        });
       });
-    });
 
-    Object.entries(requiredAmounts).forEach(([itemId, required]) => {
-      const invItem = inventory.find(i => i.id === itemId);
-      if (invItem) {
+      const shortages: { item: InventoryItem, missingQty: number }[] = [];
+      Object.entries(requiredAmounts).forEach(([itemId, required]) => {
+        const invItem = inventory.find(i => i.id === itemId);
+        if (!invItem) return;
+        const avail = remaining[itemId] ?? 0;
         const requiredFloat = Number(required.toFixed(4));
-        const stockFloat = Number((Number(invItem.stock_factory) || 0).toFixed(4));
+        const stockFloat = Number(avail.toFixed(4));
         if (stockFloat + 0.0001 < requiredFloat) {
-          const diff = Number((requiredFloat - stockFloat).toFixed(4));
-          shortages.push({ item: invItem, missingQty: diff });
+          shortages.push({ item: invItem, missingQty: Number((requiredFloat - stockFloat).toFixed(4)) });
         }
-      }
+        // احجز الكمية المستهلكة من الرصيد المتبقي (لا تنزل تحت الصفر)
+        remaining[itemId] = Math.max(0, avail - required);
+      });
+
+      result[order.id] = shortages;
     });
 
-    return shortages;
-  };
+    return result;
+  }, [orders, inventory, recipes]);
+
+  // هل اتبعت إذن صرف نواقص لهذا الطلب فعلاً؟ نشتقها من طلبات التصنيع المحفوظة (تصمد بعد إعادة
+  // تحميل الصفحة) بالإضافة للحالة المحلية للتحديث الفوري — يمنع إرسال طلب مكرر لنفس الطلب.
+  const hasRequestedShortage = (order: Order) =>
+    requestedOrders.has(order.id) ||
+    mfgOrders.some(mo => mo.status !== 'rejected' && (mo.requested_by || '').includes('نواقص الطلب ' + order.id.slice(-4)));
 
   const handleCreateRequest = async (order: Order, shortages: { item: InventoryItem, missingQty: number }[]) => {
     try {
@@ -188,9 +209,9 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
       {activeTab === 'orders' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
           {orders.map(order => {
-            const shortages = getOrderShortages(order);
+            const shortages = shortagesByOrder[order.id] || [];
             const hasShortages = shortages.length > 0;
-            const hasRequested = requestedOrders.has(order.id);
+            const hasRequested = hasRequestedShortage(order);
             const isPreparing = order.status === 'preparing';
 
             return (

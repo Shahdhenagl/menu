@@ -216,7 +216,7 @@ export const db = {
   },
 
   async addCategory(category: Omit<Category, 'id'>): Promise<Category> {
-    await triggerTelegramLog('إضافة تصنيف', 'Add Category', `تم إضافة التصنيف: ${category.name_ar}`);
+    void triggerTelegramLog('إضافة تصنيف', 'Add Category', `تم إضافة التصنيف: ${category.name_ar}`);
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -238,7 +238,7 @@ export const db = {
   },
 
   async updateCategory(id: string, category: Partial<Category>): Promise<Category> {
-    await triggerTelegramLog('تعديل تصنيف', 'Update Category', `تم تعديل التصنيف (ID: ${id})`);
+    void triggerTelegramLog('تعديل تصنيف', 'Update Category', `تم تعديل التصنيف (ID: ${id})`);
     if (supabase) {
       const { data, error } = await supabase
         .from('categories')
@@ -258,7 +258,7 @@ export const db = {
   },
 
   async deleteCategory(id: string): Promise<boolean> {
-    await triggerTelegramLog('حذف تصنيف', 'Delete Category', `تم حذف التصنيف (ID: ${id})`);
+    void triggerTelegramLog('حذف تصنيف', 'Delete Category', `تم حذف التصنيف (ID: ${id})`);
     if (supabase) {
       try {
         const { error } = await supabase
@@ -294,7 +294,7 @@ export const db = {
   },
 
   async addProduct(product: Omit<Product, 'id'>): Promise<Product> {
-    await triggerTelegramLog('إضافة منتج', 'Add Product', `تم إضافة المنتج: ${product.name_ar}`);
+    void triggerTelegramLog('إضافة منتج', 'Add Product', `تم إضافة المنتج: ${product.name_ar}`);
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -316,7 +316,7 @@ export const db = {
   },
 
   async updateProduct(id: string, product: Partial<Product>): Promise<Product> {
-    await triggerTelegramLog('تعديل منتج', 'Update Product', `تم تعديل المنتج: ${product.name_ar || '(ID: '+id+')'}`);
+    void triggerTelegramLog('تعديل منتج', 'Update Product', `تم تعديل المنتج: ${product.name_ar || '(ID: '+id+')'}`);
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -340,7 +340,7 @@ export const db = {
   },
 
   async deleteProduct(id: string): Promise<boolean> {
-    await triggerTelegramLog('حذف منتج', 'Delete Product', `تم حذف المنتج (ID: ${id})`);
+    void triggerTelegramLog('حذف منتج', 'Delete Product', `تم حذف المنتج (ID: ${id})`);
     if (supabase) {
       try {
         const { error } = await supabase
@@ -483,7 +483,7 @@ export const db = {
     } catch (e) {
       console.warn("Failed to retrieve waiter_name for telegram log:", e);
     }
-    await triggerTelegramLog('تحديث حالة طلب', 'Update Order Status', `تغيرت حالة الطلب ${id.slice(0, 6)} إلى ${status}`, finalUser);
+    void triggerTelegramLog('تحديث حالة طلب', 'Update Order Status', `تغيرت حالة الطلب ${id.slice(0, 6)} إلى ${status}`, finalUser);
     if (supabase) {
       try {
         const { data: currentOrder } = await supabase.from('orders').select('*').eq('id', id).single();
@@ -545,7 +545,7 @@ export const db = {
         console.warn("Failed to retrieve waiter_name for telegram log:", e);
       }
     }
-    await triggerTelegramLog('تعديل طلب', 'Update Order', `تم تعديل الطلب رقم ${id.slice(0, 6)}`, finalUser);
+    void triggerTelegramLog('تعديل طلب', 'Update Order', `تم تعديل الطلب رقم ${id.slice(0, 6)}`, finalUser);
     if (supabase) {
       try {
         const { data: currentOrder } = await supabase.from('orders').select('*').eq('id', id).single();
@@ -609,7 +609,7 @@ export const db = {
     } catch (e) {
       console.warn("Failed to retrieve waiter_name for telegram log:", e);
     }
-    await triggerTelegramLog('حذف الطلب', 'Delete Order', `تم حذف الطلب رقم ${id.slice(0, 6)} نهائياً من النظام`, finalUser);
+    void triggerTelegramLog('حذف الطلب', 'Delete Order', `تم حذف الطلب رقم ${id.slice(0, 6)} نهائياً من النظام`, finalUser);
     // Notify admin of deletion
     await this.addNotification({ title: '🚫 تم حذف طلب', message: `تم حذف الطلب #${id.slice(0, 8)} بواسطة: ${finalUser || 'غير معروف'}`, target_role: 'admin', notification_type: 'order_delete' });
     if (supabase) {
@@ -694,7 +694,7 @@ export const db = {
   },
 
   async addExpense(expense: Omit<Expense, 'id'>): Promise<Expense> {
-    await triggerTelegramLog('تسجيل مصروف', 'Add Expense', `تم تسجيل مصروف جديد: ${expense.name} بقيمة ${expense.amount}`);
+    void triggerTelegramLog('تسجيل مصروف', 'Add Expense', `تم تسجيل مصروف جديد: ${expense.name} بقيمة ${expense.amount}`);
     const newExpense: Expense = {
       ...expense,
       id: crypto.randomUUID(),
@@ -720,7 +720,7 @@ export const db = {
   },
 
   async deleteExpense(id: string): Promise<boolean> {
-    await triggerTelegramLog('حذف مصروف', 'Delete Expense', `تم حذف مصروف (ID: ${id})`);
+    void triggerTelegramLog('حذف مصروف', 'Delete Expense', `تم حذف مصروف (ID: ${id})`);
     if (supabase) {
       try {
         const { error } = await supabase
@@ -928,7 +928,7 @@ export const db = {
     return getLocalData('meridien_suppliers', initialSuppliers);
   },
   async addSupplier(supplier: Omit<Supplier, 'id'>): Promise<Supplier> {
-    await triggerTelegramLog('إضافة مورد', 'Add Supplier', `تم إضافة المورد: ${supplier.name}`);
+    void triggerTelegramLog('إضافة مورد', 'Add Supplier', `تم إضافة المورد: ${supplier.name}`);
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -1081,7 +1081,7 @@ export const db = {
         `\n💵 <b>إجمالي الفاتورة:</b> ${fmt(invoice.total_amount)} ج.م` +
         (pay.length ? `\n💳 <b>المدفوع:</b> ${pay.join(' | ')}` : '') +
         (remaining > 0 ? `\n🔴 <b>المتبقي (آجل):</b> ${fmt(remaining)} ج.م` : '\n✅ <b>مدفوعة بالكامل</b>');
-      await triggerTelegramLog('إضافة فاتورة مشتريات', 'Add Purchase Invoice', details);
+      void triggerTelegramLog('إضافة فاتورة مشتريات', 'Add Purchase Invoice', details);
     }
     if (supabase) {
       try {
@@ -1250,51 +1250,66 @@ export const db = {
     
     return newOrder;
   },
-  async updateManufacturingOrderStatus(id: string, status: 'approved' | 'rejected', approved_by: string): Promise<void> {
+  async updateManufacturingOrderStatus(id: string, status: 'approved' | 'rejected', approved_by: string): Promise<{ alreadyProcessed: boolean; skipped: string[] }> {
+    const skipped: string[] = [];
     if (supabase) {
       try {
+        // ملاحظة: نحدّث فقط لو الطلب لسه pending — ده بيمنع الخصم المكرر عند الضغط أكتر من مرة
         const { data: order, error } = await supabase
           .from('manufacturing_orders')
           .update({ status, approved_by })
           .eq('id', id)
+          .eq('status', 'pending')
           .select()
           .single();
-        if (!error && order) {
-          if (status === 'approved') {
+        if (error || !order) {
+          // مفيش صف اترجع = الطلب اتعالج قبل كده (موافَق/مرفوض) → مانعملش خصم تاني
+          return { alreadyProcessed: true, skipped };
+        }
+        if (status === 'approved') {
             for (const itemReq of order.items) {
+              const qty = Number(itemReq.calculated_main_quantity ?? itemReq.quantity) || 0;
               const { data: itemData } = await supabase
                 .from('inventory_items')
                 .select('stock_main, stock_factory, avg_purchase_price')
                 .eq('id', itemReq.item_id)
                 .single();
               if (itemData) {
-                const qtyToMove = itemReq.calculated_main_quantity ?? itemReq.quantity ?? 0;
-                const newStockMain = (Number(itemData.stock_main) || 0) - qtyToMove;
-                const newStockFactory = (Number(itemData.stock_factory) || 0) + qtyToMove;
+                const availMain = Number(itemData.stock_main) || 0;
+                if (qty > availMain + 1e-9) {
+                  // الرصيد في الرئيسي أقل من المطلوب → مانصرفوش ونبلّغ المستخدم
+                  skipped.push(`${itemReq.item_name || itemReq.item_id} (الرصيد غير كافٍ بالرئيسي: ${availMain})`);
+                  continue;
+                }
+                const newStockMain = availMain - qty;
+                const newStockFactory = (Number(itemData.stock_factory) || 0) + qty;
                 await supabase
                   .from('inventory_items')
                   .update({ stock_main: newStockMain, stock_factory: newStockFactory })
                   .eq('id', itemReq.item_id);
-                  
+
                 // Record Movements
                 await this.addInventoryMovement({
                   item_id: itemReq.item_id,
                   warehouse: 'main',
                   type: 'out',
-                  quantity: qtyToMove,
+                  quantity: qty,
                   unit_price: Number(itemData.avg_purchase_price || 0),
-                  total_price: Number(itemData.avg_purchase_price || 0) * qtyToMove,
+                  total_price: Number(itemData.avg_purchase_price || 0) * qty,
                   description: `صرف للمصنع/المطبخ (أمر #${id.slice(0, 6)})`
                 });
                 await this.addInventoryMovement({
                   item_id: itemReq.item_id,
                   warehouse: 'factory',
                   type: 'in',
-                  quantity: qtyToMove,
+                  quantity: qty,
                   unit_price: Number(itemData.avg_purchase_price || 0),
-                  total_price: Number(itemData.avg_purchase_price || 0) * qtyToMove,
+                  total_price: Number(itemData.avg_purchase_price || 0) * qty,
                   description: `استلام من المخزن الرئيسي (أمر #${id.slice(0, 6)})`
                 });
+              } else {
+                // الصنف مش موجود في جدول المخزون (id غير مطابق) → مانتخطّاهوش بصمت، نبلّغ المستخدم
+                skipped.push(`${itemReq.item_name || itemReq.item_id} (غير موجود في المخزون)`);
               }
             }
             await this.addNotification({
@@ -1311,17 +1326,18 @@ export const db = {
               notification_type: 'mfg_rejected'
             });
           }
-          return;
-        }
+          return { alreadyProcessed: false, skipped };
       } catch (err) {
         console.warn("Supabase updateManufacturingOrderStatus failed", err);
       }
     }
     const orders = await this.getManufacturingOrders();
     const orderIndex = orders.findIndex(o => o.id === id);
-    if (orderIndex === -1) return;
-    
+    if (orderIndex === -1) return { alreadyProcessed: true, skipped };
+
     const order = orders[orderIndex];
+    // منع المعالجة المكررة: لو الطلب اتعالج قبل كده مانعملش خصم تاني
+    if (order.status !== 'pending') return { alreadyProcessed: true, skipped };
     order.status = status;
     order.approved_by = approved_by;
     saveLocalData('meridien_mfg_orders', orders);
@@ -1329,33 +1345,41 @@ export const db = {
     if (status === 'approved') {
       const inventoryItems = await this.getInventoryItems();
       for (const itemReq of order.items) {
+        const qty = Number(itemReq.calculated_main_quantity ?? itemReq.quantity) || 0;
         const itemIndex = inventoryItems.findIndex(i => i.id === itemReq.item_id);
         if (itemIndex > -1) {
-          inventoryItems[itemIndex].stock_main -= itemReq.calculated_main_quantity;
-          inventoryItems[itemIndex].stock_factory += itemReq.calculated_main_quantity;
-          
+          const availMain = Number(inventoryItems[itemIndex].stock_main) || 0;
+          if (qty > availMain + 1e-9) {
+            skipped.push(`${itemReq.item_name || itemReq.item_id} (الرصيد غير كافٍ بالرئيسي: ${availMain})`);
+            continue;
+          }
+          inventoryItems[itemIndex].stock_main -= qty;
+          inventoryItems[itemIndex].stock_factory += qty;
+
           await this.addInventoryMovement({
             item_id: itemReq.item_id,
             warehouse: 'main',
             type: 'out',
-            quantity: itemReq.calculated_main_quantity,
+            quantity: qty,
             unit_price: inventoryItems[itemIndex].avg_purchase_price || 0,
-            total_price: (inventoryItems[itemIndex].avg_purchase_price || 0) * itemReq.calculated_main_quantity,
+            total_price: (inventoryItems[itemIndex].avg_purchase_price || 0) * qty,
             description: `صرف للمصنع/المطبخ (أمر #${id.slice(0, 6)})`
           });
           await this.addInventoryMovement({
             item_id: itemReq.item_id,
             warehouse: 'factory',
             type: 'in',
-            quantity: itemReq.calculated_main_quantity,
+            quantity: qty,
             unit_price: inventoryItems[itemIndex].avg_purchase_price || 0,
-            total_price: (inventoryItems[itemIndex].avg_purchase_price || 0) * itemReq.calculated_main_quantity,
+            total_price: (inventoryItems[itemIndex].avg_purchase_price || 0) * qty,
             description: `استلام من المخزن الرئيسي (أمر #${id.slice(0, 6)})`
           });
+        } else {
+          skipped.push(`${itemReq.item_name || itemReq.item_id} (غير موجود في المخزون)`);
         }
       }
       saveLocalData('meridien_inventory_items', inventoryItems);
-      
+
       await this.addNotification({
         title: 'تمت الموافقة على الطلب',
         message: `تمت الموافقة على طلب الصرف من قبل ${approved_by}`,
@@ -1368,6 +1392,7 @@ export const db = {
         target_role: 'kitchen_manager'
       });
     }
+    return { alreadyProcessed: false, skipped };
   },
 
   // --- NOTIFICATIONS ---

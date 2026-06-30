@@ -1123,12 +1123,25 @@ export default function AdminDashboard({
   };
 
   const handleApproveManufacturingOrder = async (id: string, isApprove: boolean) => {
+    if (loading) return; // منع الضغط المتكرر أثناء التنفيذ
+    const confirmMsg = isApprove
+      ? (language === 'ar' ? 'تأكيد صرف الخامات وخصمها من المخزن الرئيسي؟ (لا تضغط أكتر من مرة)' : 'Confirm disbursement and deduct from main stock?')
+      : (language === 'ar' ? 'تأكيد رفض هذا الطلب؟' : 'Confirm rejecting this request?');
+    if (!window.confirm(confirmMsg)) return;
     setLoading(true);
     try {
-      await db.updateManufacturingOrderStatus(id, isApprove ? 'approved' : 'rejected', loggedInUser ? loggedInUser.name : 'Unknown');
+      const res = await db.updateManufacturingOrderStatus(id, isApprove ? 'approved' : 'rejected', loggedInUser ? loggedInUser.name : 'Unknown');
       await fetchInventoryData();
+      if (res?.alreadyProcessed) {
+        alert(language === 'ar' ? 'هذا الطلب تمت معالجته بالفعل — لم يتم خصم أي كمية إضافية.' : 'This request was already processed — no extra deduction made.');
+      } else if (res?.skipped && res.skipped.length > 0) {
+        alert((language === 'ar'
+          ? '⚠ الأصناف دي غير متوفرة في المخزون (لم يتم صرفها):\n- '
+          : '⚠ These items are not available in inventory (not issued):\n- ') + res.skipped.join('\n- '));
+      }
     } catch (err) {
       console.error(err);
+      alert(language === 'ar' ? 'تعذّر تنفيذ العملية' : 'Operation failed');
     } finally {
       setLoading(false);
     }
@@ -5889,10 +5902,10 @@ export default function AdminDashboard({
                           <td>
                             {order.status === 'pending' && (loggedInUser?.role === 'inventory_manager' || loggedInUser?.role === 'admin') && (
                               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <button className="action-btn edit" onClick={() => handleApproveManufacturingOrder(order.id, true)} title={language === 'ar' ? 'قبول' : 'Approve'}>
+                                <button className="action-btn edit" disabled={loading} onClick={() => handleApproveManufacturingOrder(order.id, true)} title={language === 'ar' ? 'قبول' : 'Approve'}>
                                   <CheckCircle size={16} color="var(--success)" />
                                 </button>
-                                <button className="action-btn delete" onClick={() => handleApproveManufacturingOrder(order.id, false)} title={language === 'ar' ? 'رفض' : 'Reject'}>
+                                <button className="action-btn delete" disabled={loading} onClick={() => handleApproveManufacturingOrder(order.id, false)} title={language === 'ar' ? 'رفض' : 'Reject'}>
                                   <X size={16} color="var(--danger)" />
                                 </button>
                               </div>
@@ -6042,8 +6055,8 @@ export default function AdminDashboard({
                           <td>
                             {order.status === 'pending' && (
                               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <button className="action-btn edit" title={language === 'ar' ? 'قبول' : 'Approve'} onClick={() => handleApproveManufacturingOrder(order.id, true)}>✓</button>
-                                <button className="action-btn delete" title={language === 'ar' ? 'رفض' : 'Reject'} onClick={() => handleApproveManufacturingOrder(order.id, false)}>✗</button>
+                                <button className="action-btn edit" disabled={loading} title={language === 'ar' ? 'قبول' : 'Approve'} onClick={() => handleApproveManufacturingOrder(order.id, true)}>✓</button>
+                                <button className="action-btn delete" disabled={loading} title={language === 'ar' ? 'رفض' : 'Reject'} onClick={() => handleApproveManufacturingOrder(order.id, false)}>✗</button>
                               </div>
                             )}
                           </td>
@@ -8202,7 +8215,7 @@ export default function AdminDashboard({
               <button className="btn-close" onClick={() => setMfgRecipeModalOpen(false)}><X size={20} /></button>
             </div>
             
-            <div className="admin-modal-body" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+            <div className="admin-modal-body" style={{ maxHeight: '65vh', overflowY: 'auto', overflowX: 'hidden' }}>
               <div style={{ background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
                 <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--gold-secondary)' }}>
                   {language === 'ar' ? `حدد الخامات التي يتم سحبها من المطبخ لإنتاج (1 ${activeMfgItem.unit}) من ${activeMfgItem.name}.` : `Select the ingredients deducted from factory to produce (1 ${activeMfgItem.unit}) of ${activeMfgItem.name}.`}
@@ -8211,25 +8224,25 @@ export default function AdminDashboard({
 
               {/* Add Ingredient Form */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr auto', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'end' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
+                <div className="form-group" style={{ marginBottom: 0, minWidth: 0 }}>
                   <label>{language === 'ar' ? 'الخامة' : 'Ingredient'}</label>
-                  <select className="input-gold" value={mfgSelIngredient} onChange={e => setMfgSelIngredient(e.target.value)}>
+                  <select className="input-gold" style={{ width: '100%', minWidth: 0, maxWidth: '100%' }} value={mfgSelIngredient} onChange={e => setMfgSelIngredient(e.target.value)}>
                     <option value="">{language === 'ar' ? '-- اختر الخامة --' : '-- Select Ingredient --'}</option>
                     {inventoryItems.filter(i => i.id !== activeMfgItem.id).map(i => (
                       <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>
                     ))}
                   </select>
                 </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
+                <div className="form-group" style={{ marginBottom: 0, minWidth: 0 }}>
                   <label>{language === 'ar' ? 'الكمية' : 'Quantity'}</label>
-                  <div style={{ display: 'flex' }}>
+                  <div style={{ display: 'flex', minWidth: 0 }}>
                     <input 
                       type="number" 
                       step="0.01" 
                       className="input-gold" 
-                      value={mfgSelQuantity} 
-                      onChange={e => setMfgSelQuantity(e.target.value)} 
-                      style={{ borderTopRightRadius: language === 'ar' ? '10px' : '0', borderBottomRightRadius: language === 'ar' ? '10px' : '0', borderTopLeftRadius: language === 'en' ? '10px' : '0', borderBottomLeftRadius: language === 'en' ? '10px' : '0' }}
+                      value={mfgSelQuantity}
+                      onChange={e => setMfgSelQuantity(e.target.value)}
+                      style={{ flex: 1, minWidth: 0, width: '100%', borderTopRightRadius: language === 'ar' ? '10px' : '0', borderBottomRightRadius: language === 'ar' ? '10px' : '0', borderTopLeftRadius: language === 'en' ? '10px' : '0', borderBottomLeftRadius: language === 'en' ? '10px' : '0' }}
                     />
                     <select 
                       className="input-gold"
