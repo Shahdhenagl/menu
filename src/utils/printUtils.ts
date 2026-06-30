@@ -1,5 +1,15 @@
 import type { Order, Category, Product, Printer, RestaurantSettings } from '../types';
 import qz from 'qz-tray';
+import QRCode from 'qrcode';
+
+// يولّد رمز QR كصورة data-URI مدمجة (يشتغل offline ومع طباعة QZ، بدون انتظار تحميل من النت)
+const buildQrDataUrl = async (data: string): Promise<string> => {
+  try {
+    return await QRCode.toDataURL(data, { margin: 1, width: 160, errorCorrectionLevel: 'M' });
+  } catch {
+    return '';
+  }
+};
 
 const printWithQZ = async (htmlContent: string, settings: RestaurantSettings) => {
   try {
@@ -213,6 +223,17 @@ export const printCustomerReceipt = async (
     : '';
 
   const restaurantName = isAr ? (settings?.restaurant_name_ar || 'MERIDIEN POS') : (settings?.restaurant_name_en || 'MERIDIEN POS');
+
+  // محتوى الـ QR: رابط المنيو (أصل الموقع) عشان العميل يطلب تاني — fallback للموقع/العنوان أو رقم الفاتورة
+  const qrContent =
+    (typeof window !== 'undefined' && window.location && window.location.origin)
+      ? window.location.origin
+      : (settings?.location_url || `Invoice ${order.id.slice(-6).toUpperCase()}`);
+  const qrDataUrl = await buildQrDataUrl(qrContent);
+  const qrHtml = qrDataUrl
+    ? `<div class="qr-box"><img src="${qrDataUrl}" alt="QR" width="90" height="90" /><div class="qr-cap">${isAr ? 'امسح لتصفّح المنيو' : 'Scan for our menu'}</div></div>`
+    : '';
+
   const locationHtml = settings?.location_url ? `<div class="info-line">${isAr ? 'العنوان:' : 'Address:'} ${settings.location_url}</div>` : '';
   const phoneHtml = settings?.whatsapp_number ? `<div class="info-line">${isAr ? 'تليفون:' : 'Phone:'} ${settings.whatsapp_number}</div>` : '';
 
@@ -308,16 +329,20 @@ export const printCustomerReceipt = async (
             border-top: 1px dashed #000;
             padding-top: 10px;
           }
-          .qr-placeholder {
-            margin: 15px auto;
-            width: 80px;
-            height: 80px;
-            border: 1px solid #ccc;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+          .qr-box {
+            margin: 15px auto 5px auto;
+            text-align: center;
+          }
+          .qr-box img {
+            display: block;
+            margin: 0 auto;
+            width: 90px;
+            height: 90px;
+          }
+          .qr-cap {
             font-size: 10px;
-            color: #666;
+            color: #444;
+            margin-top: 4px;
           }
         </style>
       </head>
@@ -365,9 +390,7 @@ export const printCustomerReceipt = async (
             </div>
           </div>
           
-          <div class="qr-placeholder">
-            ${isAr ? 'رمز QR' : 'QR Code'}
-          </div>
+          ${qrHtml}
 
           <div class="footer">
             <div>${isAr ? 'شكراً لزيارتكم!' : 'Thank you for your visit!'}</div>
