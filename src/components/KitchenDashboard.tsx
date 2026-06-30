@@ -168,10 +168,10 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f0f0f', color: 'white', padding: '1.5rem', fontFamily: 'Cairo, sans-serif', direction: language === 'ar' ? 'rtl' : 'ltr' }}>
+    <div className="kitchen-screen" style={{ minHeight: '100vh', background: '#0f0f0f', color: 'white', padding: '1.5rem', fontFamily: 'Cairo, sans-serif', direction: language === 'ar' ? 'rtl' : 'ltr' }}>
       
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', background: '#1a1a1a', padding: '1rem 1.5rem', borderRadius: '15px', border: '1px solid rgba(212,175,55,0.2)' }}>
+      <div className="kitchen-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', background: '#1a1a1a', padding: '1rem 1.5rem', borderRadius: '15px', border: '1px solid rgba(212,175,55,0.2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ padding: '0.8rem', background: 'rgba(212,175,55,0.2)', borderRadius: '10px' }}>
             <ChefHat size={32} color="var(--gold-primary)" />
@@ -207,7 +207,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
       </div>
 
       {activeTab === 'orders' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
+        <div className="kitchen-orders-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(330px, 100%), 1fr))', gap: '1.5rem' }}>
           {orders.map(order => {
             const shortages = shortagesByOrder[order.id] || [];
             const hasShortages = shortages.length > 0;
@@ -362,7 +362,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
 
         {/* Inventory Tab */}
         {activeTab === 'inventory' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'start' }}>
+          <div className="kitchen-inv-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))', gap: '2rem', alignItems: 'start' }}>
             {/* Section 1: Kitchen Inventory */}
             <div style={{ background: '#1a1a1a', padding: '1.5rem', borderRadius: '16px', border: '1px solid #333' }}>
               <h2 style={{ color: 'var(--gold-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
