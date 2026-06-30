@@ -42,6 +42,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [view, setView] = useState<PosView>('role_select');
   const [role, setRole] = useState<'waiter' | 'customer' | null>(null);
   const [mobileShowCart, setMobileShowCart] = useState(false);
+  const [posDepartment, setPosDepartment] = useState<'restaurant'|'bar'>('restaurant');
   
   // Waiter Auth & Dashboard
   const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(null);
@@ -604,7 +605,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     // Auto-print customer receipt and kitchen/bar tickets
     printCustomerReceipt(placedOrder, language, settings);
     setTimeout(() => {
-      printOrderTickets(placedOrder, categories, products, printers, language);
+      printOrderTickets(placedOrder, categories, products, printers, language, settings);
     }, 1500);
   };
 
@@ -1199,7 +1200,19 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           {view === 'menu' && (
             <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', display: 'flex' }}>
               <div className="pos-menu-sidebar">
-                {categories.map(cat => (
+                <div style={{ display: 'flex', padding: '10px', gap: '5px', borderBottom: '1px solid #333' }}>
+                  <button 
+                    onClick={() => setPosDepartment('restaurant')} 
+                    style={{ flex: 1, padding: '8px', background: posDepartment === 'restaurant' ? 'var(--gold-primary)' : '#222', color: posDepartment === 'restaurant' ? '#000' : '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'المطعم' : 'Restaurant'}
+                  </button>
+                  <button 
+                    onClick={() => setPosDepartment('bar')} 
+                    style={{ flex: 1, padding: '8px', background: posDepartment === 'bar' ? '#3b82f6' : '#222', color: posDepartment === 'bar' ? '#fff' : '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'البار' : 'Bar'}
+                  </button>
+                </div>
+                {categories.filter(c => (c.department || 'restaurant') === posDepartment).map(cat => (
                   <div key={cat.id} className={`pos-cat-item ${activeCategory === cat.id ? 'active' : ''}`} onClick={() => setActiveCategory(cat.id)}>
                     {language === 'ar' ? cat.name_ar : cat.name_en}
                   </div>
@@ -1359,7 +1372,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <PrinterIcon size={20} style={{ marginRight: '8px' }} />
                       {language === 'ar' ? 'طباعة الفاتورة للعميل' : 'Print Customer Receipt'}
                     </button>
-                    <button className="pos-btn" style={{ background: '#3b82f6', color: '#fff' }} onClick={() => printOrderTickets(lastPlacedOrder, categories, products, printers, language)}>
+                    <button className="pos-btn" style={{ background: '#3b82f6', color: '#fff' }} onClick={() => printOrderTickets(lastPlacedOrder, categories, products, printers, language, settings)}>
                       <PrinterIcon size={20} style={{ marginRight: '8px' }} />
                       {language === 'ar' ? 'طباعة بونات الأقسام' : 'Print Section Tickets'}
                     </button>

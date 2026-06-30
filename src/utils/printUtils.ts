@@ -1,11 +1,53 @@
 import type { Order, Category, Product, Printer, RestaurantSettings } from '../types';
+import qz from 'qz-tray';
 
-export const printOrderTickets = (
+const printWithQZ = async (htmlContent: string, settings: RestaurantSettings) => {
+  try {
+    if (!qz.websocket.isActive()) {
+      await qz.websocket.connect();
+    }
+    
+    const printers = [
+      settings.qz_printer_cashier,
+      settings.qz_printer_kitchen,
+      settings.qz_printer_bar
+    ].filter(p => p && p.trim() !== '');
+
+    if (printers.length === 0) {
+      console.warn("QZ Printing is enabled but no printers are configured in settings.");
+      return false;
+    }
+
+    const data = [{
+      type: 'pixel',
+      format: 'html',
+      flavor: 'plain',
+      data: htmlContent,
+      options: { pageWidth: 80, margins: 0 }
+    }];
+
+    for (const printerName of printers) {
+      try {
+        const config = qz.configs.create(printerName);
+        await qz.print(config, data);
+      } catch (printErr) {
+        console.error(`Failed to print to QZ printer: ${printerName}`, printErr);
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error("QZ Tray connection or print error", err);
+    return false;
+  }
+};
+
+export const printOrderTickets = async (
   order: Order, 
   categories: Category[], 
   products: Product[], 
   printers: Printer[],
-  language: 'ar' | 'en'
+  language: 'ar' | 'en',
+  settings?: RestaurantSettings | null
 ) => {
   // 1. Group order items by printer
   const itemsByPrinter: Record<string, typeof order.items> = {};
@@ -107,15 +149,32 @@ export const printOrderTickets = (
       </html>
     `;
 
+    if (settings?.enable_qz_printing) {
+      printWithQZ(htmlContent, settings).then(success => {
+        if (!success) {
+          // Fallback if QZ fails
+          fallbackPrint(htmlContent, printerIds, index);
+        } else {
+          // Move to next
+          printNext(printerIds, index + 1);
+        }
+      });
+    } else {
+      fallbackPrint(htmlContent, printerIds, index);
+    }
+  };
+
+  const fallbackPrint = (htmlContent: string, printerIds: string[], index: number) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
     iframe.contentDocument?.write(htmlContent);
     iframe.contentDocument?.close();
     
-    // Allow iframe content to render before printing
     setTimeout(() => {
       iframe.contentWindow?.focus();
       iframe.contentWindow?.print();
       
-      // Cleanup and next
       setTimeout(() => {
         document.body.removeChild(iframe);
         printNext(printerIds, index + 1);
@@ -129,15 +188,11 @@ export const printOrderTickets = (
   }
 };
 
-export const printCustomerReceipt = (
+export const printCustomerReceipt = async (
   order: Order,
   language: 'ar' | 'en',
   settings?: RestaurantSettings | null
 ) => {
-  const iframe = document.createElement('iframe');
-  iframe.style.display = 'none';
-  document.body.appendChild(iframe);
-
   const isAr = language === 'ar';
   
   const orderTypeStr = isAr 
@@ -322,6 +377,16 @@ export const printCustomerReceipt = (
     </html>
   `;
 
+  if (settings?.enable_qz_printing) {
+    const success = await printWithQZ(htmlContent, settings);
+    if (success) return; // Stop here if QZ was successful
+  }
+
+  // Fallback to normal printing
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  document.body.appendChild(iframe);
+  
   iframe.contentDocument?.write(htmlContent);
   iframe.contentDocument?.close();
   

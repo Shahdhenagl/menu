@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>حملة واتساب</title>
+    <style>
+       @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap');
+       :root {
+           --primary: #25D366;
+           --primary-dark: #128C7E;
+           --bg: #0f172a;
+           --surface: rgba(30, 41, 59, 0.7);
+           --border: rgba(255, 255, 255, 0.1);
+           --text: #f8fafc;
+           --text-muted: #94a3b8;
+       }
+       body {
+           margin: 0;
+           padding: 0;
+           font-family: 'Cairo', sans-serif;
+           background: var(--bg);
+           background-image: 
+               radial-gradient(at 0% 0%, rgba(37, 211, 102, 0.15) 0px, transparent 50%),
+               radial-gradient(at 100% 100%, rgba(18, 140, 126, 0.15) 0px, transparent 50%);
+           color: var(--text);
+           min-height: 100vh;
+           display: flex;
+           align-items: center;
+           justify-content: center;
+       }
+       .container {
+           background: var(--surface);
+           backdrop-filter: blur(16px);
+           -webkit-backdrop-filter: blur(16px);
+           border: 1px solid var(--border);
+           border-radius: 24px;
+           padding: 40px;
+           width: 100%;
+           max-width: 600px;
+           box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+           animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+       }
+       @keyframes slideUp {
+           from { opacity: 0; transform: translateY(20px); }
+           to { opacity: 1; transform: translateY(0); }
+       }
+       h1 {
+           margin: 0 0 10px 0;
+           font-size: 2rem;
+           background: linear-gradient(to right, #25D366, #128C7E);
+           -webkit-background-clip: text;
+           -webkit-text-fill-color: transparent;
+       }
+       p.subtitle {
+           color: var(--text-muted);
+           margin-top: 0;
+           margin-bottom: 30px;
+       }
+       .form-group {
+           margin-bottom: 24px;
+       }
+       label {
+           display: block;
+           margin-bottom: 8px;
+           font-weight: 600;
+           color: var(--text);
+       }
+       input[type="file"] {
+           display: none;
+       }
+       .file-upload {
+           border: 2px dashed var(--border);
+           border-radius: 16px;
+           padding: 30px;
+           text-align: center;
+           cursor: pointer;
+           transition: all 0.3s ease;
+           background: rgba(255,255,255,0.02);
+       }
+       .file-upload:hover {
+           border-color: var(--primary);
+           background: rgba(37, 211, 102, 0.05);
+       }
+       .file-upload p {
+           margin: 0;
+           color: var(--text-muted);
+           pointer-events: none;
+       }
+       .file-upload.active {
+           border-color: var(--primary);
+           background: rgba(37, 211, 102, 0.1);
+       }
+       textarea {
+           width: 100%;
+           box-sizing: border-box;
+           background: rgba(0,0,0,0.2);
+           border: 1px solid var(--border);
+           border-radius: 12px;
+           padding: 16px;
+           color: var(--text);
+           font-family: inherit;
+           font-size: 1rem;
+           resize: vertical;
+           min-height: 120px;
+           transition: border-color 0.3s ease;
+       }
+       textarea:focus {
+           outline: none;
+           border-color: var(--primary);
+       }
+       button {
+           background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+           color: white;
+           border: none;
+           border-radius: 12px;
+           padding: 16px 24px;
+           width: 100%;
+           font-size: 1.1rem;
+           font-weight: 600;
+           font-family: inherit;
+           cursor: pointer;
+           transition: transform 0.2s ease, box-shadow 0.2s ease;
+           box-shadow: 0 4px 14px rgba(37, 211, 102, 0.3);
+       }
+       button:hover {
+           transform: translateY(-2px);
+           box-shadow: 0 6px 20px rgba(37, 211, 102, 0.4);
+       }
+       button:active {
+           transform: translateY(0);
+       }
+       button:disabled {
+           opacity: 0.5;
+           cursor: not-allowed;
+           transform: none;
+       }
+       .status {
+           margin-top: 20px;
+           padding: 15px;
+           border-radius: 12px;
+           background: rgba(255, 255, 255, 0.05);
+           display: none;
+       }
+       .status.show {
+           display: block;
+           animation: fadeIn 0.4s ease;
+       }
+       .note {
+           font-size: 0.85rem;
+           color: #f59e0b;
+           margin-top: 10px;
+           display: block;
+           background: rgba(245, 158, 11, 0.1);
+           padding: 10px;
+           border-radius: 8px;
+       }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>إرسال حملة واتساب</h1>
+        <p class="subtitle">قم برفع ملف CSV يحتوي على الأسماء والأرقام لإرسال الرسائل.</p>
+        
+        <div class="form-group">
+            <label>ملف العملاء (CSV)</label>
+            <label class="file-upload" id="drop-zone">
+                <input type="file" id="csv-file" accept=".csv" />
+                <p id="file-name">اضغط هنا لاختيار الملف أو قم بسحبه وإفلاته<br><span style="font-size: 0.8em; opacity: 0.7;">يجب أن يحتوي الملف على عمودين: الاسم، الرقم (متضمن كود الدولة)</span></p>
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label>نص الرسالة</label>
+            <textarea id="message-text" placeholder="اكتب رسالتك هنا... يمكنك استخدام {name} لاستبدالها باسم العميل"></textarea>
+        </div>
+
+        <button id="send-btn" disabled>إرسال للجميع</button>
+        <span class="note"><strong>ملاحظة هامة:</strong> لكي تفتح كل المحادثات بشكل صحيح، يرجى السماح بالنوافذ المنبثقة (Pop-ups) في متصفحك لهذا الموقع. إذا تم حظرها، سيتم إعلامك لتغيير الإعدادات.</span>
+
+        <div class="status" id="status-box"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('csv-file');
+        const dropZone = document.getElementById('drop-zone');
+        const fileNameDisplay = document.getElementById('file-name');
+        const sendBtn = document.getElementById('send-btn');
+        const messageInput = document.getElementById('message-text');
+        const statusBox = document.getElementById('status-box');
+        
+        let customers = [];
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            handleFile(file);
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('active');
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('active');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('active');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file) return;
+            if (!file.name.endsWith('.csv')) {
+                alert('يرجى اختيار ملف CSV');
+                return;
+            }
+            
+            fileNameDisplay.innerHTML = `<span style="color: var(--primary); font-weight: bold;">${file.name}</span>`;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                parseCSV(text);
+            };
+            reader.readAsText(file);
+        }
+
+        function parseCSV(text) {
+            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+            customers = [];
+            
+            for (let i = 0; i < lines.length; i++) {
+                const parts = lines[i].split(',');
+                if (parts.length >= 2) {
+                    let name = parts[0].trim();
+                    let number = parts[1].trim();
+                    
+                    number = number.replace(/[^\d+]/g, '');
+                    if(number.startsWith('00')) number = '+' + number.substring(2);
+                    
+                    if(name === 'الاسم' || number === 'الرقم' || name.toLowerCase() === 'name') continue;
+                    
+                    if (number.length > 5) {
+                        customers.push({ name, number });
+                    }
+                }
+            }
+            
+            if (customers.length > 0) {
+                sendBtn.disabled = false;
+                sendBtn.textContent = `إرسال إلى ${customers.length} عميل`;
+            } else {
+                sendBtn.disabled = true;
+                sendBtn.textContent = 'إرسال للجميع';
+                alert('لم يتم العثور على أرقام صحيحة في الملف. تأكد من أن الملف بصيغة CSV ويحتوي على (الاسم, الرقم)');
+            }
+        }
+
+        sendBtn.addEventListener('click', () => {
+            const template = messageInput.value.trim();
+            if (!template) {
+                alert('يرجى كتابة نص الرسالة أولاً');
+                return;
+            }
+
+            statusBox.classList.add('show');
+            statusBox.innerHTML = `جاري فتح ${customers.length} نافذة... يرجى الانتظار.`;
+            
+            let opened = 0;
+            let failed = 0;
+            
+            customers.forEach((cust, index) => {
+                setTimeout(() => {
+                    let msg = template.replace(/{name}/g, cust.name).replace(/{الاسم}/g, cust.name);
+                    let url = `https://wa.me/${encodeURIComponent(cust.number)}?text=${encodeURIComponent(msg)}`;
+                    
+                    const win = window.open(url, '_blank');
+                    if (win) {
+                        opened++;
+                    } else {
+                        failed++;
+                    }
+                    
+                    statusBox.innerHTML = `النتيجة:<br>
+                        ✅ تم فتح: ${opened} نافذة<br>
+                        ${failed > 0 ? `❌ تم حظر: ${failed} نافذة (يرجى السماح بالنوافذ المنبثقة من شريط العنوان)` : ''}`;
+                    
+                }, index * 200); // Small delay to prevent browser crash
+            });
+        });
+    </script>
+</body>
+</html>

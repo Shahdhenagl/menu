@@ -94,6 +94,10 @@ export interface RestaurantSettings {
   service_percent?: number;
   telegram_bot_token?: string;
   telegram_chat_id?: string;
+  enable_qz_printing?: boolean;
+  qz_printer_cashier?: string;
+  qz_printer_kitchen?: string;
+  qz_printer_bar?: string;
 }
 
 export interface Expense {

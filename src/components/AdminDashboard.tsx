@@ -156,6 +156,10 @@ export default function AdminDashboard({
   const [servicePercent, setServicePercent] = useState<number>(settings.service_percent || 0);
   const [telegramBotToken, setTelegramBotToken] = useState(settings.telegram_bot_token || '');
   const [telegramChatId, setTelegramChatId] = useState(settings.telegram_chat_id || '');
+  const [enableQzPrinting, setEnableQzPrinting] = useState(settings.enable_qz_printing || false);
+  const [qzPrinterCashier, setQzPrinterCashier] = useState(settings.qz_printer_cashier || '');
+  const [qzPrinterKitchen, setQzPrinterKitchen] = useState(settings.qz_printer_kitchen || '');
+  const [qzPrinterBar, setQzPrinterBar] = useState(settings.qz_printer_bar || '');
 
   const getSubUnitLabel = (baseUnit: string) => {
     if (!baseUnit) return null;
@@ -1350,6 +1354,10 @@ export default function AdminDashboard({
     setOffers(settings.offers || []);
     setTelegramBotToken(settings.telegram_bot_token || '');
     setTelegramChatId(settings.telegram_chat_id || '');
+    setEnableQzPrinting(settings.enable_qz_printing || false);
+    setQzPrinterCashier(settings.qz_printer_cashier || '');
+    setQzPrinterKitchen(settings.qz_printer_kitchen || '');
+    setQzPrinterBar(settings.qz_printer_bar || '');
   }, [settings]);
 
   // Passcode gate validation
@@ -2254,7 +2262,11 @@ export default function AdminDashboard({
         tax_percent: taxPercent,
         service_percent: servicePercent,
         telegram_bot_token: telegramBotToken,
-        telegram_chat_id: telegramChatId
+        telegram_chat_id: telegramChatId,
+        enable_qz_printing: enableQzPrinting,
+        qz_printer_cashier: qzPrinterCashier,
+        qz_printer_kitchen: qzPrinterKitchen,
+        qz_printer_bar: qzPrinterBar
       });
       await refreshData();
       alert(language === 'ar' ? 'تم حفظ إعدادات النظام بنجاح!' : 'System settings saved successfully!');
@@ -4876,6 +4888,61 @@ export default function AdminDashboard({
                   />
                 </div>
               </div>
+
+              {/* QZ Tray Printing Settings */}
+              <h3 style={{ color: 'var(--gold-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginTop: '2rem' }}>
+                {language === 'ar' ? 'إعدادات الطباعة التلقائية (QZ Tray)' : 'Auto Printing Settings (QZ Tray)'}
+              </h3>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-color)' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={enableQzPrinting} 
+                    onChange={(e) => setEnableQzPrinting(e.target.checked)} 
+                    style={{ width: '18px', height: '18px' }}
+                  />
+                  {language === 'ar' ? 'تفعيل الطباعة التلقائية (بدون نافذة منبثقة)' : 'Enable Auto Printing (No Popup)'}
+                </label>
+              </div>
+
+              {enableQzPrinting && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '1.5rem', background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'طابعة الكاشير' : 'Cashier Printer'}</label>
+                    <input 
+                      type="text" 
+                      className="input-gold" 
+                      value={qzPrinterCashier} 
+                      onChange={(e) => setQzPrinterCashier(e.target.value)} 
+                      placeholder="e.g. EPSON TM-T20III"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'طابعة المطبخ' : 'Kitchen Printer'}</label>
+                    <input 
+                      type="text" 
+                      className="input-gold" 
+                      value={qzPrinterKitchen} 
+                      onChange={(e) => setQzPrinterKitchen(e.target.value)} 
+                      placeholder="e.g. Kitchen Printer"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'طابعة البار' : 'Bar Printer'}</label>
+                    <input 
+                      type="text" 
+                      className="input-gold" 
+                      value={qzPrinterBar} 
+                      onChange={(e) => setQzPrinterBar(e.target.value)} 
+                      placeholder="e.g. Bar Printer"
+                    />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1', fontSize: '0.85rem', color: '#ff9800' }}>
+                    {language === 'ar' ? 'ملاحظة: يجب كتابة اسم الطابعة كما هو موجود في نظام التشغيل بالضبط. ويجب أن يكون برنامج QZ Tray يعمل في الخلفية.' : 'Note: Printer name must exactly match the OS printer name. QZ Tray app must be running.'}
+                  </div>
+                </div>
+              )}
 
               {/* Promo code custom additions */}
               <h3 style={{ color: 'var(--gold-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>

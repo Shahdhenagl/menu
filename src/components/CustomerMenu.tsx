@@ -34,6 +34,7 @@ export default function CustomerMenu({
 }: CustomerMenuProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [websiteDepartment, setWebsiteDepartment] = useState<'restaurant'|'bar'>('restaurant');
   
   // Drag to scroll functionality
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -69,6 +70,10 @@ export default function CustomerMenu({
 
   // Filter products by category and search query
   const filteredProducts = products.filter(p => {
+    const pCat = categories.find(c => c.id === p.category_id);
+    const pDept = pCat ? (pCat.department || 'restaurant') : 'restaurant';
+    if (pDept !== websiteDepartment) return false;
+
     const matchCategory = selectedCategory === 'all' || p.category_id === selectedCategory;
     const matchSearch = searchQuery.trim() === '' || 
       p.name_ar.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -229,6 +234,20 @@ export default function CustomerMenu({
           />
         </div>
 
+        {/* Department Switcher */}
+        <div style={{ display: 'flex', padding: '0 10px', gap: '10px', marginBottom: '15px' }}>
+          <button 
+            onClick={() => { setWebsiteDepartment('restaurant'); setSelectedCategory('all'); }} 
+            style={{ flex: 1, padding: '12px', background: websiteDepartment === 'restaurant' ? 'var(--gold-primary)' : 'rgba(255,255,255,0.05)', color: websiteDepartment === 'restaurant' ? '#000' : 'var(--text-color)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.3s ease' }}>
+            {language === 'ar' ? 'المطعم' : 'Restaurant'}
+          </button>
+          <button 
+            onClick={() => { setWebsiteDepartment('bar'); setSelectedCategory('all'); }} 
+            style={{ flex: 1, padding: '12px', background: websiteDepartment === 'bar' ? '#3b82f6' : 'rgba(255,255,255,0.05)', color: websiteDepartment === 'bar' ? '#fff' : 'var(--text-color)', border: '1px solid var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.3s ease' }}>
+            {language === 'ar' ? 'البار' : 'Bar'}
+          </button>
+        </div>
+
         {/* Categories Tab Carousel */}
         <div 
           className={`categories-container ${isDragging ? 'dragging' : ''}`}
@@ -245,7 +264,7 @@ export default function CustomerMenu({
           >
             {t.allCategories}
           </button>
-          {categories.map((cat) => (
+          {categories.filter(c => (c.department || 'restaurant') === websiteDepartment).map((cat) => (
             <button 
               key={cat.id} 
               className={`category-tab ${selectedCategory === cat.id ? 'active' : ''}`}
