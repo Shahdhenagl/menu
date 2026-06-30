@@ -56,7 +56,7 @@ export interface Order {
   order_type?: 'takeaway' | 'talabat' | 'dine_in' | 'delivery' | 'website';
   waiter_id?: string;
   waiter_name?: string;
-  payment_method?: 'cash' | 'visa' | 'wallet' | 'instapay' | 'split' | 'deferred' | 'hospitality'; // Added hospitality (ضيافة)
+  payment_method?: 'cash' | 'visa' | 'wallet' | 'bar_wallet' | 'instapay' | 'split' | 'deferred' | 'hospitality'; // wallet=محفظة المطبخ, bar_wallet=محفظة البار, hospitality=ضيافة
   payment_details?: any; // JSON representation of split payments
   inventory_deducted?: boolean;
   created_at: string;
@@ -105,7 +105,9 @@ export interface Expense {
   name: string;
   type: string; // classification e.g. 'بضائع', 'مرتبات', etc.
   amount: number;
-  payment_method: 'cash' | 'visa' | 'wallet' | 'instapay';
+  // 'partner' => المصروف اتدفع من عُهدة شريك (مش من حسابات الكاش) ويتسجّل على الشريك في partner_id
+  payment_method: 'cash' | 'visa' | 'wallet' | 'bar_wallet' | 'instapay' | 'partner';
+  partner_id?: string; // الشريك اللي اتخصم من عُهدته لو payment_method = 'partner'
   expense_date: string;
   created_at?: string;
 }
@@ -292,8 +294,8 @@ export interface FinancialTransaction {
   id: string;
   type: 'fund_transfer' | 'debt_settlement';
   amount: number;
-  from_method?: 'cash' | 'visa' | 'wallet' | 'instapay' | 'deferred';
-  to_method?: 'cash' | 'visa' | 'wallet' | 'instapay' | 'deferred';
+  from_method?: 'cash' | 'visa' | 'wallet' | 'bar_wallet' | 'instapay' | 'deferred';
+  to_method?: 'cash' | 'visa' | 'wallet' | 'bar_wallet' | 'instapay' | 'deferred';
   description?: string;
   customer_id?: string;
   created_at?: string;

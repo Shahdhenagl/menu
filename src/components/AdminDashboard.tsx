@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct, InventoryMovement } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct, InventoryMovement, Partner } from '../types';
 import { db, supabase } from '../lib/supabase';
 import { warehouseHoldsItem, warehouseValue, warehouseStock } from '../lib/warehouse';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
@@ -269,8 +269,11 @@ export default function AdminDashboard({
   const [customExpType, setCustomExpType] = useState('');
   const [expAmount, setExpAmount] = useState(0);
   const [expDate, setExpDate] = useState(() => getLocalDayStr());
-  const [expPaymentMethod, setExpPaymentMethod] = useState<'cash' | 'visa' | 'wallet' | 'instapay'>('cash');
-  
+  const [expPaymentMethod, setExpPaymentMethod] = useState<'cash' | 'visa' | 'wallet' | 'bar_wallet' | 'instapay' | 'partner'>('cash');
+  // عُهدة الشركاء: لو الدفع من عُهدة شريك، نختار الشريك هنا
+  const [expPartners, setExpPartners] = useState<Partner[]>([]);
+  const [expPartnerId, setExpPartnerId] = useState('');
+
   // Expenses filtering states
   const [expFilterType, setExpFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
   const [expFilterDay, setExpFilterDay] = useState<string>(() => getLocalDayStr());
@@ -297,8 +300,9 @@ export default function AdminDashboard({
 
   const fetchExpenses = async () => {
     try {
-      const data = await db.getExpenses();
+      const [data, prtns] = await Promise.all([db.getExpenses(), db.getPartners()]);
       setExpenses(data);
+      setExpPartners(prtns as Partner[]);
     } catch (err) {
       console.error("Error loading expenses:", err);
     }
@@ -1309,16 +1313,33 @@ export default function AdminDashboard({
       alert(language === 'ar' ? 'يرجى إدخال اسم المصروف وقيمة صالحة!' : 'Please enter cost name and a valid amount!');
       return;
     }
+    // لو الدفع من عُهدة شريك لازم نختار الشريك
+    if (expPaymentMethod === 'partner' && !expPartnerId) {
+      alert(language === 'ar' ? 'يرجى اختيار الشريك الذي سيُخصم من عُهدته!' : 'Please select the partner to deduct from!');
+      return;
+    }
     setLoading(true);
     try {
       const finalType = expType === 'custom' ? customExpType.trim() : expType;
+      const amountNum = Number(expAmount);
       await db.addExpense({
         name: expName.trim(),
         type: finalType || 'أخرى',
-        amount: Number(expAmount),
+        amount: amountNum,
         payment_method: expPaymentMethod,
+        ...(expPaymentMethod === 'partner' ? { partner_id: expPartnerId } : {}),
         expense_date: expDate
       });
+      // لو من عُهدة شريك: نسجّل خصم (debit) على الشريك بقيمة المصروف
+      if (expPaymentMethod === 'partner') {
+        const partnerName = expPartners.find(p => p.id === expPartnerId)?.name || '';
+        await db.addPartnerTransaction({
+          partner_id: expPartnerId,
+          type: 'debit',
+          amount: amountNum,
+          description: `مصروف من العُهدة: ${expName.trim()}${partnerName ? ' (' + partnerName + ')' : ''}`
+        });
+      }
       await fetchExpenses();
       setExpModalOpen(false);
       setExpName('');
@@ -1327,6 +1348,7 @@ export default function AdminDashboard({
       setExpAmount(0);
       setExpDate(getLocalDayStr());
       setExpPaymentMethod('cash');
+      setExpPartnerId('');
       alert(language === 'ar' ? 'تم تسجيل المصروف بنجاح!' : 'Expense recorded successfully!');
     } catch (err) {
       console.error(err);
@@ -2401,6 +2423,7 @@ export default function AdminDashboard({
     cash: { revenue: 0, expenses: 0, net: 0 },
     visa: { revenue: 0, expenses: 0, net: 0 },
     wallet: { revenue: 0, expenses: 0, net: 0 },
+    bar_wallet: { revenue: 0, expenses: 0, net: 0 },
     instapay: { revenue: 0, expenses: 0, net: 0 }
   };
 
@@ -2418,7 +2441,8 @@ export default function AdminDashboard({
   });
 
   analyticsFilteredExpenses.forEach(exp => {
-    const method = exp.payment_method;
+    // مصروفات عُهدة الشريك (partner) مش بتتخصم من حسابات الكاش، فبنتجاهلها هنا
+    const method = exp.payment_method as keyof typeof paymentMethodsStats;
     if (method && paymentMethodsStats[method]) {
       paymentMethodsStats[method].expenses += exp.amount;
     }
@@ -2485,7 +2509,7 @@ export default function AdminDashboard({
           <tbody>
             ${(Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).map(m => {
               const stats = paymentMethodsStats[m];
-              const name = m === 'cash' ? '💵 كاش (نقدي)' : m === 'visa' ? '💳 فيزا' : m === 'wallet' ? '📱 محفظة' : '⚡ إنستا باي';
+              const name = m === 'cash' ? '💵 كاش (نقدي)' : m === 'visa' ? '💳 فيزا' : m === 'wallet' ? '📱 محفظة المطبخ' : m === 'bar_wallet' ? '🍸 محفظة البار' : '⚡ إنستا باي';
               return `
                 <tr>
                   <td><strong>${name}</strong></td>
@@ -2584,7 +2608,7 @@ export default function AdminDashboard({
           </thead>
           <tbody>
             ${filteredExpenses.map(e => {
-              const p = e.payment_method === 'cash' ? '💵 كاش' : e.payment_method === 'visa' ? '💳 فيزا' : e.payment_method === 'wallet' ? '📱 محفظة' : '⚡ إنستا باي';
+              const p = e.payment_method === 'cash' ? '💵 كاش' : e.payment_method === 'visa' ? '💳 فيزا' : e.payment_method === 'wallet' ? '📱 محفظة المطبخ' : e.payment_method === 'bar_wallet' ? '🍸 محفظة البار' : e.payment_method === 'partner' ? ('🤝 عُهدة ' + (expPartners.find(pt => pt.id === e.partner_id)?.name || 'شريك')) : '⚡ إنستا باي';
               return `
                 <tr>
                   <td><strong>${e.name}</strong></td>
@@ -3537,8 +3561,8 @@ export default function AdminDashboard({
                   <tbody>
                     {(Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).map((method) => {
                       const stats = paymentMethodsStats[method];
-                      const methodNameAr = method === 'cash' ? '💵 كاش (نقدي)' : method === 'visa' ? '💳 فيزا (بطاقة)' : method === 'wallet' ? '📱 محفظة إلكترونية' : '⚡ إنستا باي';
-                      const methodNameEn = method === 'cash' ? 'Cash' : method === 'visa' ? 'Visa / Card' : method === 'wallet' ? 'Mobile Wallet' : 'InstaPay';
+                      const methodNameAr = method === 'cash' ? '💵 كاش (نقدي)' : method === 'visa' ? '💳 فيزا (بطاقة)' : method === 'wallet' ? '📱 محفظة المطبخ' : method === 'bar_wallet' ? '🍸 محفظة البار' : '⚡ إنستا باي';
+                      const methodNameEn = method === 'cash' ? 'Cash' : method === 'visa' ? 'Visa / Card' : method === 'wallet' ? 'Kitchen Wallet' : method === 'bar_wallet' ? 'Bar Wallet' : 'InstaPay';
                       return (
                         <tr key={method}>
                           <td style={{ fontWeight: 'bold', color: 'var(--text-white)' }}>
@@ -4119,7 +4143,8 @@ export default function AdminDashboard({
                                 if (method === 'cash') return language === 'ar' ? '💵 كاش' : '💵 Cash';
                                 if (method === 'visa') return language === 'ar' ? '💳 فيزا / بطاقة' : '💳 Visa / Card';
                                 if (method === 'instapay') return language === 'ar' ? '📱 انستا باي' : '📱 InstaPay';
-                                if (method === 'wallet') return language === 'ar' ? '💼 محفظة إلكترونية' : '💼 E-Wallet';
+                                if (method === 'wallet') return language === 'ar' ? '💼 محفظة المطبخ' : '💼 Kitchen Wallet';
+                                if (method === 'bar_wallet') return language === 'ar' ? '🍸 محفظة البار' : '🍸 Bar Wallet';
                                 return language === 'ar' ? '✅ تم الدفع' : '✅ Paid';
                               })()}
                             </div>
@@ -4630,7 +4655,7 @@ export default function AdminDashboard({
                           {filteredInvoices.map(inv => {
                             const cost = inv.total_cost || 0;
                             const profit = inv.total_price - cost;
-                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet' ? '📱 محفظة' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : '💵 كاش';
+                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet' ? '📱 محفظة المطبخ' : inv.payment_method === 'bar_wallet' ? '🍸 محفظة البار' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : '💵 كاش';
                             const typeLabel = inv.order_type === 'dine_in' ? '🍽️' : inv.order_type === 'takeaway' ? '🥡' : inv.order_type === 'delivery' ? '🚗' : inv.order_type === 'talabat' ? '📱' : '—';
                             return (
                               <tr key={inv.id}>
@@ -4660,7 +4685,8 @@ export default function AdminDashboard({
                                           payInfo = `\n${language === 'ar' ? 'تفاصيل الدفع:' : 'Payment Details:'}\n` +
                                             (pd.cash ? `  كاش: ${pd.cash}\n` : '') +
                                             (pd.visa ? `  فيزا: ${pd.visa}\n` : '') +
-                                            (pd.wallet ? `  محفظة: ${pd.wallet}\n` : '') +
+                                            (pd.wallet ? `  محفظة المطبخ: ${pd.wallet}\n` : '') +
+                                            (pd.bar_wallet ? `  محفظة البار: ${pd.bar_wallet}\n` : '') +
                                             (pd.instapay ? `  انستاباي: ${pd.instapay}\n` : '') +
                                             (pd.deferred ? `  آجل: ${pd.deferred}\n` : '');
                                         }
@@ -5227,7 +5253,7 @@ export default function AdminDashboard({
                           </td>
                           <td>
                             <span style={{ fontWeight: '600' }}>
-                              {exp.payment_method === 'cash' ? '💵 كاش' : exp.payment_method === 'visa' ? '💳 فيزا' : exp.payment_method === 'wallet' ? '📱 محفظة' : '⚡ انستا باي'}
+                              {exp.payment_method === 'cash' ? '💵 كاش' : exp.payment_method === 'visa' ? '💳 فيزا' : exp.payment_method === 'wallet' ? '📱 محفظة المطبخ' : exp.payment_method === 'bar_wallet' ? '🍸 محفظة البار' : exp.payment_method === 'partner' ? ('🤝 عُهدة ' + (expPartners.find(pt => pt.id === exp.partner_id)?.name || 'شريك')) : '⚡ انستا باي'}
                             </span>
                           </td>
                           <td className="font-en" style={{ fontSize: '0.85rem' }}>{exp.expense_date}</td>
@@ -7502,7 +7528,7 @@ export default function AdminDashboard({
                   >
                     <span style={{ fontSize: '1.5rem' }}>💼</span>
                     <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: selectedPaymentMethod === 'wallet' ? 'var(--gold-primary)' : 'var(--text-white)' }}>
-                      {language === 'ar' ? 'محفظة إلكترونية' : 'E-Wallet'}
+                      {language === 'ar' ? 'محفظة المطبخ' : 'Kitchen Wallet'}
                     </span>
                   </button>
 
@@ -7695,7 +7721,30 @@ export default function AdminDashboard({
                       }}
                     >
                       <span>📱</span>
-                      <span>{language === 'ar' ? 'محفظة إلكترونية' : 'E-Wallet'}</span>
+                      <span>{language === 'ar' ? 'محفظة المطبخ' : 'Kitchen Wallet'}</span>
+                    </button>
+
+                    {/* Bar Wallet Option */}
+                    <button
+                      type="button"
+                      className={expPaymentMethod === 'bar_wallet' ? 'btn-gold' : 'btn-outline-gold'}
+                      onClick={() => setExpPaymentMethod('bar_wallet')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        padding: '0.6rem',
+                        borderRadius: '10px',
+                        borderWidth: '1.5px',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                        transition: 'all 0.2s ease',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <span>🍸</span>
+                      <span>{language === 'ar' ? 'محفظة البار' : 'Bar Wallet'}</span>
                     </button>
 
                     {/* Instapay Option */}
@@ -7721,7 +7770,56 @@ export default function AdminDashboard({
                       <span>{language === 'ar' ? 'إنستا باي' : 'Instapay'}</span>
                     </button>
 
+                    {/* Partner Custody Option (عُهدة شريك) */}
+                    <button
+                      type="button"
+                      className={expPaymentMethod === 'partner' ? 'btn-gold' : 'btn-outline-gold'}
+                      onClick={() => setExpPaymentMethod('partner')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        padding: '0.6rem',
+                        borderRadius: '10px',
+                        borderWidth: '1.5px',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                        transition: 'all 0.2s ease',
+                        cursor: 'pointer',
+                        gridColumn: '1 / -1'
+                      }}
+                    >
+                      <span>🤝</span>
+                      <span>{language === 'ar' ? 'من عُهدة شريك' : 'From Partner Custody'}</span>
+                    </button>
+
                   </div>
+
+                  {/* Partner selector — only when paying from a partner's custody */}
+                  {expPaymentMethod === 'partner' && (
+                    <div className="form-group" style={{ marginTop: '0.4rem' }}>
+                      <label style={{ fontSize: '0.9rem', color: 'var(--gold-primary)', fontWeight: 'bold', display: 'block', marginBottom: '0.4rem' }}>
+                        {language === 'ar' ? 'اختر الشريك (هيتخصم من عُهدته) *' : 'Select Partner (deducted from custody) *'}
+                      </label>
+                      <select
+                        className="input-gold"
+                        value={expPartnerId}
+                        onChange={(e) => setExpPartnerId(e.target.value)}
+                        style={{ width: '100%' }}
+                      >
+                        <option value="">{language === 'ar' ? '— اختر الشريك —' : '— Select partner —'}</option>
+                        {expPartners.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                      {expPartners.length === 0 && (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--danger)' }}>
+                          {language === 'ar' ? 'لا يوجد شركاء — أضف شريكاً من تبويب «العهد والشركاء» أولاً.' : 'No partners — add one from the Partners tab first.'}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -9212,7 +9310,7 @@ export default function AdminDashboard({
                   >
                     <option value="cash">{language === 'ar' ? 'نقدًا (كاش)' : 'Cash'}</option>
                     <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
-                    <option value="wallet">{language === 'ar' ? 'محفظة' : 'Wallet'}</option>
+                    <option value="wallet">{language === 'ar' ? 'محفظة المطبخ' : 'Kitchen Wallet'}</option>
                     <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
                   </select>
                 </div>

@@ -80,6 +80,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [payCash, setPayCash] = useState<number | ''>('');
   const [payVisa, setPayVisa] = useState<number | ''>('');
   const [payWallet, setPayWallet] = useState<number | ''>('');
+  const [payBarWallet, setPayBarWallet] = useState<number | ''>('');
   const [payInstapay, setPayInstapay] = useState<number | ''>('');
   const [payIsDeferred, setPayIsDeferred] = useState(false);
   const [payCustomerId, setPayCustomerId] = useState('');
@@ -1490,6 +1491,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               setPayCash('');
                               setPayVisa('');
                               setPayWallet('');
+                              setPayBarWallet('');
                               setPayInstapay('');
                               setPayIsDeferred(false);
                               setPayCustomerId(order.customer_id || '');
@@ -1762,14 +1764,28 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
-                      📱 {language === 'ar' ? 'محفظة إلكترونية:' : 'Mobile Wallet:'}
+                      📱 {language === 'ar' ? 'محفظة المطبخ:' : 'Kitchen Wallet:'}
                     </label>
-                    <input 
+                    <input
                       type="number"
                       className="pos-input"
                       placeholder="0.00"
                       value={payWallet}
                       onChange={(e) => setPayWallet(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      min="0"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                      🍸 {language === 'ar' ? 'محفظة البار:' : 'Bar Wallet:'}
+                    </label>
+                    <input
+                      type="number"
+                      className="pos-input"
+                      placeholder="0.00"
+                      value={payBarWallet}
+                      onChange={(e) => setPayBarWallet(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       min="0"
                     />
                   </div>
@@ -1922,8 +1938,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   const cashVal = Number(payCash) || 0;
                   const visaVal = Number(payVisa) || 0;
                   const walletVal = Number(payWallet) || 0;
+                  const barWalletVal = Number(payBarWallet) || 0;
                   const instapayVal = Number(payInstapay) || 0;
-                  const totalPaid = cashVal + visaVal + walletVal + instapayVal;
+                  const totalPaid = cashVal + visaVal + walletVal + barWalletVal + instapayVal;
                   const remaining = collectPaymentOrder.total_price - totalPaid;
 
                   let statusText = '';
@@ -1991,6 +2008,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 cashVal > 0 && 'cash',
                                 visaVal > 0 && 'visa',
                                 walletVal > 0 && 'wallet',
+                                barWalletVal > 0 && 'bar_wallet',
                                 instapayVal > 0 && 'instapay',
                                 remaining > 0.01 && payIsDeferred && 'deferred'
                               ].filter(Boolean) as string[];
@@ -2005,6 +2023,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 cash: cashVal,
                                 visa: visaVal,
                                 wallet: walletVal,
+                                bar_wallet: barWalletVal,
                                 instapay: instapayVal,
                                 deferred: remaining > 0.01 && payIsDeferred ? remaining : 0,
                                 customer_id: remaining > 0.01 && payIsDeferred ? payCustomerId : undefined

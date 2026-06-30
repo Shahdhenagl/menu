@@ -1069,7 +1069,7 @@ export const db = {
       const pay: string[] = [];
       if (Number(invoice.paid_cash)) pay.push(`كاش ${fmt(invoice.paid_cash)}`);
       if (Number(invoice.paid_visa)) pay.push(`فيزا ${fmt(invoice.paid_visa)}`);
-      if (Number(invoice.paid_wallet)) pay.push(`محفظة ${fmt(invoice.paid_wallet)}`);
+      if (Number(invoice.paid_wallet)) pay.push(`محفظة المطبخ ${fmt(invoice.paid_wallet)}`);
       if (Number(invoice.paid_instapay)) pay.push(`إنستاباي ${fmt(invoice.paid_instapay)}`);
       let dateStr = '';
       try { dateStr = invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('ar-EG') : ''; } catch (e) {}

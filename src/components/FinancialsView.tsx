@@ -64,13 +64,14 @@ export default function FinancialsView({
   const netCashflow = totalRevenue - totalExpenses; // Note: Revenue now includes deferred, so true net cashflow requires checking balances
 
   // Revenue Breakdown (5 Categories)
-  const revenueByType = { cash: 0, visa: 0, wallet: 0, instapay: 0, deferred: 0 };
-  
+  const revenueByType = { cash: 0, visa: 0, wallet: 0, bar_wallet: 0, instapay: 0, deferred: 0 };
+
   filteredOrders.forEach(o => {
     if (o.payment_method === 'split' && o.payment_details) {
       revenueByType.cash += (o.payment_details.cash || 0);
       revenueByType.visa += (o.payment_details.visa || 0);
       revenueByType.wallet += (o.payment_details.wallet || 0);
+      revenueByType.bar_wallet += (o.payment_details.bar_wallet || 0);
       revenueByType.instapay += (o.payment_details.instapay || 0);
       revenueByType.deferred += (o.payment_details.deferred || 0);
     } else {
@@ -84,8 +85,8 @@ export default function FinancialsView({
   });
 
   // Actual Vault/Bank balances (All Time)
-  const actualBalances = { cash: 0, visa: 0, wallet: 0, instapay: 0, deferred: 0 };
-  
+  const actualBalances = { cash: 0, visa: 0, wallet: 0, bar_wallet: 0, instapay: 0, deferred: 0 };
+
   // 1. Add All Revenues
   const allCompletedOrders = orders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality');
   allCompletedOrders.forEach(o => {
@@ -93,6 +94,7 @@ export default function FinancialsView({
       actualBalances.cash += (o.payment_details.cash || 0);
       actualBalances.visa += (o.payment_details.visa || 0);
       actualBalances.wallet += (o.payment_details.wallet || 0);
+      actualBalances.bar_wallet += (o.payment_details.bar_wallet || 0);
       actualBalances.instapay += (o.payment_details.instapay || 0);
       actualBalances.deferred += (o.payment_details.deferred || 0);
     } else {
@@ -132,10 +134,12 @@ export default function FinancialsView({
     switch(method) {
       case 'cash': return language === 'ar' ? 'كاش' : 'Cash';
       case 'visa': return language === 'ar' ? 'فيزا' : 'Visa';
-      case 'wallet': return language === 'ar' ? 'محفظة' : 'Wallet';
+      case 'wallet': return language === 'ar' ? 'محفظة المطبخ' : 'Kitchen Wallet';
+      case 'bar_wallet': return language === 'ar' ? 'محفظة البار' : 'Bar Wallet';
       case 'instapay': return language === 'ar' ? 'إنستاباي' : 'Instapay';
       case 'deferred': return language === 'ar' ? 'آجل (مديونية)' : 'Deferred (Debt)';
       case 'split': return language === 'ar' ? 'دفع مقسم' : 'Split Payment';
+      case 'partner': return language === 'ar' ? 'عُهدة شريك' : 'Partner Custody';
       default: return method;
     }
   };
@@ -145,6 +149,7 @@ export default function FinancialsView({
       case 'cash': return '#10b981'; // Green
       case 'visa': return '#3b82f6'; // Blue
       case 'wallet': return '#8b5cf6'; // Purple
+      case 'bar_wallet': return '#ec4899'; // Pink
       case 'instapay': return '#f59e0b'; // Orange
       case 'deferred': return '#ef4444'; // Red
       default: return '#6b7280';
@@ -250,7 +255,7 @@ export default function FinancialsView({
             {language === 'ar' ? 'أرصدة الخزينة والحسابات (خلال الفترة)' : 'Treasury Balances (Period)'}
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-            {['cash', 'visa', 'wallet', 'instapay', 'deferred'].map(method => (
+            {['cash', 'visa', 'wallet', 'bar_wallet', 'instapay', 'deferred'].map(method => (
               <div key={method} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '12px', border: `1px solid ${getMethodColor(method)}` }}>
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-gray)' }}>{getMethodLabel(method)}</div>
                 <div className="font-en" style={{ fontSize: '1.4rem', fontWeight: '800', color: getMethodColor(method) }}>
@@ -392,7 +397,8 @@ export default function FinancialsView({
                 <select className="input-gold" value={transferFrom} onChange={e => setTransferFrom(e.target.value)} style={{ width: '100%' }}>
                   <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
                   <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
-                  <option value="wallet">{language === 'ar' ? 'محفظة' : 'Wallet'}</option>
+                  <option value="wallet">{language === 'ar' ? 'محفظة المطبخ' : 'Kitchen Wallet'}</option>
+                  <option value="bar_wallet">{language === 'ar' ? 'محفظة البار' : 'Bar Wallet'}</option>
                   <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
                 </select>
               </div>
@@ -404,7 +410,8 @@ export default function FinancialsView({
                 <select className="input-gold" value={transferTo} onChange={e => setTransferTo(e.target.value)} style={{ width: '100%' }}>
                   <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
                   <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
-                  <option value="wallet">{language === 'ar' ? 'محفظة' : 'Wallet'}</option>
+                  <option value="wallet">{language === 'ar' ? 'محفظة المطبخ' : 'Kitchen Wallet'}</option>
+                  <option value="bar_wallet">{language === 'ar' ? 'محفظة البار' : 'Bar Wallet'}</option>
                   <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
                 </select>
               </div>

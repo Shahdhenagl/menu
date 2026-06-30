@@ -201,7 +201,8 @@ export const printCustomerReceipt = async (
 
   const paymentMethodStr = order.payment_method === 'cash' ? (isAr ? 'كاش' : 'Cash') :
                            order.payment_method === 'visa' ? (isAr ? 'فيزا' : 'Visa') :
-                           order.payment_method === 'wallet' ? (isAr ? 'محفظة إلكترونية' : 'E-Wallet') :
+                           order.payment_method === 'wallet' ? (isAr ? 'محفظة المطبخ' : 'Kitchen Wallet') :
+                           order.payment_method === 'bar_wallet' ? (isAr ? 'محفظة البار' : 'Bar Wallet') :
                            order.payment_method === 'instapay' ? (isAr ? 'إنستاباي' : 'InstaPay') :
                            order.payment_method === 'split' ? (isAr ? 'مقسم' : 'Split') :
                            order.payment_method === 'deferred' ? (isAr ? 'آجل' : 'Deferred') :
