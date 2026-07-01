@@ -1,9 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/supabase';
 import type { InventoryItem, InventoryMovement } from '../types';
-import { warehouseHoldsItem, warehouseStock } from '../lib/warehouse';
-import { Calendar, PackageOpen, TrendingDown, ArrowDownRight, ArrowUpRight, Search, FileText, FileSpreadsheet } from 'lucide-react';
+import { warehouseHoldsItem, warehouseStock, warehouseValue } from '../lib/warehouse';
+import { Calendar, PackageOpen, TrendingDown, ArrowDownRight, ArrowUpRight, Search, FileText, FileSpreadsheet, ClipboardCheck, X, AlertTriangle, CheckCircle2, Send } from 'lucide-react';
 import * as XLSX from 'xlsx';
+
+const STOCK_FIELD: Record<'main' | 'factory' | 'distribution', 'stock_main' | 'stock_factory' | 'stock_distribution'> = {
+  main: 'stock_main',
+  factory: 'stock_factory',
+  distribution: 'stock_distribution',
+};
 
 interface InventoryReportViewProps {
   language: 'ar' | 'en';
@@ -22,6 +28,12 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
   const [selectedWarehouse, setSelectedWarehouse] = useState<WarehouseKey>('main');
   const [search, setSearch] = useState('');
   const [hideZero, setHideZero] = useState(true);
+
+  // --- تقفيل الجرد (Physical stock-taking / close inventory) ---
+  const [countOpen, setCountOpen] = useState(false);
+  const [counts, setCounts] = useState<Record<string, string>>({});
+  const [countSearch, setCountSearch] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -101,6 +113,135 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
       return true;
     });
   }, [reportData.itemStats, search, hideZero]);
+
+  // كل أصناف المخزن المختار (بغضّ النظر عن الحركة) — دي أساس الجرد الفعلي
+  const countItems = useMemo(
+    () => items.filter(i => warehouseHoldsItem(selectedWarehouse, i)),
+    [items, selectedWarehouse]
+  );
+
+  const visibleCountItems = useMemo(() => {
+    const q = countSearch.trim().toLowerCase();
+    if (!q) return countItems;
+    return countItems.filter(i => i.name.toLowerCase().includes(q));
+  }, [countItems, countSearch]);
+
+  // ملخّص الجرد: الفروقات، الهدر، الزيادات، قيمة المخزون قبل/بعد
+  const countSummary = useMemo(() => {
+    let wasteValue = 0, surplusValue = 0, wasteItems = 0, surplusItems = 0, countedCount = 0;
+    const changes: { item: InventoryItem; expected: number; actual: number; diff: number; price: number; val: number }[] = [];
+    for (const item of countItems) {
+      const raw = counts[item.id];
+      if (raw === undefined || raw === '') continue;
+      const actual = Number(raw);
+      if (!isFinite(actual) || actual < 0) continue;
+      countedCount++;
+      const expected = warehouseStock(selectedWarehouse, item);
+      const diff = actual - expected;
+      if (Math.abs(diff) < 1e-9) continue;
+      const price = item.avg_purchase_price || 0;
+      const val = Math.abs(diff) * price;
+      if (diff < 0) { wasteValue += val; wasteItems++; }
+      else { surplusValue += val; surplusItems++; }
+      changes.push({ item, expected, actual, diff, price, val });
+    }
+    const warehouseValueBefore = warehouseValue(selectedWarehouse, items);
+    const net = surplusValue - wasteValue;
+    return {
+      wasteValue, surplusValue, net, wasteItems, surplusItems, countedCount, changes,
+      warehouseValueBefore, warehouseValueAfter: warehouseValueBefore + net,
+    };
+  }, [countItems, counts, selectedWarehouse, items]);
+
+  const prefillCounts = () => {
+    const next: Record<string, string> = {};
+    for (const item of countItems) next[item.id] = String(warehouseStock(selectedWarehouse, item));
+    setCounts(next);
+  };
+
+  const currentUserName = () => {
+    try {
+      const adminRaw = localStorage.getItem('meridien_logged_in_user');
+      if (adminRaw) return JSON.parse(adminRaw).name || 'مدير النظام';
+      const waiterRaw = localStorage.getItem('meridien_waiter');
+      if (waiterRaw) return JSON.parse(waiterRaw).name || 'كابتن';
+    } catch (e) {}
+    return 'غير معروف';
+  };
+
+  const confirmCount = async () => {
+    const { changes } = countSummary;
+    if (changes.length === 0) {
+      alert(language === 'ar' ? 'لا توجد فروقات لتسجيلها — أدخل الجرد الفعلي أولاً.' : 'No differences to record — enter the physical count first.');
+      return;
+    }
+    if (!window.confirm(language === 'ar'
+      ? `سيتم تعديل رصيد ${changes.length} صنف حسب الجرد الفعلي وإرسال التقرير للبوت. متابعة؟`
+      : `Stock of ${changes.length} item(s) will be adjusted and a report sent. Continue?`)) return;
+
+    setSubmitting(true);
+    try {
+      const field = STOCK_FIELD[selectedWarehouse];
+      for (const ch of changes) {
+        await db.updateInventoryItem(ch.item.id, { [field]: ch.actual } as Partial<InventoryItem>);
+        await db.addInventoryMovement({
+          item_id: ch.item.id,
+          warehouse: selectedWarehouse,
+          type: ch.diff < 0 ? 'waste' : 'adjustment',
+          quantity: Math.abs(ch.diff),
+          unit_price: ch.price,
+          total_price: ch.val,
+          description: `${ch.diff < 0 ? 'عجز جرد' : 'زيادة جرد'} — تقفيل ${periodLabel}`,
+        });
+      }
+
+      // إرسال تقرير الجرد للبوت
+      try {
+        const settings = await db.getSettings();
+        const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const s = countSummary;
+        const dateStr = new Date().toLocaleString('ar-EG');
+        const details = s.changes.map(ch => {
+          const arrow = ch.diff < 0 ? '🔻' : '🔺';
+          const sign = ch.diff < 0 ? '−' : '+';
+          return `${arrow} ${ch.item.name} — متوقع ${num(ch.expected)} / فعلي ${num(ch.actual)} (${sign}${num(Math.abs(ch.diff))} ${ch.item.unit}) = ${fmt(ch.val)} ج.م`;
+        });
+        // Telegram message limit safety
+        const MAX_LINES = 45;
+        const shownDetails = details.slice(0, MAX_LINES).join('\n') + (details.length > MAX_LINES ? `\n… و ${details.length - MAX_LINES} صنف آخر` : '');
+
+        const text =
+          `🧾 <b>تقفيل الجرد الشهري</b>\n\n` +
+          `📦 <b>المخزن:</b> ${whName}\n` +
+          `🗓 <b>الفترة:</b> ${periodLabel}\n` +
+          `👤 <b>القائم بالجرد:</b> ${currentUserName()}\n` +
+          `🕐 ${dateStr}\n\n` +
+          `━━━━━━ النتيجة ━━━━━━\n` +
+          `🔴 <b>إجمالي الهدر/العجز:</b> ${fmt(s.wasteValue)} ج.م (${s.wasteItems} صنف)\n` +
+          `🟢 <b>إجمالي الزيادات:</b> ${fmt(s.surplusValue)} ج.م (${s.surplusItems} صنف)\n` +
+          `⚖️ <b>صافي الفرق:</b> ${s.net >= 0 ? '+' : '−'}${fmt(Math.abs(s.net))} ج.م\n\n` +
+          `💰 <b>قيمة المخزون قبل الجرد:</b> ${fmt(s.warehouseValueBefore)} ج.م\n` +
+          `💰 <b>قيمة المخزون بعد الجرد:</b> ${fmt(s.warehouseValueAfter)} ج.م\n\n` +
+          `━━━━━━ تفاصيل الفروقات ━━━━━━\n${shownDetails}`;
+
+        const { sendTelegramMessage } = await import('../utils/telegramUtils');
+        await sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id || '5507184715,7441837470', text);
+      } catch (tgErr) {
+        console.error('Failed to send inventory count report to Telegram', tgErr);
+      }
+
+      await fetchData();
+      setCounts({});
+      setCountSearch('');
+      setCountOpen(false);
+      alert(language === 'ar' ? '✅ تم تقفيل الجرد بنجاح وإرسال التقرير.' : '✅ Inventory closed and report sent.');
+    } catch (e) {
+      console.error(e);
+      alert(language === 'ar' ? 'حدث خطأ أثناء تقفيل الجرد.' : 'An error occurred while closing inventory.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const warehouses: { key: WarehouseKey; ar: string; en: string; sub: string }[] = [
     { key: 'main', ar: 'الرئيسي', en: 'Main', sub: language === 'ar' ? 'خام' : 'Raw' },
@@ -258,6 +399,16 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
           <p style={{ color: 'var(--text-gray)', fontSize: '0.82rem' }}>{periodLabel}</p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => { setCountSearch(''); setCountOpen(true); }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem',
+              borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem',
+              background: 'var(--gold-primary)', color: '#000',
+            }}
+          >
+            <ClipboardCheck size={16} /> {language === 'ar' ? 'تقفيل الجرد' : 'Close Inventory'}
+          </button>
           <button className="btn-export excel" onClick={exportExcel}>
             <FileSpreadsheet size={16} /> {language === 'ar' ? 'تصدير Excel' : 'Export Excel'}
           </button>
@@ -389,6 +540,174 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
           </div>
         )}
       </div>
+
+      {/* ===== مودال تقفيل الجرد ===== */}
+      {countOpen && (
+        <div
+          onClick={() => !submitting && setCountOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="custom-scrollbar"
+            style={{
+              width: '100%', maxWidth: '860px', maxHeight: '92vh', overflowY: 'auto',
+              background: 'var(--bg-dark, #14110c)', border: '1px solid rgba(212,175,55,0.35)',
+              borderRadius: '14px', padding: '1.25rem', boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            }}
+          >
+            {/* header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.5rem' }}>
+              <div>
+                <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <ClipboardCheck size={20} color="var(--gold-primary)" /> {language === 'ar' ? 'تقفيل الجرد الفعلي' : 'Close Physical Inventory'}
+                </h2>
+                <p style={{ color: 'var(--text-gray)', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>{periodLabel}</p>
+              </div>
+              <button onClick={() => !submitting && setCountOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-gray)', cursor: 'pointer', padding: 4 }}>
+                <X size={22} />
+              </button>
+            </div>
+
+            <p style={{ color: 'var(--text-gray)', fontSize: '0.82rem', marginTop: 0 }}>
+              {language === 'ar'
+                ? 'أدخل الكمية الفعلية الموجودة في المخزن لكل صنف. تُحسب الفروقات تلقائياً: النقص يُعتبر هدر والزيادة تُضاف للرصيد. الأصناف المتروكة فارغة لن تتغيّر.'
+                : 'Enter the actual counted quantity per item. Differences are computed automatically. Blank items stay unchanged.'}
+            </p>
+
+            {/* toolbar */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', margin: '0.75rem 0' }}>
+              <div style={{ position: 'relative', flex: '1 1 220px', minWidth: '180px' }}>
+                <Search size={15} style={{ position: 'absolute', insetInlineStart: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-gray)' }} />
+                <input
+                  className="input-gold"
+                  value={countSearch}
+                  onChange={(e) => setCountSearch(e.target.value)}
+                  placeholder={language === 'ar' ? 'ابحث باسم الصنف...' : 'Search item...'}
+                  style={{ width: '100%', paddingInlineStart: '2rem' }}
+                />
+              </div>
+              <button
+                onClick={prefillCounts}
+                style={{ padding: '0.5rem 0.9rem', borderRadius: '8px', border: '1px solid rgba(212,175,55,0.4)', background: 'transparent', color: 'var(--gold-primary)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap' }}
+              >
+                {language === 'ar' ? 'ملء بقيم النظام' : 'Prefill system values'}
+              </button>
+              <button
+                onClick={() => setCounts({})}
+                style={{ padding: '0.5rem 0.9rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'var(--text-gray)', cursor: 'pointer', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+              >
+                {language === 'ar' ? 'تفريغ' : 'Clear'}
+              </button>
+            </div>
+
+            {/* count table */}
+            <div style={{ overflowX: 'auto', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px' }} className="custom-scrollbar">
+              <table className="data-table" style={{ width: '100%', minWidth: '560px' }}>
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: '150px' }}>{language === 'ar' ? 'الصنف' : 'Item'}</th>
+                    <th style={{ textAlign: 'center' }}>{language === 'ar' ? 'رصيد النظام' : 'System'}</th>
+                    <th style={{ textAlign: 'center', minWidth: '120px' }}>{language === 'ar' ? 'الفعلي' : 'Actual'}</th>
+                    <th style={{ textAlign: 'center' }}>{language === 'ar' ? 'الفرق' : 'Diff'}</th>
+                    <th style={{ textAlign: 'center' }}>{language === 'ar' ? 'القيمة' : 'Value'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleCountItems.map(item => {
+                    const expected = warehouseStock(selectedWarehouse, item);
+                    const raw = counts[item.id] ?? '';
+                    const actual = raw === '' ? null : Number(raw);
+                    const valid = actual !== null && isFinite(actual) && actual >= 0;
+                    const diff = valid ? (actual as number) - expected : 0;
+                    const price = item.avg_purchase_price || 0;
+                    const val = Math.abs(diff) * price;
+                    const color = diff < 0 ? '#ef4444' : diff > 0 ? '#10b981' : 'var(--text-gray)';
+                    return (
+                      <tr key={item.id}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{item.name}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-gray)' }}>{item.unit}</div>
+                        </td>
+                        <td style={{ textAlign: 'center', color: 'var(--text-light)' }}>{num(expected)}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="number"
+                            className="input-gold"
+                            value={raw}
+                            min={0}
+                            step="any"
+                            onChange={(e) => setCounts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            placeholder="—"
+                            style={{ width: '90px', textAlign: 'center', borderColor: valid && diff !== 0 ? color : undefined }}
+                          />
+                        </td>
+                        <td style={{ textAlign: 'center', color, fontWeight: 700 }}>
+                          {valid && diff !== 0 ? `${diff > 0 ? '+' : '−'}${num(Math.abs(diff))}` : '—'}
+                        </td>
+                        <td style={{ textAlign: 'center', color, fontSize: '0.82rem' }}>
+                          {valid && diff !== 0 ? `${num(val)} EGP` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {visibleCountItems.length === 0 && (
+                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'لا توجد أصناف' : 'No items'}</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* summary */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.6rem', margin: '1rem 0' }}>
+              <div style={{ padding: '0.7rem', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-gray)', display: 'flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={13} color="#ef4444" /> {language === 'ar' ? 'الهدر/العجز' : 'Shortage'}</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#ef4444' }}>{num(countSummary.wasteValue)} <span style={{ fontSize: '0.65rem' }}>EGP</span></div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-gray)' }}>{countSummary.wasteItems} {language === 'ar' ? 'صنف' : 'items'}</div>
+              </div>
+              <div style={{ padding: '0.7rem', borderRadius: '10px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-gray)', display: 'flex', alignItems: 'center', gap: 4 }}><ArrowUpRight size={13} color="#10b981" /> {language === 'ar' ? 'الزيادات' : 'Surplus'}</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#10b981' }}>{num(countSummary.surplusValue)} <span style={{ fontSize: '0.65rem' }}>EGP</span></div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-gray)' }}>{countSummary.surplusItems} {language === 'ar' ? 'صنف' : 'items'}</div>
+              </div>
+              <div style={{ padding: '0.7rem', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'قيمة المخزون قبل' : 'Value before'}</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-light)' }}>{num(countSummary.warehouseValueBefore)} <span style={{ fontSize: '0.65rem' }}>EGP</span></div>
+              </div>
+              <div style={{ padding: '0.7rem', borderRadius: '10px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'قيمة المخزون بعد' : 'Value after'}</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f59e0b' }}>{num(countSummary.warehouseValueAfter)} <span style={{ fontSize: '0.65rem' }}>EGP</span></div>
+              </div>
+            </div>
+
+            {/* actions */}
+            <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => !submitting && setCountOpen(false)}
+                disabled={submitting}
+                style={{ padding: '0.6rem 1.2rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'var(--text-light)', cursor: submitting ? 'not-allowed' : 'pointer' }}
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                onClick={confirmCount}
+                disabled={submitting || countSummary.changes.length === 0}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.4rem', borderRadius: '8px', border: 'none',
+                  fontWeight: 700, cursor: submitting || countSummary.changes.length === 0 ? 'not-allowed' : 'pointer',
+                  background: countSummary.changes.length === 0 ? 'rgba(255,255,255,0.1)' : 'var(--gold-primary)',
+                  color: countSummary.changes.length === 0 ? 'var(--text-gray)' : '#000', opacity: submitting ? 0.7 : 1,
+                }}
+              >
+                {submitting ? <>{language === 'ar' ? 'جارٍ التنفيذ...' : 'Processing...'}</> : <><CheckCircle2 size={17} /> {language === 'ar' ? `تأكيد الجرد (${countSummary.changes.length})` : `Confirm (${countSummary.changes.length})`} <Send size={15} /></>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
