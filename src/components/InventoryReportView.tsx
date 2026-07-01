@@ -114,6 +114,9 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
     });
   }, [reportData.itemStats, search, hideZero]);
 
+  // مفتاح الجرد لكل (مخزن + صنف) — مهم لأن الصنف الخام موجود بالرئيسي والمطبخ بنفس الـ id
+  const countKey = (wh: WarehouseKey, id: string) => `${wh}:${id}`;
+
   // كل أصناف المخزن المختار (بغضّ النظر عن الحركة) — دي أساس الجرد الفعلي
   const countItems = useMemo(
     () => items.filter(i => warehouseHoldsItem(selectedWarehouse, i)),
@@ -131,7 +134,7 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
     let wasteValue = 0, surplusValue = 0, wasteItems = 0, surplusItems = 0, countedCount = 0;
     const changes: { item: InventoryItem; expected: number; actual: number; diff: number; price: number; val: number }[] = [];
     for (const item of countItems) {
-      const raw = counts[item.id];
+      const raw = counts[countKey(selectedWarehouse, item.id)];
       if (raw === undefined || raw === '') continue;
       const actual = Number(raw);
       if (!isFinite(actual) || actual < 0) continue;
@@ -153,10 +156,22 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
     };
   }, [countItems, counts, selectedWarehouse, items]);
 
+  // ملء قيم النظام للمخزن الحالي فقط (مع الحفاظ على أرقام المخازن الأخرى)
   const prefillCounts = () => {
-    const next: Record<string, string> = {};
-    for (const item of countItems) next[item.id] = String(warehouseStock(selectedWarehouse, item));
-    setCounts(next);
+    setCounts(prev => {
+      const next = { ...prev };
+      for (const item of countItems) next[countKey(selectedWarehouse, item.id)] = String(warehouseStock(selectedWarehouse, item));
+      return next;
+    });
+  };
+
+  // تفريغ أرقام المخزن الحالي فقط
+  const clearCurrentCounts = () => {
+    setCounts(prev => {
+      const next = { ...prev };
+      for (const item of countItems) delete next[countKey(selectedWarehouse, item.id)];
+      return next;
+    });
   };
 
   const currentUserName = () => {
@@ -230,11 +245,12 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
         console.error('Failed to send inventory count report to Telegram', tgErr);
       }
 
+      // نمسح أرقام المخزن اللي اتقفل بس، ونسيب باقي المخازن عشان تكمّل جردها
+      clearCurrentCounts();
       await fetchData();
-      setCounts({});
-      setCountSearch('');
-      setCountOpen(false);
-      alert(language === 'ar' ? '✅ تم تقفيل الجرد بنجاح وإرسال التقرير.' : '✅ Inventory closed and report sent.');
+      alert(language === 'ar'
+        ? `✅ تم تقفيل جرد «${whName}» بنجاح وإرسال التقرير.\nتقدر تبدّل لمخزن تاني وتكمّل الجرد.`
+        : `✅ Inventory for "${whName}" closed and report sent.`);
     } catch (e) {
       console.error(e);
       alert(language === 'ar' ? 'حدث خطأ أثناء تقفيل الجرد.' : 'An error occurred while closing inventory.');
@@ -401,13 +417,15 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button
             onClick={() => { setCountSearch(''); setCountOpen(true); }}
+            title={language === 'ar' ? 'ابدأ الجرد الفعلي وتقفيل المخزن' : 'Start physical stock-take'}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem',
-              borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem',
-              background: 'var(--gold-primary)', color: '#000',
+              display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1.3rem',
+              borderRadius: '10px', border: '2px solid #ffe9a8', cursor: 'pointer', fontWeight: 800, fontSize: '0.95rem',
+              background: 'linear-gradient(135deg, #f5c94b, #d4af37)', color: '#000',
+              boxShadow: '0 4px 16px rgba(212,175,55,0.45)', letterSpacing: '0.2px',
             }}
           >
-            <ClipboardCheck size={16} /> {language === 'ar' ? 'تقفيل الجرد' : 'Close Inventory'}
+            <ClipboardCheck size={19} /> {language === 'ar' ? 'تقفيل / جرد المخزن' : 'Stock-Take'}
           </button>
           <button className="btn-export excel" onClick={exportExcel}>
             <FileSpreadsheet size={16} /> {language === 'ar' ? 'تصدير Excel' : 'Export Excel'}
@@ -563,7 +581,7 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.5rem' }}>
               <div>
                 <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <ClipboardCheck size={20} color="var(--gold-primary)" /> {language === 'ar' ? 'تقفيل الجرد الفعلي' : 'Close Physical Inventory'}
+                  <ClipboardCheck size={20} color="var(--gold-primary)" /> {language === 'ar' ? 'تقفيل / جرد المخزن' : 'Stock-Take'}
                 </h2>
                 <p style={{ color: 'var(--text-gray)', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>{periodLabel}</p>
               </div>
@@ -572,10 +590,46 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
               </button>
             </div>
 
+            {/* اختيار المخزن اللي بنجرده — الرئيسي / المطبخ / التوزيع */}
+            <div style={{ marginBottom: '0.6rem' }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-gray)', marginBottom: '0.35rem' }}>
+                {language === 'ar' ? 'اختر المخزن المراد جرده:' : 'Select warehouse to count:'}
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {warehouses.map(w => {
+                  const active = selectedWarehouse === w.key;
+                  // عدد الأصناف اللي اتدخل ليها جرد فعلي في المخزن ده
+                  const filledCount = items.reduce((n, it) => {
+                    if (!warehouseHoldsItem(w.key, it)) return n;
+                    const v = counts[countKey(w.key, it.id)];
+                    return n + (v !== undefined && v !== '' ? 1 : 0);
+                  }, 0);
+                  return (
+                    <button
+                      key={w.key}
+                      onClick={() => { setCountSearch(''); setSelectedWarehouse(w.key); }}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.15,
+                        padding: '0.45rem 1rem', borderRadius: '10px', cursor: 'pointer', transition: 'all 0.15s',
+                        border: active ? '2px solid var(--gold-primary)' : '1px solid rgba(255,255,255,0.12)',
+                        background: active ? 'rgba(212,175,55,0.16)' : 'rgba(255,255,255,0.03)',
+                        color: active ? 'var(--gold-primary)' : 'var(--text-light)', fontWeight: active ? 800 : 500,
+                      }}
+                    >
+                      <span style={{ fontSize: '0.9rem' }}>{language === 'ar' ? w.ar : w.en}</span>
+                      <span style={{ fontSize: '0.62rem', opacity: 0.85 }}>
+                        {w.sub}{filledCount > 0 ? ` • ${filledCount} ${language === 'ar' ? 'مُدخل' : 'entered'}` : ''}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <p style={{ color: 'var(--text-gray)', fontSize: '0.82rem', marginTop: 0 }}>
               {language === 'ar'
-                ? 'أدخل الكمية الفعلية الموجودة في المخزن لكل صنف. تُحسب الفروقات تلقائياً: النقص يُعتبر هدر والزيادة تُضاف للرصيد. الأصناف المتروكة فارغة لن تتغيّر.'
-                : 'Enter the actual counted quantity per item. Differences are computed automatically. Blank items stay unchanged.'}
+                ? 'أدخل الكمية الفعلية الموجودة في المخزن لكل صنف. تُحسب الفروقات تلقائياً: النقص يُعتبر هدر والزيادة تُضاف للرصيد. الأصناف المتروكة فارغة لن تتغيّر. تقدر تبدّل بين المخازن الثلاثة وكل مخزن بيتقفل لوحده.'
+                : 'Enter the actual counted quantity per item. Differences are computed automatically. Blank items stay unchanged. Switch between the three warehouses freely — each is closed separately.'}
             </p>
 
             {/* toolbar */}
@@ -597,7 +651,7 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
                 {language === 'ar' ? 'ملء بقيم النظام' : 'Prefill system values'}
               </button>
               <button
-                onClick={() => setCounts({})}
+                onClick={clearCurrentCounts}
                 style={{ padding: '0.5rem 0.9rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'var(--text-gray)', cursor: 'pointer', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
               >
                 {language === 'ar' ? 'تفريغ' : 'Clear'}
@@ -619,7 +673,8 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
                 <tbody>
                   {visibleCountItems.map(item => {
                     const expected = warehouseStock(selectedWarehouse, item);
-                    const raw = counts[item.id] ?? '';
+                    const key = countKey(selectedWarehouse, item.id);
+                    const raw = counts[key] ?? '';
                     const actual = raw === '' ? null : Number(raw);
                     const valid = actual !== null && isFinite(actual) && actual >= 0;
                     const diff = valid ? (actual as number) - expected : 0;
@@ -640,7 +695,7 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
                             value={raw}
                             min={0}
                             step="any"
-                            onChange={(e) => setCounts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            onChange={(e) => setCounts(prev => ({ ...prev, [key]: e.target.value }))}
                             placeholder="—"
                             style={{ width: '90px', textAlign: 'center', borderColor: valid && diff !== 0 ? color : undefined }}
                           />
