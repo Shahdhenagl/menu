@@ -5,10 +5,10 @@ import { warehouseHoldsItem, warehouseStock, warehouseValue, type WarehouseKey }
 import { Calendar, PackageOpen, TrendingDown, ArrowDownRight, ArrowUpRight, Search, FileText, FileSpreadsheet, ClipboardCheck, X, AlertTriangle, CheckCircle2, Send } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const STOCK_FIELD: Record<'main' | 'factory' | 'distribution', 'stock_main' | 'stock_factory' | 'stock_distribution'> = {
+const STOCK_FIELD: Record<'main' | 'factory' | 'bar', 'stock_main' | 'stock_factory' | 'stock_bar'> = {
   main: 'stock_main',
   factory: 'stock_factory',
-  distribution: 'stock_distribution',
+  bar: 'stock_bar',
 };
 
 interface InventoryReportViewProps {
