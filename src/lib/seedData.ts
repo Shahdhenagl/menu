@@ -41,7 +41,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -51,7 +51,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -61,7 +61,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -71,7 +71,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -81,7 +81,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -91,7 +91,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -101,7 +101,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -111,7 +111,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -121,7 +121,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -131,7 +131,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -141,7 +141,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -151,7 +151,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -161,7 +161,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -171,7 +171,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -181,7 +181,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -191,7 +191,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -201,7 +201,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -211,7 +211,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -221,7 +221,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -231,7 +231,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -241,7 +241,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -251,7 +251,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -261,7 +261,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -271,7 +271,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -281,7 +281,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -291,7 +291,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -301,7 +301,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -311,7 +311,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -321,7 +321,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -331,7 +331,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -341,7 +341,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -351,7 +351,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -361,7 +361,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -371,7 +371,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -381,7 +381,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -391,7 +391,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -401,7 +401,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -411,7 +411,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -421,7 +421,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -431,7 +431,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -441,7 +441,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -451,7 +451,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -461,7 +461,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -471,7 +471,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -481,7 +481,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -491,7 +491,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -501,7 +501,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -511,7 +511,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -521,7 +521,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -531,7 +531,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -541,7 +541,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -551,7 +551,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -561,7 +561,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -571,7 +571,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -581,7 +581,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -591,7 +591,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -601,7 +601,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -611,7 +611,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -621,7 +621,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -631,7 +631,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -641,7 +641,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -651,7 +651,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -661,7 +661,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -671,7 +671,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -681,7 +681,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -691,7 +691,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -701,7 +701,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -711,7 +711,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -721,7 +721,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -731,7 +731,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -741,7 +741,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -751,7 +751,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -761,7 +761,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -771,7 +771,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -781,7 +781,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -791,7 +791,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -801,7 +801,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -811,7 +811,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -821,7 +821,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -831,7 +831,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -841,7 +841,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -851,7 +851,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -861,7 +861,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -871,7 +871,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -881,7 +881,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -891,7 +891,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -901,7 +901,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -911,7 +911,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -921,7 +921,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -931,7 +931,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -941,7 +941,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -951,7 +951,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -961,7 +961,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -971,7 +971,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -981,7 +981,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -991,7 +991,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1001,7 +1001,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1011,7 +1011,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1021,7 +1021,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1031,7 +1031,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1041,7 +1041,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1051,7 +1051,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1061,7 +1061,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1071,7 +1071,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1081,7 +1081,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1091,7 +1091,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1101,7 +1101,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1111,7 +1111,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1121,7 +1121,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1131,7 +1131,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1141,7 +1141,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1151,7 +1151,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1161,7 +1161,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1171,7 +1171,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1181,7 +1181,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1191,7 +1191,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1201,7 +1201,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1211,7 +1211,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1221,7 +1221,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1231,7 +1231,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1241,7 +1241,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1251,7 +1251,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1261,7 +1261,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1271,7 +1271,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1281,7 +1281,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1291,7 +1291,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1301,7 +1301,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1311,7 +1311,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1321,7 +1321,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1331,7 +1331,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1341,7 +1341,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1351,7 +1351,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "كجم",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1361,7 +1361,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1371,7 +1371,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   },
@@ -1381,7 +1381,7 @@ export const initialInventoryItems: InventoryItem[] = [
     "unit": "قطعة",
     "stock_main": 100,
     "stock_factory": 10,
-    "stock_distribution": 5,
+    "stock_bar": 5,
     "last_purchase_price": 0,
     "avg_purchase_price": 0
   }

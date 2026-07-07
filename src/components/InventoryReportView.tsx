@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/supabase';
 import type { InventoryItem, InventoryMovement } from '../types';
-import { warehouseHoldsItem, warehouseStock, warehouseValue } from '../lib/warehouse';
+import { warehouseHoldsItem, warehouseStock, warehouseValue, type WarehouseKey } from '../lib/warehouse';
 import { Calendar, PackageOpen, TrendingDown, ArrowDownRight, ArrowUpRight, Search, FileText, FileSpreadsheet, ClipboardCheck, X, AlertTriangle, CheckCircle2, Send } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -15,7 +15,6 @@ interface InventoryReportViewProps {
   language: 'ar' | 'en';
 }
 
-type WarehouseKey = 'main' | 'factory' | 'distribution';
 
 export default function InventoryReportView({ language }: InventoryReportViewProps) {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -262,7 +261,7 @@ export default function InventoryReportView({ language }: InventoryReportViewPro
   const warehouses: { key: WarehouseKey; ar: string; en: string; sub: string }[] = [
     { key: 'main', ar: 'الرئيسي', en: 'Main', sub: language === 'ar' ? 'خام' : 'Raw' },
     { key: 'factory', ar: 'المصنع / المطبخ', en: 'Factory', sub: language === 'ar' ? 'خام' : 'Raw' },
-    { key: 'distribution', ar: 'التوزيع', en: 'Distribution', sub: language === 'ar' ? 'مصنّع' : 'Mfg' },
+    { key: 'bar', ar: 'التوزيع', en: 'bar', sub: language === 'ar' ? 'مصنّع' : 'Mfg' },
   ];
 
   const cards = [

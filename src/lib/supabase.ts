@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, BarProduct } from '../types';
 import { initialCategories, initialProducts, initialInventoryItems, initialProductRecipes } from './seedData';
 
 // Load credentials from environment
@@ -707,7 +707,17 @@ export const db = {
           .insert([newExpense])
           .select()
           .single();
-        if (!error && data) return data;
+        if (!error && data) {
+          if (newExpense.payment_method === 'petty_cash' && newExpense.partner_id) {
+            await this.addPartnerTransaction({
+              partner_id: newExpense.partner_id,
+              type: 'debit',
+              amount: newExpense.amount,
+              description: `مصروفات من العهدة: ${newExpense.name}`
+            });
+          }
+          return data;
+        }
         console.warn("Supabase insert expense error, falling back to local storage:", error?.message);
       } catch (err) {
         console.warn("Supabase insert expense failed, falling back to local storage.", err);
@@ -716,6 +726,14 @@ export const db = {
     const expenses = getLocalData('meridien_expenses', [] as Expense[]);
     expenses.unshift(newExpense);
     saveLocalData('meridien_expenses', expenses);
+    if (newExpense.payment_method === 'petty_cash' && newExpense.partner_id) {
+      await this.addPartnerTransaction({
+        partner_id: newExpense.partner_id,
+        type: 'debit',
+        amount: newExpense.amount,
+        description: `مصروفات من العهدة: ${newExpense.name}`
+      });
+    }
     return newExpense;
   },
 
@@ -983,7 +1001,7 @@ export const db = {
         unit: 'وجبة',
         stock_main: 0,
         stock_factory: 0,
-        stock_distribution: 10,
+        stock_bar: 10,
         last_purchase_price: 0,
         avg_purchase_price: 0
       }))
@@ -1493,7 +1511,7 @@ export const db = {
     saveLocalData('meridien_notifications', all.filter(n => n.id !== id));
   },
 
-  // --- Production Logs (Factory to Distribution) ---
+  // --- Production Logs (Factory to bar) ---
   async getProductionLogs(): Promise<ProductionLog[]> {
     if (supabase) {
       try {
@@ -1542,23 +1560,23 @@ export const db = {
               });
             }
           }
-          // Process produced items (Increase distribution stock)
+          // Process produced items (Increase bar stock)
           for (const produced of logData.produced_items) {
             const { data: itemData } = await supabase
               .from('inventory_items')
-              .select('stock_distribution, avg_purchase_price')
+              .select('stock_bar, avg_purchase_price')
               .eq('id', produced.item_id)
               .single();
             if (itemData) {
-              const newStockDist = (Number(itemData.stock_distribution) || 0) + produced.quantity;
+              const newStockDist = (Number(itemData.stock_bar) || 0) + produced.quantity;
               await supabase
                 .from('inventory_items')
-                .update({ stock_distribution: newStockDist })
+                .update({ stock_bar: newStockDist })
                 .eq('id', produced.item_id);
 
               await this.addInventoryMovement({
                 item_id: produced.item_id,
-                warehouse: 'distribution',
+                warehouse: 'bar',
                 type: 'in',
                 quantity: produced.quantity,
                 unit_price: Number(itemData.avg_purchase_price || 0),
@@ -1581,7 +1599,7 @@ export const db = {
     };
     saveLocalData('meridien_production_logs', [newLog, ...all]);
 
-    // Update inventory: decrease stock_factory for consumed, increase stock_distribution for produced
+    // Update inventory: decrease stock_factory for consumed, increase stock_bar for produced
     const items = getLocalData('meridien_inventory_items', []) as InventoryItem[];
     let updated = false;
 
@@ -1604,16 +1622,16 @@ export const db = {
       }
     }
 
-    // Process produced items (Increase distribution stock)
+    // Process produced items (Increase bar stock)
     for (const produced of logData.produced_items) {
       const itemIdx = items.findIndex(i => i.id === produced.item_id);
       if (itemIdx > -1) {
-        items[itemIdx].stock_distribution = (items[itemIdx].stock_distribution || 0) + produced.quantity;
+        items[itemIdx].stock_bar = (items[itemIdx].stock_bar || 0) + produced.quantity;
         updated = true;
 
         await this.addInventoryMovement({
           item_id: produced.item_id,
-          warehouse: 'distribution',
+          warehouse: 'bar',
           type: 'in',
           quantity: produced.quantity,
           unit_price: items[itemIdx].avg_purchase_price || 0,
@@ -1628,7 +1646,7 @@ export const db = {
     }
   },
 
-  // --- TRANSFER REQUESTS (Kitchen → Distribution, requires approval) ---
+  // --- TRANSFER REQUESTS (Kitchen → bar, requires approval) ---
   async getTransferRequests(): Promise<TransferRequest[]> {
     if (supabase) {
       try {
@@ -1696,45 +1714,45 @@ export const db = {
           .select()
           .single();
         if (!error && req && status === 'approved') {
-          // Increase stock_distribution for each item in the transfer
+          // Increase stock_bar for each item in the transfer
           for (const item of req.items) {
             const { data: itemData } = await supabase
               .from('inventory_items')
-              .select('stock_factory, stock_distribution, avg_purchase_price')
+              .select('stock_main, stock_bar, avg_purchase_price')
               .eq('id', item.item_id)
               .single();
             if (itemData) {
               await supabase
                 .from('inventory_items')
                 .update({
-                  stock_factory: Math.max(0, (Number(itemData.stock_factory) || 0) - item.quantity),
-                  stock_distribution: (Number(itemData.stock_distribution) || 0) + item.quantity
+                  stock_main: Math.max(0, (Number(itemData.stock_main) || 0) - item.quantity),
+                  stock_bar: (Number(itemData.stock_bar) || 0) + item.quantity
                 })
                 .eq('id', item.item_id);
                 
               await this.addInventoryMovement({
                 item_id: item.item_id,
-                warehouse: 'factory',
+                warehouse: 'main',
                 type: 'out',
                 quantity: item.quantity,
                 unit_price: Number(itemData.avg_purchase_price || 0),
                 total_price: Number(itemData.avg_purchase_price || 0) * item.quantity,
-                description: `تحويل للتوزيع (طلب #${id.slice(0, 6)})`
+                description: `تحويل للبار (طلب #${id.slice(0, 6)})`
               });
               await this.addInventoryMovement({
                 item_id: item.item_id,
-                warehouse: 'distribution',
+                warehouse: 'bar',
                 type: 'in',
                 quantity: item.quantity,
                 unit_price: Number(itemData.avg_purchase_price || 0),
                 total_price: Number(itemData.avg_purchase_price || 0) * item.quantity,
-                description: `استلام من المصنع (طلب #${id.slice(0, 6)})`
+                description: `استلام من الرئيسي (طلب #${id.slice(0, 6)})`
               });
             }
           }
           await this.addNotification({
             title: '✅ تمت الموافقة على التحويل',
-            message: `وافق ${approved_by} على تحويل المنتجات للتوزيع. تم الخصم من المطبخ.`,
+            message: `وافق ${approved_by} على تحويل المنتجات للبار. تم الخصم من الرئيسي.`,
             target_role: 'kitchen_manager',
             notification_type: 'transfer_approved'
           });
@@ -1763,26 +1781,26 @@ export const db = {
       for (const item of all[idx].items) {
         const itemIdx = items.findIndex(i => i.id === item.item_id);
         if (itemIdx > -1) {
-          items[itemIdx].stock_factory = Math.max(0, (items[itemIdx].stock_factory || 0) - item.quantity);
-          items[itemIdx].stock_distribution = (items[itemIdx].stock_distribution || 0) + item.quantity;
+          items[itemIdx].stock_main = Math.max(0, (items[itemIdx].stock_main || 0) - item.quantity);
+          items[itemIdx].stock_bar = (items[itemIdx].stock_bar || 0) + item.quantity;
           
           await this.addInventoryMovement({
             item_id: item.item_id,
-            warehouse: 'factory',
+            warehouse: 'main',
             type: 'out',
             quantity: item.quantity,
             unit_price: items[itemIdx].avg_purchase_price || 0,
             total_price: (items[itemIdx].avg_purchase_price || 0) * item.quantity,
-            description: `تحويل للتوزيع (طلب #${id.slice(0, 6)})`
+            description: `تحويل للبار (طلب #${id.slice(0, 6)})`
           });
           await this.addInventoryMovement({
             item_id: item.item_id,
-            warehouse: 'distribution',
+            warehouse: 'bar',
             type: 'in',
             quantity: item.quantity,
             unit_price: items[itemIdx].avg_purchase_price || 0,
             total_price: (items[itemIdx].avg_purchase_price || 0) * item.quantity,
-            description: `استلام من المصنع (طلب #${id.slice(0, 6)})`
+            description: `استلام من الرئيسي (طلب #${id.slice(0, 6)})`
           });
         }
       }
@@ -1806,73 +1824,73 @@ export const db = {
     saveLocalData('meridien_transfer_requests', all);
   },
 
-  // --- DISTRIBUTION PRODUCTS CATALOG ---
-  async getDistributionProducts(): Promise<DistributionProduct[]> {
+  // --- bar PRODUCTS CATALOG ---
+  async getBarProducts(): Promise<BarProduct[]> {
     if (supabase) {
       try {
         const { data, error } = await supabase
-          .from('distribution_products')
+          .from('bar_products')
           .select('*')
           .order('name', { ascending: true });
         if (!error) return data || [];
       } catch (err) {
-        console.warn("Supabase getDistributionProducts failed", err);
+        console.warn("Supabase getBarProducts failed", err);
       }
     }
-    return getLocalData('meridien_distribution_products', []) as DistributionProduct[];
+    return getLocalData('meridien_bar_products', []) as BarProduct[];
   },
 
-  async addDistributionProduct(prod: Omit<DistributionProduct, 'id' | 'created_at'>): Promise<DistributionProduct> {
+  async addBarProduct(prod: Omit<BarProduct, 'id' | 'created_at'>): Promise<BarProduct> {
     if (supabase) {
       try {
         const { data, error } = await supabase
-          .from('distribution_products')
+          .from('bar_products')
           .insert([prod])
           .select()
           .single();
         if (!error && data) return data;
       } catch (err) {
-        console.warn("Supabase addDistributionProduct failed", err);
+        console.warn("Supabase addBarProduct failed", err);
       }
     }
-    const newProd: DistributionProduct = { ...prod, id: crypto.randomUUID(), created_at: new Date().toISOString() };
-    const all = await this.getDistributionProducts();
-    saveLocalData('meridien_distribution_products', [...all, newProd]);
+    const newProd: BarProduct = { ...prod, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    const all = await this.getBarProducts();
+    saveLocalData('meridien_bar_products', [...all, newProd]);
     return newProd;
   },
 
-  async updateDistributionProduct(id: string, updates: Partial<DistributionProduct>): Promise<void> {
+  async updateBarProduct(id: string, updates: Partial<BarProduct>): Promise<void> {
     if (supabase) {
       try {
-        await supabase.from('distribution_products').update(updates).eq('id', id);
+        await supabase.from('bar_products').update(updates).eq('id', id);
         return;
       } catch (err) {
-        console.warn("Supabase updateDistributionProduct failed", err);
+        console.warn("Supabase updateBarProduct failed", err);
       }
     }
-    const all = await this.getDistributionProducts();
+    const all = await this.getBarProducts();
     const idx = all.findIndex(p => p.id === id);
-    if (idx > -1) { all[idx] = { ...all[idx], ...updates }; saveLocalData('meridien_distribution_products', all); }
+    if (idx > -1) { all[idx] = { ...all[idx], ...updates }; saveLocalData('meridien_bar_products', all); }
   },
 
-  async deleteDistributionProduct(id: string): Promise<void> {
+  async deleteBarProduct(id: string): Promise<void> {
     if (supabase) {
       try {
-        await supabase.from('distribution_products').delete().eq('id', id);
+        await supabase.from('bar_products').delete().eq('id', id);
         return;
       } catch (err) {
-        console.warn("Supabase deleteDistributionProduct failed", err);
+        console.warn("Supabase deleteBarProduct failed", err);
       }
     }
-    const all = await this.getDistributionProducts();
-    saveLocalData('meridien_distribution_products', all.filter(p => p.id !== id));
+    const all = await this.getBarProducts();
+    saveLocalData('meridien_bar_products', all.filter(p => p.id !== id));
   },
 
   // --- PRODUCT RECIPES ---
-  async getProductRecipes(productId: string): Promise<ProductRecipe[]> {
+  async getProductRecipes(productId?: string): Promise<ProductRecipe[]> {
     if (supabase) {
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('product_recipes')
           .select(`
             id,
@@ -1884,8 +1902,11 @@ export const db = {
               name,
               unit
             )
-          `)
-          .eq('product_id', productId);
+          `);
+          if (productId) {
+            query = query.eq('product_id', productId);
+          }
+          const { data, error } = await query;
         if (!error && data) {
           return data.map((d: any) => ({
             id: d.id,
@@ -1902,7 +1923,7 @@ export const db = {
       }
     }
     const allRecipes = getLocalData('meridien_product_recipes', initialProductRecipes);
-    const filtered = allRecipes.filter(r => r.product_id === productId);
+    const filtered = productId ? allRecipes.filter(r => r.product_id === productId) : allRecipes;
     const items = await this.getInventoryItems();
     return filtered.map(r => {
       const item = items.find(i => i.id === r.inventory_item_id);
@@ -2033,21 +2054,21 @@ export const db = {
           // 2. Also deduct the product itself if it exists in inventory_items
           const { data: prodItem } = await supabase
             .from('inventory_items')
-            .select('name, stock_distribution, avg_purchase_price, low_stock_threshold')
+            .select('name, stock_bar, avg_purchase_price, low_stock_threshold')
             .eq('id', item.id)
             .single();
 
           if (prodItem) {
             total_cost += (Number(prodItem.avg_purchase_price) || 0) * item.quantity;
-            const newStockDist = Math.max(0, (Number(prodItem.stock_distribution) || 0) - item.quantity);
+            const newStockDist = Math.max(0, (Number(prodItem.stock_bar) || 0) - item.quantity);
             await supabase
               .from('inventory_items')
-              .update({ stock_distribution: newStockDist })
+              .update({ stock_bar: newStockDist })
               .eq('id', item.id);
 
             await this.addInventoryMovement({
               item_id: item.id,
-              warehouse: 'distribution',
+              warehouse: 'bar',
               type: 'out',
               quantity: item.quantity,
               unit_price: Number(prodItem.avg_purchase_price) || 0,
@@ -2066,66 +2087,77 @@ export const db = {
           }
         }
       } else {
+        const products = await this.getProducts();
         const items = await this.getInventoryItems();
         const allRecipes = getLocalData('meridien_product_recipes', initialProductRecipes);
         let updated = false;
 
         for (const item of order.items) {
-          // 1. Deduct recipe ingredients
+          const product = products.find(p => p.id === item.id);
+          const dept = product?.department || 'restaurant';
+          const stockField = dept === 'bar' ? 'stock_bar' : 'stock_factory';
+          const warehouseName = dept === 'bar' ? 'bar' : 'factory';
+          const title = dept === 'bar' ? 'تنبيه: اقتراب نفاذ المخزون بالبار' : 'تنبيه: اقتراب نفاذ المخزون بالمطبخ';
+          const msg = dept === 'bar' ? 'في البار' : 'في المطبخ';
+
           const productRecipes = allRecipes.filter(r => r.product_id === item.id);
-          for (const rec of productRecipes) {
-            const deductQty = rec.quantity * item.quantity;
-            const itemIdx = items.findIndex(i => i.id === rec.inventory_item_id);
-            if (itemIdx > -1) {
-              total_cost += (items[itemIdx].avg_purchase_price || 0) * deductQty;
-              items[itemIdx].stock_factory = Math.max(0, (items[itemIdx].stock_factory || 0) - deductQty);
+          
+          if (productRecipes.length > 0) {
+            // 1. Deduct recipe ingredients
+            for (const rec of productRecipes) {
+              const deductQty = rec.quantity * item.quantity;
+              const itemIdx = items.findIndex(i => i.id === rec.inventory_item_id);
+              if (itemIdx > -1) {
+                total_cost += (items[itemIdx].avg_purchase_price || 0) * deductQty;
+                items[itemIdx][stockField] = Math.max(0, (items[itemIdx][stockField] || 0) - deductQty);
+                updated = true;
+
+                await this.addInventoryMovement({
+                  item_id: items[itemIdx].id,
+                  warehouse: warehouseName as any,
+                  type: 'out',
+                  quantity: deductQty,
+                  unit_price: items[itemIdx].avg_purchase_price || 0,
+                  total_price: (items[itemIdx].avg_purchase_price || 0) * deductQty,
+                  description: `استهلاك مكونات طلب ${order.id.slice(0, 6)}`
+                });
+
+                if (items[itemIdx].low_stock_threshold !== undefined && items[itemIdx].low_stock_threshold !== null && (items[itemIdx][stockField] || 0) <= items[itemIdx].low_stock_threshold!) {
+                  await this.addNotification({
+                    title,
+                    message: `الخامة "${items[itemIdx].name}" اقتربت من النفاذ ${msg}. الكمية المتبقية: ${items[itemIdx][stockField]}`,
+                    target_role: 'admin'
+                  });
+                  await this.notifyLowStock(items[itemIdx].name, items[itemIdx][stockField] || 0);
+                }
+              }
+            }
+          } else {
+            // 2. Deduct product itself if no recipe
+            const prodItemIdx = items.findIndex(i => i.id === item.id);
+            if (prodItemIdx > -1) {
+              total_cost += (items[prodItemIdx].avg_purchase_price || 0) * item.quantity;
+              items[prodItemIdx][stockField] = Math.max(0, (items[prodItemIdx][stockField] || 0) - item.quantity);
               updated = true;
 
               await this.addInventoryMovement({
-                item_id: items[itemIdx].id,
-                warehouse: 'factory',
+                item_id: items[prodItemIdx].id,
+                warehouse: warehouseName as any,
                 type: 'out',
-                quantity: deductQty,
-                unit_price: items[itemIdx].avg_purchase_price || 0,
-                total_price: (items[itemIdx].avg_purchase_price || 0) * deductQty,
-                description: `استهلاك مكونات طلب ${order.id.slice(0, 6)}`
+                quantity: item.quantity,
+                unit_price: items[prodItemIdx].avg_purchase_price || 0,
+                total_price: (items[prodItemIdx].avg_purchase_price || 0) * item.quantity,
+                description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
               });
 
-              if (items[itemIdx].low_stock_threshold !== undefined && items[itemIdx].low_stock_threshold !== null && items[itemIdx].stock_factory <= items[itemIdx].low_stock_threshold!) {
+              if (items[prodItemIdx].low_stock_threshold !== undefined && items[prodItemIdx].low_stock_threshold !== null && (items[prodItemIdx][stockField] || 0) <= items[prodItemIdx].low_stock_threshold!) {
                 await this.addNotification({
-                  title: 'تنبيه: اقتراب نفاذ المخزون بالمطبخ',
-                  message: `الخامة "${items[itemIdx].name}" اقتربت من النفاذ في المطبخ. الكمية المتبقية: ${items[itemIdx].stock_factory}`,
+                  title,
+                  message: `الصنف "${items[prodItemIdx].name}" اقترب من النفاذ ${msg}. الكمية المتبقية: ${items[prodItemIdx][stockField]}`,
                   target_role: 'admin'
                 });
-                await this.notifyLowStock(items[itemIdx].name, items[itemIdx].stock_factory || 0);
+                await this.notifyLowStock(items[prodItemIdx].name, items[prodItemIdx][stockField] || 0);
               }
-            }
-          }
-
-          // 2. Deduct product itself
-          const prodItemIdx = items.findIndex(i => i.id === item.id);
-          if (prodItemIdx > -1) {
-            total_cost += (items[prodItemIdx].avg_purchase_price || 0) * item.quantity;
-            items[prodItemIdx].stock_distribution = Math.max(0, (items[prodItemIdx].stock_distribution || 0) - item.quantity);
-            updated = true;
-
-            await this.addInventoryMovement({
-              item_id: items[prodItemIdx].id,
-              warehouse: 'distribution',
-              type: 'out',
-              quantity: item.quantity,
-              unit_price: items[prodItemIdx].avg_purchase_price || 0,
-              total_price: (items[prodItemIdx].avg_purchase_price || 0) * item.quantity,
-              description: `استهلاك مبيعات طلب ${order.id.slice(0, 6)}`
-            });
-
-            if (items[prodItemIdx].low_stock_threshold !== undefined && items[prodItemIdx].low_stock_threshold !== null && items[prodItemIdx].stock_distribution <= items[prodItemIdx].low_stock_threshold!) {
-              await this.addNotification({
-                title: 'تنبيه: اقتراب نفاذ المخزون',
-                message: `الصنف "${items[prodItemIdx].name}" اقترب من النفاذ في المخزن الموزع. الكمية المتبقية: ${items[prodItemIdx].stock_distribution}`,
-                target_role: 'admin'
-              });
-              await this.notifyLowStock(items[prodItemIdx].name, items[prodItemIdx].stock_distribution || 0);
             }
           }
         }
@@ -2394,7 +2426,15 @@ export const db = {
     if (supabase) {
       try {
         const { data, error } = await (supabase as any).from('financial_transactions').insert([newTx]).select().single();
-        if (!error && data) return data;
+        if (!error && data) {
+          if ((newTx as any).from_method === 'petty_cash' && (newTx as any).partner_id) {
+            await this.addPartnerTransaction({ partner_id: (newTx as any).partner_id, type: 'debit', amount: (newTx as any).amount, description: `تحويل من العهدة: ${(newTx as any).description || ''}` });
+          }
+          if ((newTx as any).to_method === 'petty_cash' && (newTx as any).partner_id) {
+            await this.addPartnerTransaction({ partner_id: (newTx as any).partner_id, type: 'credit', amount: (newTx as any).amount, description: `تحويل للعهدة: ${(newTx as any).description || ''}` });
+          }
+          return data;
+        }
       } catch (err) {
         console.warn("Supabase insert financial transaction failed", err);
       }
@@ -2402,6 +2442,12 @@ export const db = {
     const txs = getLocalData('meridien_financial_transactions', [] as any[]);
     txs.unshift(newTx);
     saveLocalData('meridien_financial_transactions', txs);
+    if ((newTx as any).from_method === 'petty_cash' && (newTx as any).partner_id) {
+      await this.addPartnerTransaction({ partner_id: (newTx as any).partner_id, type: 'debit', amount: (newTx as any).amount, description: `تحويل من العهدة: ${(newTx as any).description || ''}` });
+    }
+    if ((newTx as any).to_method === 'petty_cash' && (newTx as any).partner_id) {
+      await this.addPartnerTransaction({ partner_id: (newTx as any).partner_id, type: 'credit', amount: (newTx as any).amount, description: `تحويل للعهدة: ${(newTx as any).description || ''}` });
+    }
     return newTx;
   },
 

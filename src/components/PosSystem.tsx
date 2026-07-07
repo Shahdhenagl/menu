@@ -17,7 +17,7 @@ import {
   Bell
 } from 'lucide-react';
 import { db } from '../lib/supabase';
-import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog } from '../types';
+import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe } from '../types';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
 
@@ -38,6 +38,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [settings, setSettings] = useState<RestaurantSettings | null>(null);
   const [lastPlacedOrder, setLastPlacedOrder] = useState<Order | null>(null);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [productRecipes, setProductRecipes] = useState<ProductRecipe[]>([]);
 
   const [view, setView] = useState<PosView>('role_select');
   const [role, setRole] = useState<'waiter' | 'customer' | null>(null);
@@ -79,8 +81,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [collectPaymentOrder, setCollectPaymentOrder] = useState<Order | null>(null);
   const [payCash, setPayCash] = useState<number | ''>('');
   const [payVisa, setPayVisa] = useState<number | ''>('');
-  const [payWallet, setPayWallet] = useState<number | ''>('');
-  const [payBarWallet, setPayBarWallet] = useState<number | ''>('');
+  const [payWalletRestaurant, setPayWalletRestaurant] = useState<number | ''>('');
+  const [payWalletBar, setPayWalletBar] = useState<number | ''>('');
+
   const [payInstapay, setPayInstapay] = useState<number | ''>('');
   const [payIsDeferred, setPayIsDeferred] = useState(false);
   const [payCustomerId, setPayCustomerId] = useState('');
@@ -195,7 +198,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   }, [view]);
 
   const loadData = async () => {
-    const [cats, prods, users, ords, prnts, sets, custs, emps, atts] = await Promise.all([
+    const [cats, prods, users, ords, prnts, sets, custs, emps, atts, invItems, prodRecipes] = await Promise.all([
       db.getCategories(),
       db.getProducts(),
       db.getSystemUsers(),
@@ -204,7 +207,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       db.getSettings(),
       db.getCustomers(),
       db.getEmployees(),
-      db.getAttendanceLogs()
+      db.getAttendanceLogs(),
+      db.getInventoryItems(),
+      db.getProductRecipes()
     ]);
     setCategories(cats.sort((a, b) => {
       const aBar = a.department === 'bar';
@@ -221,6 +226,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     setCustomers(custs);
     setEmployeesList(emps);
     setAttendanceLogsList(atts);
+    setInventoryItems(invItems || []);
+    setProductRecipes(prodRecipes || []);
     if (cats.length > 0) setActiveCategory(cats[0].id);
   };
 
@@ -487,6 +494,33 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
   const addToCart = (p: Product) => {
     const price = getProductPrice(p);
+    
+    const dept = p.department || 'restaurant';
+    const stockField = dept === 'bar' ? 'stock_bar' : 'stock_factory';
+
+    // Negative stock warning check
+    let stockWarning = false;
+    const recipeItems = productRecipes.filter(r => r.product_id === p.id);
+    if (recipeItems.length > 0) {
+      for (const rec of recipeItems) {
+        const invItem = inventoryItems.find(i => i.id === rec.inventory_item_id);
+        if (invItem && (invItem[stockField] || 0) - rec.quantity <= 0) {
+          stockWarning = true;
+          break;
+        }
+      }
+    } else {
+      // Check if product is sold directly
+      const invItem = inventoryItems.find(i => i.id === p.id);
+      if (invItem && (invItem[stockField] || 0) - 1 <= 0) {
+        stockWarning = true;
+      }
+    }
+
+    if (stockWarning) {
+      alert(language === 'ar' ? '⚠️ تحذير: هذا الصنف أو مكوناته على وشك النفاذ من المخزون!' : '⚠️ Warning: This item or its ingredients are out of stock!');
+    }
+
     setCart(prev => {
       const existing = prev.find(item => item.id === p.id);
       if (existing) {
@@ -1490,8 +1524,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               setCollectPaymentOrder(order);
                               setPayCash('');
                               setPayVisa('');
-                              setPayWallet('');
-                              setPayBarWallet('');
+                              setPayWalletRestaurant('');
+                        setPayWalletBar('');
+
                               setPayInstapay('');
                               setPayIsDeferred(false);
                               setPayCustomerId(order.customer_id || '');
@@ -1764,14 +1799,28 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
-                      📱 {language === 'ar' ? 'محفظة المطبخ:' : 'Kitchen Wallet:'}
+                      📱 {language === 'ar' ? 'محفظة المطعم:' : 'Restaurant Wallet:'}
+
                     </label>
                     <input
                       type="number"
                       className="pos-input"
                       placeholder="0.00"
-                      value={payWallet}
-                      onChange={(e) => setPayWallet(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      value={payWalletRestaurant}
+                      onChange={(e) => setPayWalletRestaurant(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                      📱 {language === 'ar' ? 'محفظة البار:' : 'Bar Wallet:'}
+                    </label>
+                    <input 
+                      type="number"
+                      className="pos-input"
+                      placeholder="0.00"
+                      value={payWalletBar}
+                      onChange={(e) => setPayWalletBar(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       min="0"
                     />
                   </div>
@@ -1784,8 +1833,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       type="number"
                       className="pos-input"
                       placeholder="0.00"
-                      value={payBarWallet}
-                      onChange={(e) => setPayBarWallet(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      value={payWalletBar}
+                      onChange={(e) => setPayWalletBar(e.target.value === '' ? '' : parseFloat(e.target.value))}
                       min="0"
                     />
                   </div>
@@ -1937,10 +1986,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 {(() => {
                   const cashVal = Number(payCash) || 0;
                   const visaVal = Number(payVisa) || 0;
-                  const walletVal = Number(payWallet) || 0;
-                  const barWalletVal = Number(payBarWallet) || 0;
+                  const walletRestaurantVal = Number(payWalletRestaurant) || 0;
+                  const walletBarVal = Number(payWalletBar) || 0;
                   const instapayVal = Number(payInstapay) || 0;
-                  const totalPaid = cashVal + visaVal + walletVal + barWalletVal + instapayVal;
+                  const totalPaid = cashVal + visaVal + walletRestaurantVal + walletBarVal + instapayVal;
+
                   const remaining = collectPaymentOrder.total_price - totalPaid;
 
                   let statusText = '';
@@ -2007,8 +2057,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               const activeMethods = [
                                 cashVal > 0 && 'cash',
                                 visaVal > 0 && 'visa',
-                                walletVal > 0 && 'wallet',
-                                barWalletVal > 0 && 'bar_wallet',
+                                walletRestaurantVal > 0 && 'wallet_restaurant',
+                                walletBarVal > 0 && 'wallet_bar',
+
                                 instapayVal > 0 && 'instapay',
                                 remaining > 0.01 && payIsDeferred && 'deferred'
                               ].filter(Boolean) as string[];
@@ -2022,8 +2073,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               const paymentDetails = {
                                 cash: cashVal,
                                 visa: visaVal,
-                                wallet: walletVal,
-                                bar_wallet: barWalletVal,
+                                wallet_restaurant: walletRestaurantVal,
+                                wallet_bar: walletBarVal,
+
                                 instapay: instapayVal,
                                 deferred: remaining > 0.01 && payIsDeferred ? remaining : 0,
                                 customer_id: remaining > 0.01 && payIsDeferred ? payCustomerId : undefined

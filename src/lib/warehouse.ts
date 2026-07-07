@@ -1,22 +1,22 @@
 import type { InventoryItem } from '../types';
 
-export type WarehouseKey = 'main' | 'factory' | 'distribution';
+export type WarehouseKey = 'main' | 'factory' | 'bar';
 
 // قاعدة توزيع الأصناف على المخازن:
 // - المخزن الرئيسي (main) والمصنع/المطبخ (factory): يحتويان المواد الخام فقط
 //   (الخام يُشترى للرئيسي ثم يتحوّل للمطبخ ليُصنّع).
-// - مخزن التوزيع (distribution): يحتوي المنتجات المصنّعة فقط (المنتج النهائي الجاهز للتوزيع).
+// - مخزن التوزيع (bar): يحتوي المنتجات المصنّعة فقط (المنتج النهائي الجاهز للتوزيع).
 export function warehouseHoldsItem(
   wh: WarehouseKey,
   item: Pick<InventoryItem, 'is_manufactured'>
 ): boolean {
-  return wh === 'distribution' ? !!item.is_manufactured : !item.is_manufactured;
+  return wh === 'bar' ? !!item.is_manufactured : !item.is_manufactured;
 }
 
 // رصيد الصنف في مخزن معيّن
 export function warehouseStock(wh: WarehouseKey, item: InventoryItem): number {
   if (wh === 'factory') return item.stock_factory || 0;
-  if (wh === 'distribution') return item.stock_distribution || 0;
+  if (wh === 'bar') return item.stock_bar || 0;
   return item.stock_main || 0;
 }
 

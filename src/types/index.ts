@@ -31,6 +31,7 @@ export interface Product {
   recipe_ar?: string;
   recipe_en?: string;
   talabat_price?: number;
+  department?: 'restaurant' | 'bar';
   created_at?: string;
 }
 
@@ -56,7 +57,7 @@ export interface Order {
   order_type?: 'takeaway' | 'talabat' | 'dine_in' | 'delivery' | 'website';
   waiter_id?: string;
   waiter_name?: string;
-  payment_method?: 'cash' | 'visa' | 'wallet' | 'bar_wallet' | 'instapay' | 'split' | 'deferred' | 'hospitality'; // wallet=محفظة المطبخ, bar_wallet=محفظة البار, hospitality=ضيافة
+  payment_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'split' | 'deferred' | 'hospitality' | 'petty_cash'; // Added hospitality (ضيافة), wallets, and petty_cash
   payment_details?: any; // JSON representation of split payments
   inventory_deducted?: boolean;
   created_at: string;
@@ -105,9 +106,8 @@ export interface Expense {
   name: string;
   type: string; // classification e.g. 'بضائع', 'مرتبات', etc.
   amount: number;
-  // 'partner' => المصروف اتدفع من عُهدة شريك (مش من حسابات الكاش) ويتسجّل على الشريك في partner_id
-  payment_method: 'cash' | 'visa' | 'wallet' | 'bar_wallet' | 'instapay' | 'partner';
-  partner_id?: string; // الشريك اللي اتخصم من عُهدته لو payment_method = 'partner'
+  payment_method: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'petty_cash';
+  partner_id?: string;
   expense_date: string;
   created_at?: string;
 }
@@ -148,7 +148,7 @@ export interface InventoryItem {
   // Stock levels
   stock_main: number;
   stock_factory: number;
-  stock_distribution: number;
+  stock_bar: number;
   
   // Cost tracking
   last_purchase_price: number;
@@ -279,7 +279,7 @@ export interface TransferRequest {
 }
 
 // Distribution warehouse product catalog
-export interface DistributionProduct {
+export interface BarProduct {
   id: string;
   name: string;
   unit: string;
@@ -294,10 +294,11 @@ export interface FinancialTransaction {
   id: string;
   type: 'fund_transfer' | 'debt_settlement';
   amount: number;
-  from_method?: 'cash' | 'visa' | 'wallet' | 'bar_wallet' | 'instapay' | 'deferred';
-  to_method?: 'cash' | 'visa' | 'wallet' | 'bar_wallet' | 'instapay' | 'deferred';
+  from_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'deferred' | 'petty_cash'; // e.g. from cash drawer
+  to_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'deferred' | 'petty_cash';   // e.g. to visa
+  partner_id?: string; // used when from_method or to_method is 'petty_cash'
   description?: string;
-  customer_id?: string;
+  customer_id?: string; // used when type === 'debt_settlement'
   created_at?: string;
 }
 

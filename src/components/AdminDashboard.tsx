@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, DistributionProduct, InventoryMovement, Partner } from '../types';
+import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, PromoCodeDetails, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, BarProduct, InventoryMovement, Partner } from '../types';
+
 import { db, supabase } from '../lib/supabase';
 import { warehouseHoldsItem, warehouseValue, warehouseStock } from '../lib/warehouse';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
@@ -26,13 +27,14 @@ import {
   Loader,
   Plus, Edit, Trash2, X, PlusCircle, Save, LogOut, Lock, 
   LayoutDashboard, FolderOpen, Coffee, Users, Settings as Gear, Calendar, Sparkles,
-  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, Bell, CheckCircle, Eye,
+  Upload, Printer as PrinterIcon, Sun, Moon, Search, MonitorSmartphone, Package, PackageOpen, Bell, CheckCircle, Eye,
   UserCheck, DollarSign, WalletCards, TrendingDown, Download, ChevronDown
 } from 'lucide-react';
 import { playClickSound, playNewOrderSound } from '../utils/audioUtils';
 import FinancialsView from './FinancialsView';
 import PartnersView from './PartnersView';
 import InventoryReportView from './InventoryReportView';
+import InventoryCountView from './InventoryCountView';
 
 interface AdminDashboardProps {
   onClose: () => void;
@@ -46,8 +48,7 @@ interface AdminDashboardProps {
   toggleTheme: () => void;
   setLanguage: (lang: 'ar' | 'en') => void;
 }
-
-type TabType = 'analytics' | 'financials' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'inventory_report' | 'factory' | 'employees' | 'attendance' | 'partners';
+type TabType = 'analytics' | 'financials' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'inventory_report' | 'inventory_count' | 'factory' | 'employees' | 'attendance' | 'partners';
 
 export default function AdminDashboard({
   onClose,
@@ -263,22 +264,33 @@ export default function AdminDashboard({
 
   // --- EXPENSES & COSTS MODULE STATES ---
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expPartners, setExpPartners] = useState<Partner[]>([]);
   const [expModalOpen, setExpModalOpen] = useState(false);
   const [expName, setExpName] = useState('');
   const [expType, setExpType] = useState('بضائع وخامات');
   const [customExpType, setCustomExpType] = useState('');
   const [expAmount, setExpAmount] = useState(0);
   const [expDate, setExpDate] = useState(() => getLocalDayStr());
-  const [expPaymentMethod, setExpPaymentMethod] = useState<'cash' | 'visa' | 'wallet' | 'bar_wallet' | 'instapay' | 'partner'>('cash');
-  // عُهدة الشركاء: لو الدفع من عُهدة شريك، نختار الشريك هنا
-  const [expPartners, setExpPartners] = useState<Partner[]>([]);
-  const [expPartnerId, setExpPartnerId] = useState('');
+  const [expPaymentMethod, setExpPaymentMethod] = useState<'cash' | 'visa' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'petty_cash'>('cash');
+  const [expPartnerId, setExpPartnerId] = useState<string>('');
+  
 
   // Expenses filtering states
   const [expFilterType, setExpFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
   const [expFilterDay, setExpFilterDay] = useState<string>(() => getLocalDayStr());
   const [expFilterMonth, setExpFilterMonth] = useState<string>(() => getLocalMonthStr());
   const [expFilterYear, setExpFilterYear] = useState<number>(() => new Date().getFullYear());
+
+  // --- PARTNERS STATE ---
+  const [partners, setPartners] = useState<any[]>([]);
+  const fetchPartners = async () => {
+    try {
+      const p = await db.getPartners();
+      setPartners(p);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // --- FINANCIAL TRANSACTIONS STATE ---
   const [financialTransactions, setFinancialTransactions] = useState<any[]>([]);
@@ -528,7 +540,7 @@ export default function AdminDashboard({
 
   // --- INVENTORY STATES ---
   const [inventorySubTab, setInventorySubTab] = useState<'suppliers' | 'items' | 'invoices' | 'mfg_orders'>('items');
-  const [factorySubTab, setFactorySubTab] = useState<'mfg_requests' | 'production' | 'transfer_requests' | 'distribution' | 'kitchen_stock'>('mfg_requests');
+  const [factorySubTab, setFactorySubTab] = useState<'mfg_requests' | 'production' | 'transfer_requests' | 'bar' | 'kitchen_stock'>('mfg_requests');
   const [kitchenSearch, setKitchenSearch] = useState('');
   const [productionLogs, setProductionLogs] = useState<ProductionLog[]>([]);
   const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>([]);
@@ -572,7 +584,7 @@ export default function AdminDashboard({
   const [mfgSelQuantity, setMfgSelQuantity] = useState<string | number>('');
   const [mfgSelUnitMode, setMfgSelUnitMode] = useState<'base' | 'sub'>('base');
   
-  const [inventoryWarehouseFilter, setInventoryWarehouseFilter] = useState<'main' | 'factory' | 'distribution'>('main');
+  const [inventoryWarehouseFilter, setInventoryWarehouseFilter] = useState<'main' | 'factory' | 'bar'>('main');
   const [inventoryLowStockFilter, setInventoryLowStockFilter] = useState(false);
   const [editStockModalOpen, setEditStockModalOpen] = useState(false);
   const [editStockItem, setEditStockItem] = useState<InventoryItem | null>(null);
@@ -613,14 +625,14 @@ export default function AdminDashboard({
   const [mfgItemSearch, setMfgItemSearch] = useState('');
   const [mfgShowSuggest, setMfgShowSuggest] = useState(false);
 
-  // Transfer Requests (Kitchen → Distribution)
+  // Transfer Requests (Kitchen → bar)
   const [transferRequests, setTransferRequests] = useState<TransferRequest[]>([]);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [transferCart, setTransferCart] = useState<{item_id: string, item_name: string, quantity: number, unit: string}[]>([]);
   const [transferNotes, setTransferNotes] = useState('');
 
-  // Distribution Products Catalog
-  const [distributionProducts, setDistributionProducts] = useState<DistributionProduct[]>([]);
+  // bar Products Catalog
+  const [BarProducts, setBarProducts] = useState<BarProduct[]>([]);
   const [distProdModalOpen, setDistProdModalOpen] = useState(false);
   const [distProdEditId, setDistProdEditId] = useState<string | null>(null);
   const [distProdName, setDistProdName] = useState('');
@@ -643,10 +655,10 @@ export default function AdminDashboard({
       setManufacturingOrders(mfg);
       setProductionLogs(prodLogs);
       const transferReqs = await db.getTransferRequests();
-      const distProds = await db.getDistributionProducts();
+      const distProds = await db.getBarProducts();
       const movements = await db.getInventoryMovements();
       setTransferRequests(transferReqs);
-      setDistributionProducts(distProds);
+      setBarProducts(distProds);
       setInventoryMovements(movements);
       
       if (loggedInUser) {
@@ -808,7 +820,7 @@ export default function AdminDashboard({
           unit: invUnit,
           stock_main: 0,
           stock_factory: 0,
-          stock_distribution: 0,
+          stock_bar: 0,
           avg_purchase_price: 0,
           last_purchase_price: 0,
           units_per_carton: invUnitsPerCarton ? Number(invUnitsPerCarton) : undefined,
@@ -851,13 +863,13 @@ export default function AdminDashboard({
       let currentStock = 0;
       if (inventoryWarehouseFilter === 'main') currentStock = editStockItem.stock_main || 0;
       if (inventoryWarehouseFilter === 'factory') currentStock = editStockItem.stock_factory || 0;
-      if (inventoryWarehouseFilter === 'distribution') currentStock = editStockItem.stock_distribution || 0;
+      if (inventoryWarehouseFilter === 'bar') currentStock = editStockItem.stock_bar || 0;
 
       const newStock = Math.max(0, currentStock + editStockAdjustment);
       const updateData: Partial<InventoryItem> = {};
       if (inventoryWarehouseFilter === 'main') updateData.stock_main = newStock;
       if (inventoryWarehouseFilter === 'factory') updateData.stock_factory = newStock;
-      if (inventoryWarehouseFilter === 'distribution') updateData.stock_distribution = newStock;
+      if (inventoryWarehouseFilter === 'bar') updateData.stock_bar = newStock;
 
       if ((window as any).supabase) {
         await (window as any).supabase.from('inventory_items').update(updateData).eq('id', editStockItem.id);
@@ -1083,7 +1095,7 @@ export default function AdminDashboard({
       setMfgNowOpen(false);
       setMfgNowItem(null);
       setMfgNowRecipe([]);
-      alert(language === 'ar' ? `✅ تم تصنيع ${mfgNowQty} ${mfgNowItem.unit} من ${mfgNowItem.name} وإضافتها لمخزن التوزيع.` : `✅ Manufactured ${mfgNowQty} ${mfgNowItem.unit} of ${mfgNowItem.name} into distribution.`);
+      alert(language === 'ar' ? `✅ تم تصنيع ${mfgNowQty} ${mfgNowItem.unit} من ${mfgNowItem.name} وإضافتها لمخزن التوزيع.` : `✅ Manufactured ${mfgNowQty} ${mfgNowItem.unit} of ${mfgNowItem.name} into bar.`);
     } catch (err) {
       console.error(err);
       alert((language === 'ar' ? '❌ تعذّر التصنيع: ' : '❌ Production failed: ') + ((err as any)?.message || err));
@@ -1186,8 +1198,8 @@ export default function AdminDashboard({
     }
   };
 
-  // --- DISTRIBUTION PRODUCTS HANDLERS ---
-  const openDistProdModal = (prod?: DistributionProduct) => {
+  // --- bar PRODUCTS HANDLERS ---
+  const openDistProdModal = (prod?: BarProduct) => {
     if (prod) {
       setDistProdEditId(prod.id);
       setDistProdName(prod.name);
@@ -1208,7 +1220,7 @@ export default function AdminDashboard({
     setDistProdModalOpen(true);
   };
 
-  const handleSaveDistributionProduct = async () => {
+  const handleSaveBarProduct = async () => {
     if (!distProdName.trim() || distProdStock === '' || distProdPrice === '') return;
     setLoading(true);
     try {
@@ -1221,9 +1233,9 @@ export default function AdminDashboard({
         notes: distProdNotes.trim() || undefined
       };
       if (distProdEditId) {
-        await db.updateDistributionProduct(distProdEditId, prodData);
+        await db.updateBarProduct(distProdEditId, prodData);
       } else {
-        await db.addDistributionProduct(prodData);
+        await db.addBarProduct(prodData);
       }
       await fetchInventoryData();
       setDistProdModalOpen(false);
@@ -1234,11 +1246,11 @@ export default function AdminDashboard({
     }
   };
 
-  const handleDeleteDistributionProduct = async (id: string) => {
+  const handleDeleteBarProduct = async (id: string) => {
     if (!confirm(language === 'ar' ? 'هل أنت متأكد من الحذف؟' : 'Are you sure you want to delete?')) return;
     setLoading(true);
     try {
-      await db.deleteDistributionProduct(id);
+      await db.deleteBarProduct(id);
       await fetchInventoryData();
     } catch (err) {
       console.error(err);
@@ -1305,6 +1317,7 @@ export default function AdminDashboard({
     fetchAttendanceLogs();
     fetchEmployeeTransactions();
     fetchFinancialTransactions();
+    fetchPartners();
   }, []);
 
   const handleSaveExpense = async (e: React.FormEvent) => {
@@ -1314,7 +1327,7 @@ export default function AdminDashboard({
       return;
     }
     // لو الدفع من عُهدة شريك لازم نختار الشريك
-    if (expPaymentMethod === 'partner' && !expPartnerId) {
+    if (expPaymentMethod === 'petty_cash' && !expPartnerId) {
       alert(language === 'ar' ? 'يرجى اختيار الشريك الذي سيُخصم من عُهدته!' : 'Please select the partner to deduct from!');
       return;
     }
@@ -1327,11 +1340,12 @@ export default function AdminDashboard({
         type: finalType || 'أخرى',
         amount: amountNum,
         payment_method: expPaymentMethod,
-        ...(expPaymentMethod === 'partner' ? { partner_id: expPartnerId } : {}),
+        partner_id: expPartnerId || undefined,
+
         expense_date: expDate
       });
       // لو من عُهدة شريك: نسجّل خصم (debit) على الشريك بقيمة المصروف
-      if (expPaymentMethod === 'partner') {
+      if (expPaymentMethod === 'petty_cash') {
         const partnerName = expPartners.find(p => p.id === expPartnerId)?.name || '';
         await db.addPartnerTransaction({
           partner_id: expPartnerId,
@@ -1783,21 +1797,21 @@ export default function AdminDashboard({
   const filteredInventoryItems = inventoryItems.filter(item => {
     if (!warehouseHoldsItem(inventoryWarehouseFilter, item)) return false;
     const stock = inventoryWarehouseFilter === 'factory' ? (item.stock_factory || 0)
-      : inventoryWarehouseFilter === 'distribution' ? (item.stock_distribution || 0)
+      : inventoryWarehouseFilter === 'bar' ? (item.stock_bar || 0)
       : (item.stock_main || 0);
     if (inventoryLowStockFilter && stock > (item.low_stock_threshold || 0)) return false;
     return true;
   });
 
-  const warehouseLabel = (wh: 'main' | 'factory' | 'distribution') => (
+  const warehouseLabel = (wh: 'main' | 'factory' | 'bar') => (
     wh === 'factory' ? (language === 'ar' ? 'المصنع' : 'Factory')
-      : wh === 'distribution' ? (language === 'ar' ? 'التوزيع' : 'Distribution')
+      : wh === 'bar' ? (language === 'ar' ? 'التوزيع' : 'bar')
       : (language === 'ar' ? 'الرئيسي' : 'Main')
   );
 
   // رصيد الصنف "نهاية الشهر الماضي" لمخزن معيّن = مجموع الحركات قبل أول يوم في الشهر الحالي.
   // لو مفيش حركات أصلاً، نعتبر الرصيد الحالي هو المُرحّل من قبل بداية الشهر.
-  const lastMonthClosing = (item: InventoryItem, wh: 'main' | 'factory' | 'distribution') => {
+  const lastMonthClosing = (item: InventoryItem, wh: 'main' | 'factory' | 'bar') => {
     const now = new Date();
     const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const movs = inventoryMovements.filter(m => m.item_id === item.id && (m.warehouse === wh || (!m.warehouse && wh === 'main')));
@@ -1842,12 +1856,12 @@ export default function AdminDashboard({
         'الكمية الحالية': warehouseStock(wh, item),
         'رصيد المخزن الأساسي': item.stock_main || 0,
         'رصيد المصنع': item.stock_factory || 0,
-        'رصيد مخزن التوزيع': item.stock_distribution || 0,
+        'رصيد مخزن التوزيع': item.stock_bar || 0,
         'الحد الأدنى للقطعة': item.low_stock_threshold || 0,
         'متوسط السعر': item.avg_purchase_price || 0,
         'التكلفة الإجمالية للمخزن الأساسي': (item.stock_main || 0) * (item.avg_purchase_price || 0),
         'التكلفة الإجمالية للمصنع': (item.stock_factory || 0) * (item.avg_purchase_price || 0),
-        'التكلفة الإجمالية لمخزن التوزيع': (item.stock_distribution || 0) * (item.avg_purchase_price || 0),
+        'التكلفة الإجمالية لمخزن التوزيع': (item.stock_bar || 0) * (item.avg_purchase_price || 0),
         [RECIPE_COL]: item.is_manufactured ? (recipeMap.get(item.id) || '') : ''
       }));
 
@@ -1875,24 +1889,38 @@ export default function AdminDashboard({
           const wsname = wb.SheetNames[0];
           const ws = wb.Sheets[wsname];
           const data = XLSX.utils.sheet_to_json(ws);
-
-          // الاستيراد يحترم الفلتر النشط: يحدّث فقط الأصناف الموجودة في الفلتر الحالي
-          const allowedIds = new Set(filteredInventoryItems.map(i => i.id));
-
+          let recipeCount = 0;
           let updatedCount = 0;
           let skippedCount = 0;
-          let recipeCount = 0;
-          for (const row of data as any[]) {
-            const id = row['رقم الصنف'];
-            if (!id) continue;
-            if (!allowedIds.has(id)) { skippedCount++; continue; }
+          const missingItems: string[] = [];
 
+          for (const row of data as any[]) {
+            const rawId = row['رقم الصنف'];
+            const rawName = row['اسم الصنف'] || row['إسم الصنف'];
+            
+            const item = inventoryItems.find(i => (rawId && i.id === rawId) || (rawName && i.name.trim() === rawName.trim()));
+            
+            if (!item) {
+              if (rawName) missingItems.push(rawName);
+              skippedCount++;
+              continue;
+            }
+
+            const id = item.id;
             const updateObj: Partial<InventoryItem> = {};
-            if (row['اسم الصنف'] !== undefined) updateObj.name = row['اسم الصنف'];
+            
             if (row['الوحدة'] !== undefined) updateObj.unit = row['الوحدة'];
-            if (row['رصيد المخزن الأساسي'] !== undefined) updateObj.stock_main = Number(row['رصيد المخزن الأساسي']) || 0;
+            
+            // Support both old template and new user excel columns
+            const mainStock = row['رصيد المخزن الأساسي'] !== undefined ? row['رصيد المخزن الأساسي'] : row['الكمية'];
+            if (mainStock !== undefined) updateObj.stock_main = Number(mainStock) || 0;
+            
+            if (row['متوسط السعر'] !== undefined) updateObj.avg_purchase_price = Number(row['متوسط السعر']) || 0;
+            
             if (row['رصيد المصنع'] !== undefined) updateObj.stock_factory = Number(row['رصيد المصنع']) || 0;
-            if (row['رصيد مخزن التوزيع'] !== undefined) updateObj.stock_distribution = Number(row['رصيد مخزن التوزيع']) || 0;
+            if (row['رصيد مخزن التوزيع'] !== undefined || row['رصيد البار'] !== undefined) {
+              updateObj.stock_bar = Number(row['رصيد مخزن التوزيع'] || row['رصيد البار']) || 0;
+            }
             if (row['الحد الأدنى للقطعة'] !== undefined) updateObj.low_stock_threshold = Number(row['الحد الأدنى للقطعة']) || 0;
 
             if (Object.keys(updateObj).length > 0) {
@@ -1903,8 +1931,7 @@ export default function AdminDashboard({
             }
 
             // تحديث وصفة المنتج المصنّع لو عمود الوصفة موجود
-            const item = inventoryItems.find(i => i.id === id);
-            if (item?.is_manufactured && row[RECIPE_COL] !== undefined) {
+            if (item.is_manufactured && row[RECIPE_COL] !== undefined) {
               const recipeStr = String(row[RECIPE_COL] || '').trim();
               const recipes: { ingredient_item_id: string; quantity: number }[] = [];
               if (recipeStr) {
@@ -2419,18 +2446,20 @@ export default function AdminDashboard({
     .slice(0, 5);
 
   // Payment Methods Breakdown (Total Revenue vs Total Expenses)
-  const paymentMethodsStats = {
+  const paymentMethodsStats: Record<string, { revenue: number, expenses: number, net: number }> = {
     cash: { revenue: 0, expenses: 0, net: 0 },
     visa: { revenue: 0, expenses: 0, net: 0 },
-    wallet: { revenue: 0, expenses: 0, net: 0 },
-    bar_wallet: { revenue: 0, expenses: 0, net: 0 },
-    instapay: { revenue: 0, expenses: 0, net: 0 }
+    wallet_restaurant: { revenue: 0, expenses: 0, net: 0 },
+    wallet_bar: { revenue: 0, expenses: 0, net: 0 },
+    instapay: { revenue: 0, expenses: 0, net: 0 },
+    petty_cash: { revenue: 0, expenses: 0, net: 0 }
+
   };
 
   analyticsFilteredOrders.forEach(order => {
     if (order.status.startsWith('completed')) {
       const parts = order.status.split('_');
-      const method = parts[1] as 'cash' | 'visa' | 'wallet' | 'instapay';
+      const method = parts[1] as string;
       if (method && paymentMethodsStats[method]) {
         paymentMethodsStats[method].revenue += order.total_price;
       } else {
@@ -2509,7 +2538,8 @@ export default function AdminDashboard({
           <tbody>
             ${(Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).map(m => {
               const stats = paymentMethodsStats[m];
-              const name = m === 'cash' ? '💵 كاش (نقدي)' : m === 'visa' ? '💳 فيزا' : m === 'wallet' ? '📱 محفظة المطبخ' : m === 'bar_wallet' ? '🍸 محفظة البار' : '⚡ إنستا باي';
+              const name = m === 'cash' ? '💵 كاش (نقدي)' : m === 'visa' ? '💳 فيزا' : m === 'wallet_restaurant' ? '📱 محفظة مطعم' : m === 'wallet_bar' ? '📱 محفظة بار' : m === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
+
               return `
                 <tr>
                   <td><strong>${name}</strong></td>
@@ -2608,7 +2638,8 @@ export default function AdminDashboard({
           </thead>
           <tbody>
             ${filteredExpenses.map(e => {
-              const p = e.payment_method === 'cash' ? '💵 كاش' : e.payment_method === 'visa' ? '💳 فيزا' : e.payment_method === 'wallet' ? '📱 محفظة المطبخ' : e.payment_method === 'bar_wallet' ? '🍸 محفظة البار' : e.payment_method === 'partner' ? ('🤝 عُهدة ' + (expPartners.find(pt => pt.id === e.partner_id)?.name || 'شريك')) : '⚡ إنستا باي';
+              const p = e.payment_method === 'cash' ? '💵 كاش' : e.payment_method === 'visa' ? '💳 فيزا' : e.payment_method === 'wallet_restaurant' ? '📱 محفظة مطعم' : e.payment_method === 'wallet_bar' ? '📱 محفظة بار' : e.payment_method === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
+
               return `
                 <tr>
                   <td><strong>${e.name}</strong></td>
@@ -3181,6 +3212,7 @@ export default function AdminDashboard({
                 items: [
                   { id: 'inventory', show: loggedInUser?.role === 'admin' || loggedInUser?.role === 'inventory_manager' || loggedInUser?.role === 'manager', icon: <Package size={18} />, label: language === 'ar' ? 'إدارة المخازن' : 'Inventory' },
                   { id: 'inventory_report', show: loggedInUser?.role === 'admin' || loggedInUser?.role === 'inventory_manager' || loggedInUser?.role === 'manager', icon: <TrendingDown size={18} />, label: language === 'ar' ? 'الجرد الشهري' : 'Monthly Report' },
+                  { id: 'inventory_count', show: loggedInUser?.role === 'admin' || loggedInUser?.role === 'inventory_manager' || loggedInUser?.role === 'manager', icon: <PackageOpen size={18} />, label: language === 'ar' ? 'جرد المخزون الفعلي' : 'Physical Inventory Count' },
                   { id: 'factory', show: loggedInUser?.role === 'admin' || loggedInUser?.role === 'kitchen_manager', icon: emoji('🏭'), label: language === 'ar' ? 'المصنع والمطبخ' : 'Factory & Kitchen' },
                 ],
               },
@@ -3561,8 +3593,9 @@ export default function AdminDashboard({
                   <tbody>
                     {(Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).map((method) => {
                       const stats = paymentMethodsStats[method];
-                      const methodNameAr = method === 'cash' ? '💵 كاش (نقدي)' : method === 'visa' ? '💳 فيزا (بطاقة)' : method === 'wallet' ? '📱 محفظة المطبخ' : method === 'bar_wallet' ? '🍸 محفظة البار' : '⚡ إنستا باي';
-                      const methodNameEn = method === 'cash' ? 'Cash' : method === 'visa' ? 'Visa / Card' : method === 'wallet' ? 'Kitchen Wallet' : method === 'bar_wallet' ? 'Bar Wallet' : 'InstaPay';
+                      const methodNameAr = method === 'cash' ? '💵 كاش (نقدي)' : method === 'visa' ? '💳 فيزا (بطاقة)' : method === 'wallet_restaurant' ? '📱 محفظة مطعم' : method === 'wallet_bar' ? '📱 محفظة بار' : method === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
+                      const methodNameEn = method === 'cash' ? 'Cash' : method === 'visa' ? 'Visa / Card' : method === 'wallet_restaurant' ? 'Rest. Wallet' : method === 'wallet_bar' ? 'Bar Wallet' : method === 'petty_cash' ? 'Petty Cash' : 'InstaPay';
+
                       return (
                         <tr key={method}>
                           <td style={{ fontWeight: 'bold', color: 'var(--text-white)' }}>
@@ -3694,6 +3727,7 @@ export default function AdminDashboard({
         {/* TAB 2: CATEGORIES MANAGEMENT */}
         {activeTab === 'financials' && (
           <FinancialsView 
+            userRole={loggedInUser?.role}
             orders={orders}
             expenses={expenses}
             financialTransactions={financialTransactions}
@@ -4655,7 +4689,8 @@ export default function AdminDashboard({
                           {filteredInvoices.map(inv => {
                             const cost = inv.total_cost || 0;
                             const profit = inv.total_price - cost;
-                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet' ? '📱 محفظة المطبخ' : inv.payment_method === 'bar_wallet' ? '🍸 محفظة البار' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : '💵 كاش';
+                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet_restaurant' ? '📱 محفظة مطعم' : inv.payment_method === 'wallet_bar' ? '📱 محفظة بار' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : inv.payment_method === 'petty_cash' ? '💼 عهدة' : '💵 كاش';
+
                             const typeLabel = inv.order_type === 'dine_in' ? '🍽️' : inv.order_type === 'takeaway' ? '🥡' : inv.order_type === 'delivery' ? '🚗' : inv.order_type === 'talabat' ? '📱' : '—';
                             return (
                               <tr key={inv.id}>
@@ -5253,7 +5288,8 @@ export default function AdminDashboard({
                           </td>
                           <td>
                             <span style={{ fontWeight: '600' }}>
-                              {exp.payment_method === 'cash' ? '💵 كاش' : exp.payment_method === 'visa' ? '💳 فيزا' : exp.payment_method === 'wallet' ? '📱 محفظة المطبخ' : exp.payment_method === 'bar_wallet' ? '🍸 محفظة البار' : exp.payment_method === 'partner' ? ('🤝 عُهدة ' + (expPartners.find(pt => pt.id === exp.partner_id)?.name || 'شريك')) : '⚡ انستا باي'}
+                              {exp.payment_method === 'cash' ? '💵 كاش' : exp.payment_method === 'visa' ? '💳 فيزا' : exp.payment_method === 'wallet_restaurant' ? '📱 محفظة مطعم' : exp.payment_method === 'wallet_bar' ? '📱 محفظة بار' : exp.payment_method === 'petty_cash' ? '💼 عهدة' : '⚡ انستا باي'}
+
                             </span>
                           </td>
                           <td className="font-en" style={{ fontSize: '0.85rem' }}>{exp.expense_date}</td>
@@ -5525,6 +5561,10 @@ export default function AdminDashboard({
           <InventoryReportView language={language} />
         )}
 
+        {activeTab === 'inventory_count' && (
+          <InventoryCountView language={language} />
+        )}
+
         {activeTab === 'inventory' && (
           <div className="admin-section">
             <div className="section-header" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
@@ -5590,7 +5630,7 @@ export default function AdminDashboard({
                       {([
                         { key: 'main', ar: 'الرئيسي', en: 'Main', sub: language === 'ar' ? 'خام' : 'Raw' },
                         { key: 'factory', ar: 'المصنع / المطبخ', en: 'Factory', sub: language === 'ar' ? 'خام' : 'Raw' },
-                        { key: 'distribution', ar: 'التوزيع', en: 'Distribution', sub: language === 'ar' ? 'مصنّع' : 'Mfg' },
+                        { key: 'bar', ar: 'التوزيع', en: 'bar', sub: language === 'ar' ? 'مصنّع' : 'Mfg' },
                       ] as const).map(w => {
                         const active = inventoryWarehouseFilter === w.key;
                         return (
@@ -5670,9 +5710,9 @@ export default function AdminDashboard({
                   <div className="stat-card" style={{ padding: '1.5rem' }}>
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
                     <div className="stat-info">
-                      <h3>{language === 'ar' ? 'قيمة التوزيع (مصنّع)' : 'Distribution Value (Mfg)'}</h3>
+                      <h3>{language === 'ar' ? 'قيمة التوزيع (مصنّع)' : 'bar Value (Mfg)'}</h3>
                       <p className="stat-value" style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>
-                        {warehouseValue('distribution', inventoryItems).toFixed(0)} EGP
+                        {warehouseValue('bar', inventoryItems).toFixed(0)} EGP
                       </p>
                     </div>
                   </div>
@@ -5957,7 +5997,7 @@ export default function AdminDashboard({
               <div>
                 <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>{language === 'ar' ? '🏭 المصنع والمخازن' : 'Factory & Warehouses'}</h1>
                 <p style={{ color: 'var(--text-gray)' }}>
-                  {language === 'ar' ? 'مخزن الخامات ← مطبخ/مصنع ← مخزن التوزيع | سير عمل متكامل بالموافقات' : 'Raw Stock → Kitchen/Factory → Distribution | Full workflow with approvals'}
+                  {language === 'ar' ? 'مخزن الخامات ← مطبخ/مصنع ← مخزن التوزيع | سير عمل متكامل بالموافقات' : 'Raw Stock → Kitchen/Factory → bar | Full workflow with approvals'}
                 </p>
               </div>
             </div>
@@ -5978,8 +6018,8 @@ export default function AdminDashboard({
               <div style={{ fontSize: '1.5rem', color: 'var(--gold-primary)' }}>→</div>
               <div style={{ textAlign: 'center', padding: '0.5rem 1rem', background: 'rgba(16,185,129,0.2)', borderRadius: '8px' }}>
                 <div style={{ fontSize: '1.5rem' }}>🚚</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'مخزن التوزيع' : 'Distribution'}</div>
-                <div style={{ fontWeight: 'bold', color: '#10b981' }}>{warehouseValue('distribution', inventoryItems).toFixed(0)} EGP</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'مخزن التوزيع' : 'bar'}</div>
+                <div style={{ fontWeight: 'bold', color: '#10b981' }}>{warehouseValue('bar', inventoryItems).toFixed(0)} EGP</div>
               </div>
               <div style={{ marginInlineStart: 'auto' }}>
                 <span style={{ background: 'rgba(245,158,11,0.2)', color: 'orange', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}>
@@ -6017,11 +6057,11 @@ export default function AdminDashboard({
                 )}
               </button>
               <button 
-                className={`btn-outline-gold ${(factorySubTab as string) === 'distribution' ? 'active' : ''}`}
-                onClick={() => setFactorySubTab('distribution' as any)}
-                style={{ background: (factorySubTab as string) === 'distribution' ? 'var(--gold-primary)' : 'transparent', color: (factorySubTab as string) === 'distribution' ? '#000' : 'var(--gold-primary)' }}
+                className={`btn-outline-gold ${(factorySubTab as string) === 'bar' ? 'active' : ''}`}
+                onClick={() => setFactorySubTab('bar' as any)}
+                style={{ background: (factorySubTab as string) === 'bar' ? 'var(--gold-primary)' : 'transparent', color: (factorySubTab as string) === 'bar' ? '#000' : 'var(--gold-primary)' }}
               >
-                🎪 {language === 'ar' ? 'كتالوج التوزيع' : 'Distribution Catalog'}
+                🎪 {language === 'ar' ? 'كتالوج التوزيع' : 'bar Catalog'}
               </button>
               <button 
                 className={`btn-outline-gold ${factorySubTab === 'production' ? 'active' : ''}`}
@@ -6097,13 +6137,13 @@ export default function AdminDashboard({
               </div>
             )}
 
-            {/* SUB-TAB: TRANSFER REQUESTS (Kitchen → Distribution) */}
+            {/* SUB-TAB: TRANSFER REQUESTS (Kitchen → bar) */}
             {(factorySubTab as string) === 'transfer_requests' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center' }}>
                   <div>
-                    <h2 style={{ color: 'var(--gold-primary)', marginBottom: '0.25rem' }}>{language === 'ar' ? '🚚 أذون التحويل للتوزيع' : '🚚 Transfer to Distribution'}</h2>
-                    <p style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'المطبخ يرسل إذن تحويل → مدير التوزيع يوافق → يُخصم من المطبخ ويضاف للتوزيع' : 'Kitchen sends request → Distribution manager approves → Stock transferred'}</p>
+                    <h2 style={{ color: 'var(--gold-primary)', marginBottom: '0.25rem' }}>{language === 'ar' ? '🚚 أذون التحويل للتوزيع' : '🚚 Transfer to bar'}</h2>
+                    <p style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'المطبخ يرسل إذن تحويل → مدير التوزيع يوافق → يُخصم من المطبخ ويضاف للتوزيع' : 'Kitchen sends request → bar manager approves → Stock transferred'}</p>
                   </div>
                   <button className="btn-gold" onClick={() => setTransferModalOpen(true)}>
                     <Plus size={18} /> {language === 'ar' ? 'طلب تحويل للتوزيع' : 'Request Transfer'}
@@ -6175,7 +6215,7 @@ export default function AdminDashboard({
               </div>
             )}
 
-            {/* SUB-TAB: DISTRIBUTION CATALOG */}
+            {/* SUB-TAB: bar CATALOG */}
             {/* SUB-TAB: KITCHEN STOCK NOW (raw + mfg currently in kitchen) */}
             {factorySubTab === 'kitchen_stock' && (() => {
               const kitchenItems = inventoryItems
@@ -6237,15 +6277,15 @@ export default function AdminDashboard({
               );
             })()}
 
-            {(factorySubTab as string) === 'distribution' && (
+            {(factorySubTab as string) === 'bar' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                   <div>
-                    <h2 style={{ color: 'var(--gold-primary)', marginBottom: '0.25rem' }}>{language === 'ar' ? '🎪 كتالوج مخزن التوزيع' : '🎪 Distribution Warehouse Catalog'}</h2>
-                    <p style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'المنتجات النهائية الجاهزة للتوزيع والبيع' : 'Finished products ready for distribution and sale'}</p>
+                    <h2 style={{ color: 'var(--gold-primary)', marginBottom: '0.25rem' }}>{language === 'ar' ? '🎪 كتالوج مخزن التوزيع' : '🎪 bar Warehouse Catalog'}</h2>
+                    <p style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>{language === 'ar' ? 'المنتجات النهائية الجاهزة للتوزيع والبيع' : 'Finished products ready for bar and sale'}</p>
                   </div>
                   <button className="btn-gold" onClick={() => openDistProdModal()}>
-                    <Plus size={18} /> {language === 'ar' ? 'إضافة منتج توزيع' : 'Add Distribution Product'}
+                    <Plus size={18} /> {language === 'ar' ? 'إضافة منتج توزيع' : 'Add bar Product'}
                   </button>
                 </div>
 
@@ -6258,7 +6298,7 @@ export default function AdminDashboard({
                         <tr>
                           <th>{language === 'ar' ? 'المنتج' : 'Product'}</th>
                           <th>{language === 'ar' ? 'الوحدة' : 'Unit'}</th>
-                          <th>{language === 'ar' ? 'رصيد التوزيع' : 'Distribution Stock'}</th>
+                          <th>{language === 'ar' ? 'رصيد التوزيع' : 'bar Stock'}</th>
                           <th>{language === 'ar' ? 'متوسط التكلفة' : 'Avg Cost'}</th>
                           <th>{language === 'ar' ? 'القيمة' : 'Value'}</th>
                           <th>{language === 'ar' ? 'إجراء' : 'Action'}</th>
@@ -6269,9 +6309,9 @@ export default function AdminDashboard({
                           <tr key={i.id}>
                             <td style={{ fontWeight: 'bold' }}>{i.name}</td>
                             <td>{i.unit}</td>
-                            <td style={{ color: (i.stock_distribution || 0) > 0 ? 'var(--gold-primary)' : 'var(--text-gray)', fontWeight: 'bold' }}>{(i.stock_distribution || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} {i.unit}</td>
+                            <td style={{ color: (i.stock_bar || 0) > 0 ? 'var(--gold-primary)' : 'var(--text-gray)', fontWeight: 'bold' }}>{(i.stock_bar || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} {i.unit}</td>
                             <td>{(i.avg_purchase_price || 0).toFixed(2)}</td>
-                            <td style={{ color: '#10b981', fontWeight: 'bold' }}>{((i.stock_distribution || 0) * (i.avg_purchase_price || 0)).toFixed(2)} EGP</td>
+                            <td style={{ color: '#10b981', fontWeight: 'bold' }}>{((i.stock_bar || 0) * (i.avg_purchase_price || 0)).toFixed(2)} EGP</td>
                             <td>
                               <button className="btn-gold" style={{ padding: '0.35rem 0.7rem', fontSize: '0.82rem', whiteSpace: 'nowrap' }} onClick={() => openManufactureNow(i)}>
                                 🏭 {language === 'ar' ? 'تصنيع الآن' : 'Produce Now'}
@@ -6287,27 +6327,27 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                <h3 style={{ color: 'var(--gold-primary)', marginBottom: '0.5rem', fontSize: '1rem' }}>🎪 {language === 'ar' ? 'منتجات توزيع إضافية (يدوية)' : 'Extra Distribution Products (manual)'}</h3>
+                <h3 style={{ color: 'var(--gold-primary)', marginBottom: '0.5rem', fontSize: '1rem' }}>🎪 {language === 'ar' ? 'منتجات توزيع إضافية (يدوية)' : 'Extra bar Products (manual)'}</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                   <div className="stat-card">
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
                     <div className="stat-info">
                       <h3>{language === 'ar' ? 'إجمالي الأصناف' : 'Total Products'}</h3>
-                      <p className="stat-value">{distributionProducts.length}</p>
+                      <p className="stat-value">{BarProducts.length}</p>
                     </div>
                   </div>
                   <div className="stat-card">
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
                     <div className="stat-info">
                       <h3>{language === 'ar' ? 'قيمة الكتالوج' : 'Catalog Value'}</h3>
-                      <p className="stat-value">{distributionProducts.reduce((s, p) => s + (p.stock_quantity * p.unit_price), 0).toFixed(0)} EGP</p>
+                      <p className="stat-value">{BarProducts.reduce((s, p) => s + (p.stock_quantity * p.unit_price), 0).toFixed(0)} EGP</p>
                     </div>
                   </div>
                   <div className="stat-card">
                     <div className="stat-icon"><Package color="#000" size={24} /></div>
                     <div className="stat-info">
                       <h3>{language === 'ar' ? 'قيمة مخزون التوزيع المصنّع' : 'Mfg Dist. Value'}</h3>
-                      <p className="stat-value">{warehouseValue('distribution', inventoryItems).toFixed(0)} EGP</p>
+                      <p className="stat-value">{warehouseValue('bar', inventoryItems).toFixed(0)} EGP</p>
                     </div>
                   </div>
                 </div>
@@ -6326,7 +6366,7 @@ export default function AdminDashboard({
                       </tr>
                     </thead>
                     <tbody>
-                      {distributionProducts.map(prod => (
+                      {BarProducts.map(prod => (
                         <tr key={prod.id}>
                           <td style={{ fontWeight: 'bold' }}>{prod.name}</td>
                           <td><span style={{ background: 'rgba(212,175,55,0.15)', color: 'var(--gold-primary)', padding: '2px 8px', borderRadius: '10px', fontSize: '0.8rem' }}>{prod.category || '-'}</span></td>
@@ -6341,12 +6381,12 @@ export default function AdminDashboard({
                           <td>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                               <button className="action-btn edit" onClick={() => openDistProdModal(prod)}><Edit size={14} /></button>
-                              <button className="action-btn delete" onClick={() => handleDeleteDistributionProduct(prod.id)}><Trash2 size={14} /></button>
+                              <button className="action-btn delete" onClick={() => handleDeleteBarProduct(prod.id)}><Trash2 size={14} /></button>
                             </div>
                           </td>
                         </tr>
                       ))}
-                      {distributionProducts.length === 0 && (
+                      {BarProducts.length === 0 && (
                         <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-gray)' }}>
                           <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🎪</div>
                           {language === 'ar' ? 'لا توجد منتجات. أضف أول منتج توزيع!' : 'No products yet. Add your first!'}
@@ -7701,49 +7741,34 @@ export default function AdminDashboard({
                       <span>{language === 'ar' ? 'فيزا / بطاقة' : 'Visa'}</span>
                     </button>
 
-                    {/* Wallet Option */}
+                    {/* Wallet Restaurant Option */}
                     <button
                       type="button"
-                      className={expPaymentMethod === 'wallet' ? 'btn-gold' : 'btn-outline-gold'}
-                      onClick={() => setExpPaymentMethod('wallet')}
+                      className={expPaymentMethod === 'wallet_restaurant' ? 'btn-gold' : 'btn-outline-gold'}
+                      onClick={() => setExpPaymentMethod('wallet_restaurant')}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.5rem',
-                        padding: '0.6rem',
-                        borderRadius: '10px',
-                        borderWidth: '1.5px',
-                        fontSize: '0.85rem',
-                        fontWeight: 'bold',
-                        transition: 'all 0.2s ease',
-                        cursor: 'pointer'
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                        padding: '0.6rem', borderRadius: '10px', borderWidth: '1.5px',
+                        fontSize: '0.85rem', fontWeight: 'bold', transition: 'all 0.2s ease', cursor: 'pointer'
                       }}
                     >
                       <span>📱</span>
-                      <span>{language === 'ar' ? 'محفظة المطبخ' : 'Kitchen Wallet'}</span>
+                      <span>{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</span>
                     </button>
 
-                    {/* Bar Wallet Option */}
+                    {/* Wallet Bar Option */}
                     <button
                       type="button"
-                      className={expPaymentMethod === 'bar_wallet' ? 'btn-gold' : 'btn-outline-gold'}
-                      onClick={() => setExpPaymentMethod('bar_wallet')}
+                      className={expPaymentMethod === 'wallet_bar' ? 'btn-gold' : 'btn-outline-gold'}
+                      onClick={() => setExpPaymentMethod('wallet_bar')}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.5rem',
-                        padding: '0.6rem',
-                        borderRadius: '10px',
-                        borderWidth: '1.5px',
-                        fontSize: '0.85rem',
-                        fontWeight: 'bold',
-                        transition: 'all 0.2s ease',
-                        cursor: 'pointer'
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                        padding: '0.6rem', borderRadius: '10px', borderWidth: '1.5px',
+                        fontSize: '0.85rem', fontWeight: 'bold', transition: 'all 0.2s ease', cursor: 'pointer'
                       }}
                     >
-                      <span>🍸</span>
+                      <span>📱</span>
+
                       <span>{language === 'ar' ? 'محفظة البار' : 'Bar Wallet'}</span>
                     </button>
 
@@ -7753,71 +7778,50 @@ export default function AdminDashboard({
                       className={expPaymentMethod === 'instapay' ? 'btn-gold' : 'btn-outline-gold'}
                       onClick={() => setExpPaymentMethod('instapay')}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.5rem',
-                        padding: '0.6rem',
-                        borderRadius: '10px',
-                        borderWidth: '1.5px',
-                        fontSize: '0.85rem',
-                        fontWeight: 'bold',
-                        transition: 'all 0.2s ease',
-                        cursor: 'pointer'
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                        padding: '0.6rem', borderRadius: '10px', borderWidth: '1.5px',
+                        fontSize: '0.85rem', fontWeight: 'bold', transition: 'all 0.2s ease', cursor: 'pointer'
                       }}
                     >
                       <span>⚡</span>
                       <span>{language === 'ar' ? 'إنستا باي' : 'Instapay'}</span>
                     </button>
 
-                    {/* Partner Custody Option (عُهدة شريك) */}
+                    {/* Petty Cash Option */}
                     <button
                       type="button"
-                      className={expPaymentMethod === 'partner' ? 'btn-gold' : 'btn-outline-gold'}
-                      onClick={() => setExpPaymentMethod('partner')}
+                      className={expPaymentMethod === 'petty_cash' ? 'btn-gold' : 'btn-outline-gold'}
+                      onClick={() => setExpPaymentMethod('petty_cash')}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.5rem',
-                        padding: '0.6rem',
-                        borderRadius: '10px',
-                        borderWidth: '1.5px',
-                        fontSize: '0.85rem',
-                        fontWeight: 'bold',
-                        transition: 'all 0.2s ease',
-                        cursor: 'pointer',
-                        gridColumn: '1 / -1'
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                        padding: '0.6rem', borderRadius: '10px', borderWidth: '1.5px',
+                        fontSize: '0.85rem', fontWeight: 'bold', transition: 'all 0.2s ease', cursor: 'pointer'
                       }}
                     >
-                      <span>🤝</span>
-                      <span>{language === 'ar' ? 'من عُهدة شريك' : 'From Partner Custody'}</span>
+                      <span>💼</span>
+                      <span>{language === 'ar' ? 'عهدة الشريك' : 'Partner Petty Cash'}</span>
                     </button>
 
                   </div>
-
-                  {/* Partner selector — only when paying from a partner's custody */}
-                  {expPaymentMethod === 'partner' && (
-                    <div className="form-group" style={{ marginTop: '0.4rem' }}>
-                      <label style={{ fontSize: '0.9rem', color: 'var(--gold-primary)', fontWeight: 'bold', display: 'block', marginBottom: '0.4rem' }}>
-                        {language === 'ar' ? 'اختر الشريك (هيتخصم من عُهدته) *' : 'Select Partner (deducted from custody) *'}
+                  
+                  {expPaymentMethod === 'petty_cash' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                      <label style={{ fontSize: '0.9rem', color: 'var(--text-color)' }}>
+                        {language === 'ar' ? 'اختر الشريك (العهدة):' : 'Select Partner (Petty Cash):'}
                       </label>
-                      <select
-                        className="input-gold"
-                        value={expPartnerId}
-                        onChange={(e) => setExpPartnerId(e.target.value)}
-                        style={{ width: '100%' }}
+                      <select 
+                        className="input-gold" 
+                        value={expPartnerId} 
+                        onChange={(e) => setExpPartnerId(e.target.value)} 
+                        required 
+                        style={{ height: '40px', padding: '0 1rem' }}
                       >
-                        <option value="">{language === 'ar' ? '— اختر الشريك —' : '— Select partner —'}</option>
-                        {expPartners.map(p => (
+                        <option value="">{language === 'ar' ? 'اختر الشريك...' : 'Select Partner...'}</option>
+                        {partners.map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
                       </select>
-                      {expPartners.length === 0 && (
-                        <span style={{ fontSize: '0.8rem', color: 'var(--danger)' }}>
-                          {language === 'ar' ? 'لا يوجد شركاء — أضف شريكاً من تبويب «العهد والشركاء» أولاً.' : 'No partners — add one from the Partners tab first.'}
-                        </span>
-                      )}
+
                     </div>
                   )}
                 </div>
@@ -8462,7 +8466,7 @@ export default function AdminDashboard({
                   <strong>
                     {inventoryWarehouseFilter === 'main' ? (language === 'ar' ? 'الرئيسي' : 'Main') :
                      inventoryWarehouseFilter === 'factory' ? (language === 'ar' ? 'المصنع' : 'Factory') :
-                     (language === 'ar' ? 'التوزيع' : 'Distribution')}
+                     (language === 'ar' ? 'التوزيع' : 'bar')}
                   </strong>
                 </p>
                 <div className="form-group">
@@ -8758,7 +8762,7 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* Manufacture Now Modal (from distribution catalog) */}
+      {/* Manufacture Now Modal (from bar catalog) */}
       {mfgNowOpen && mfgNowItem && (() => {
         const reqs = computeMfgNowReqs();
         const hasRecipe = reqs.length > 0;
@@ -8864,7 +8868,7 @@ export default function AdminDashboard({
             <div className="admin-modal-body">
               
               <div style={{ background: '#222', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                <h3 style={{ marginBottom: '1rem', color: 'var(--success)' }}>{language === 'ar' ? 'المنتج الجاهز (سيتم إضافته للتوزيع)' : 'Produced Item (To Distribution)'}</h3>
+                <h3 style={{ marginBottom: '1rem', color: 'var(--success)' }}>{language === 'ar' ? 'المنتج الجاهز (سيتم إضافته للتوزيع)' : 'Produced Item (To bar)'}</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.5rem' }}>
                   <select 
                     className="input-gold" 
@@ -9028,12 +9032,12 @@ export default function AdminDashboard({
         <div className="admin-modal-overlay" onClick={() => setTransferModalOpen(false)}>
           <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
             <div className="admin-modal-header">
-              <h2>🚚 {language === 'ar' ? 'طلب تحويل من المطبخ للتوزيع' : 'Transfer Request: Kitchen → Distribution'}</h2>
+              <h2>🚚 {language === 'ar' ? 'طلب تحويل من المطبخ للتوزيع' : 'Transfer Request: Kitchen → bar'}</h2>
               <button className="btn-close" onClick={() => setTransferModalOpen(false)}><X size={20} /></button>
             </div>
             <div className="admin-modal-body">
               <p style={{ color: 'var(--text-gray)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-                {language === 'ar' ? 'أضف الأصناف المراد تحويلها من مخزن المطبخ إلى مخزن التوزيع. يتطلب موافقة مدير التوزيع.' : 'Add items to transfer from kitchen stock to distribution. Requires distribution manager approval.'}
+                {language === 'ar' ? 'أضف الأصناف المراد تحويلها من المخزن الرئيسي إلى مخزن البار. يتطلب موافقة مدير البار.' : 'Add items to transfer from main stock to bar. Requires bar manager approval.'}
               </p>
 
               {/* Add item form */}
@@ -9111,12 +9115,12 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* DISTRIBUTION PRODUCT MODAL */}
+      {/* bar PRODUCT MODAL */}
       {distProdModalOpen && (
         <div className="admin-modal-overlay" onClick={() => setDistProdModalOpen(false)}>
           <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <div className="admin-modal-header">
-              <h2>🎪 {distProdEditId ? (language === 'ar' ? 'تعديل منتج التوزيع' : 'Edit Distribution Product') : (language === 'ar' ? 'إضافة منتج توزيع جديد' : 'Add New Distribution Product')}</h2>
+              <h2>🎪 {distProdEditId ? (language === 'ar' ? 'تعديل منتج التوزيع' : 'Edit bar Product') : (language === 'ar' ? 'إضافة منتج توزيع جديد' : 'Add New bar Product')}</h2>
               <button className="btn-close" onClick={() => setDistProdModalOpen(false)}><X size={20} /></button>
             </div>
             <div className="admin-modal-body">
@@ -9161,7 +9165,7 @@ export default function AdminDashboard({
             </div>
             <div className="admin-modal-footer">
               <button type="button" className="btn-outline-gold" onClick={() => setDistProdModalOpen(false)}>{t.close}</button>
-              <button type="button" className="btn-gold" onClick={handleSaveDistributionProduct} disabled={loading || !distProdName.trim() || distProdStock === '' || distProdPrice === ''}>
+              <button type="button" className="btn-gold" onClick={handleSaveBarProduct} disabled={loading || !distProdName.trim() || distProdStock === '' || distProdPrice === ''}>
                 {loading ? '...' : distProdEditId ? (language === 'ar' ? 'حفظ التعديلات' : 'Save Changes') : (language === 'ar' ? 'إضافة المنتج' : 'Add Product')}
               </button>
             </div>
