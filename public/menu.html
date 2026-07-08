@@ -65,12 +65,25 @@
   }
 
   /* Category nav */
+  .topbar{
+    position:sticky;top:0;z-index:25;
+    background:rgba(7,7,7,.95);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);margin-bottom:32px;
+  }
+  .tabs{display:flex;justify-content:center;gap:10px;padding:12px 14px 8px}
+  .tabs button{
+    flex:0 0 auto;min-width:128px;font-family:inherit;font-size:1rem;font-weight:800;
+    cursor:pointer;color:var(--muted);background:var(--card);
+    border:1.5px solid var(--line);border-radius:999px;padding:10px 22px;transition:.2s;
+  }
+  .tabs button:hover{border-color:var(--gold);color:var(--text)}
+  .tabs button.active{
+    color:#1a1400;background:linear-gradient(180deg,var(--gold-light),var(--gold));
+    border-color:var(--gold);box-shadow:0 4px 16px rgba(212,175,55,.4);
+  }
   nav{
-    position:sticky;top:0;z-index:20;
-    background:rgba(7,7,7,.94);backdrop-filter:blur(10px);
-    border-bottom:1px solid var(--line);
     display:flex;gap:9px;overflow-x:auto;overflow-y:hidden;
-    padding:13px 14px;margin-bottom:34px;
+    padding:4px 14px 12px;
     scrollbar-width:thin;scrollbar-color:var(--gold-dark) transparent;
     -webkit-overflow-scrolling:touch;
   }
@@ -93,7 +106,7 @@
   /* Main section banner (المطبخ / البار) */
   .section-head{
     display:flex;align-items:center;gap:16px;
-    max-width:1200px;margin:8px auto 28px;padding:0 18px;scroll-margin-top:64px;
+    max-width:1200px;margin:8px auto 28px;padding:0 18px;scroll-margin-top:112px;
   }
   .section-head .rule{flex:1;height:2px;background:linear-gradient(90deg,transparent,var(--gold-dark),transparent)}
   .section-head h2{
@@ -112,7 +125,7 @@
   @media(min-width:1236px){ .soon{margin-inline:auto} }
 
   /* Category section */
-  .cat{margin-bottom:46px;scroll-margin-top:70px}
+  .cat{margin-bottom:46px;scroll-margin-top:104px}
   .cat-head{display:flex;align-items:center;gap:14px;margin-bottom:22px}
   .cat-head h2{
     font-size:1.6rem;font-weight:800;color:var(--gold);white-space:nowrap;
@@ -175,6 +188,8 @@
     .cat-head h2{font-size:1.2rem}
     .section-head{gap:10px;margin-bottom:20px}
     .section-head h2{font-size:1.5rem;letter-spacing:2px}
+    .tabs{padding:10px 12px 6px;gap:8px}
+    .tabs button{min-width:0;flex:1 1 0;font-size:.92rem;padding:9px 10px}
     .cat-head .count{font-size:.72rem}
     .card{border-radius:13px}
     .body{padding:10px 11px 12px;gap:3px}
@@ -195,7 +210,10 @@
   <div class="divider"></div>
 </header>
 
-<nav id="nav"></nav>
+<div class="topbar">
+  <div class="tabs" id="tabs"></div>
+  <nav id="nav"></nav>
+</div>
 
 <div class="wrap" id="menu"></div>
 
@@ -439,6 +457,32 @@ nav.addEventListener('click', e=>{
   const a = e.target.closest('a');
   if(a && a.dataset.cat) setActive(a.dataset.cat);
 });
+
+/* ---- تابات الأقسام الرئيسية (المطبخ / البار) ---- */
+const tabsEl = document.getElementById('tabs');
+const tabBtns = {};
+SECTIONS.forEach(section=>{
+  const b = document.createElement('button');
+  b.textContent = section.ar;
+  b.dataset.sec = section.id;
+  b.addEventListener('click', ()=>{
+    const banner = document.getElementById('sec-'+section.id);
+    if(banner) banner.scrollIntoView({behavior:'smooth', block:'start'});
+    setTab(section.id);
+  });
+  tabBtns[section.id] = b;
+  tabsEl.appendChild(b);
+});
+function setTab(id){
+  for(const k in tabBtns) tabBtns[k].classList.toggle('active', k===id);
+}
+setTab(SECTIONS[0].id);
+
+/* التاب بيتظلّل حسب القسم اللي في العرض أثناء الاسكرول */
+const secSpy = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting) setTab(e.target.id.replace('sec-','')); });
+}, { rootMargin:'0px 0px -76% 0px', threshold:0 });
+document.querySelectorAll('.section-head').forEach(el=>secSpy.observe(el));
 </script>
 </body>
 </html>
