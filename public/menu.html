@@ -53,16 +53,14 @@
   /* Category nav */
   nav{
     position:sticky;top:0;z-index:20;
-    background:rgba(7,7,7,.85);backdrop-filter:blur(10px);
+    background:rgba(7,7,7,.92);backdrop-filter:blur(10px);
     border-bottom:1px solid var(--line);
-    display:flex;gap:8px;overflow-x:auto;padding:12px 14px;margin-bottom:30px;
-    scrollbar-width:thin;
+    display:flex;flex-wrap:wrap;justify-content:center;gap:8px;
+    padding:12px 14px;margin-bottom:34px;
   }
-  nav::-webkit-scrollbar{height:5px}
-  nav::-webkit-scrollbar-thumb{background:var(--line);border-radius:10px}
   nav a{
-    flex:0 0 auto;color:var(--muted);text-decoration:none;font-weight:600;font-size:.9rem;
-    padding:7px 14px;border:1px solid var(--line);border-radius:999px;white-space:nowrap;
+    color:var(--muted);text-decoration:none;font-weight:600;font-size:.85rem;
+    padding:6px 13px;border:1px solid var(--line);border-radius:999px;white-space:nowrap;
     transition:.2s;
   }
   nav a:hover{color:var(--bg);background:var(--gold);border-color:var(--gold)}
@@ -78,9 +76,12 @@
 
   /* Grid */
   .grid{
-    display:grid;gap:16px;
-    grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+    display:grid;gap:12px;
+    grid-template-columns:repeat(2,1fr);
   }
+  @media(min-width:560px){ .grid{ grid-template-columns:repeat(3,1fr) } }
+  @media(min-width:820px){ .grid{ grid-template-columns:repeat(4,1fr);gap:16px } }
+  @media(min-width:1120px){ .grid{ grid-template-columns:repeat(5,1fr) } }
   .card{
     background:linear-gradient(180deg,var(--card2),var(--card));
     border:1px solid var(--line);border-radius:16px;overflow:hidden;
@@ -112,6 +113,29 @@
 
   footer{text-align:center;color:var(--muted);font-size:.85rem;padding:40px 16px 10px;border-top:1px solid var(--line);margin-top:20px}
   footer .g{color:var(--gold)}
+
+  /* Mobile polish */
+  @media(max-width:559px){
+    .wrap{padding:0 12px 40px}
+    header{padding:34px 14px 20px}
+    .logo-ring{width:66px;height:66px;font-size:26px;margin-bottom:14px}
+    h1{font-size:2rem}
+    .subtitle{font-size:.85rem;margin-top:6px}
+    .divider{margin-top:16px}
+    nav{padding:10px 10px}
+    nav a{font-size:.78rem;padding:5px 11px}
+    .cat{margin-bottom:34px}
+    .cat-head{gap:10px;margin-bottom:16px}
+    .cat-head h2{font-size:1.2rem}
+    .cat-head .count{font-size:.72rem}
+    .card{border-radius:13px}
+    .body{padding:10px 11px 12px;gap:3px}
+    .name-ar{font-size:.9rem;line-height:1.3}
+    .name-en{font-size:.7rem}
+    .price{padding-top:7px}
+    .price .num{font-size:1.05rem}
+    .thumb::after{font-size:30px}
+  }
 </style>
 </head>
 <body>
