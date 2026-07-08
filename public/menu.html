@@ -298,22 +298,15 @@ const PRODUCTS = [
   {c:'kids', ar:'هابي ميل', en:'Happy Meal', p:200, img:S+'1.jpg'},
 ];
 
-/* ---- صور بديلة مؤقتة حسب التصنيف (تظهر مكان أي صورة مش متاحة) ---- */
-const FBQ = '?w=500&q=72&auto=format&fit=crop';
-const FALLBACK = {
-  box:      'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666'+FBQ,
-  salad:    'https://images.unsplash.com/photo-1512621776951-a57141f2eefd'+FBQ,
-  soup:     'https://images.unsplash.com/photo-1547592166-23ac45744acd'+FBQ,
-  tagine:   'https://images.unsplash.com/photo-1585937421612-70a008356fbe'+FBQ,
-  meals:    'https://images.unsplash.com/photo-1544025162-d76694265947'+FBQ,
-  grills:   'https://images.unsplash.com/photo-1544025162-d76694265947'+FBQ,
-  pasta:    'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9'+FBQ,
-  sides:    'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b'+FBQ,
-  burgers:  'https://images.unsplash.com/photo-1568901346375-23c9450c58cd'+FBQ,
-  pizza:    'https://images.unsplash.com/photo-1513104890138-7c749659a591'+FBQ,
-  sandwich: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af'+FBQ,
-  kids:     'https://images.unsplash.com/photo-1571091718767-18b5b1457add'+FBQ,
-};
+/* ---- صور من النت حسب اسم المنتج (تظهر مكان أي صورة مش متاحة) ---- */
+const STOP = new Set(['large','medium','small','kg','meal','the','and','with','of','a','1','2','3']);
+function kw(en){
+  let w = (en||'').toLowerCase().replace(/[-\/]/g,' ').replace(/[^a-z0-9 ]/g,' ')
+    .split(/\s+/).filter(x=>x && !STOP.has(x));
+  if(!w.length) w=['food'];
+  return w.slice(-2).join(',');            // آخر كلمتين = نوع الأكلة غالبًا
+}
+function netImg(p, i){ return 'https://loremflickr.com/500/400/'+kw(p.en)+'?lock='+i; }
 function fb(el){
   const f = el.getAttribute('data-fb');
   if (f && !el.dataset.done){ el.dataset.done='1'; el.src=f; }
@@ -352,7 +345,7 @@ CATS.forEach(cat=>{
   items.forEach(p=>{
     const card = document.createElement('div');
     card.className = 'card';
-    const fallback = FALLBACK[p.c] || '';
+    const fallback = netImg(p, PRODUCTS.indexOf(p));
     const imgTag = '<img src="'+(p.img||fallback)+'" data-fb="'+fallback+'" alt="'+p.ar+'" loading="lazy" onerror="fb(this)" />';
     card.innerHTML =
       '<div class="thumb">'+imgTag+'</div>'+
