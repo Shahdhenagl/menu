@@ -90,6 +90,27 @@
     box-shadow:0 4px 16px rgba(212,175,55,.4);
   }
 
+  /* Main section banner (المطبخ / البار) */
+  .section-head{
+    display:flex;align-items:center;gap:16px;
+    max-width:1200px;margin:8px auto 28px;padding:0 18px;scroll-margin-top:64px;
+  }
+  .section-head .rule{flex:1;height:2px;background:linear-gradient(90deg,transparent,var(--gold-dark),transparent)}
+  .section-head h2{
+    text-align:center;font-size:2rem;font-weight:900;letter-spacing:3px;white-space:nowrap;
+    background:linear-gradient(90deg,var(--gold-light),var(--gold),var(--gold-dark));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .section-head h2 .en{
+    display:block;font-size:.72rem;letter-spacing:4px;color:var(--muted);
+    -webkit-text-fill-color:var(--muted);font-weight:600;margin-top:4px;text-align:center;
+  }
+  .soon{
+    max-width:1200px;margin:0 18px 46px;padding:34px 18px;text-align:center;
+    color:var(--muted);border:1px dashed var(--line);border-radius:16px;font-weight:600;
+  }
+  @media(min-width:1236px){ .soon{margin-inline:auto} }
+
   /* Category section */
   .cat{margin-bottom:46px;scroll-margin-top:70px}
   .cat-head{display:flex;align-items:center;gap:14px;margin-bottom:22px}
@@ -152,6 +173,8 @@
     .cat{margin-bottom:34px}
     .cat-head{gap:10px;margin-bottom:16px}
     .cat-head h2{font-size:1.2rem}
+    .section-head{gap:10px;margin-bottom:20px}
+    .section-head h2{font-size:1.5rem;letter-spacing:2px}
     .cat-head .count{font-size:.72rem}
     .card{border-radius:13px}
     .body{padding:10px 11px 12px;gap:3px}
@@ -182,19 +205,27 @@
 
 <script>
 /* ---- بيانات المنيو (من الداتا بيز) — عرض فقط ---- */
+/* الأقسام الرئيسية */
+const SECTIONS = [
+  { id:'kitchen', ar:'المطبخ', en:'Kitchen' },
+  { id:'bar',     ar:'البار',  en:'Bar' },
+];
+
+/* التصنيفات — s = القسم الرئيسي */
 const CATS = [
-  { id:'box',      ar:'الفطار',          en:'Breakfast' },
-  { id:'salad',    ar:'السلطات',         en:'Salads' },
-  { id:'soup',     ar:'الشوربة',         en:'Soups' },
-  { id:'tagine',   ar:'الطواجن',         en:'Casseroles' },
-  { id:'meals',    ar:'الوجبات',         en:'Main Meals' },
-  { id:'grills',   ar:'المشويات',        en:'Grills' },
-  { id:'pasta',    ar:'الباستا',         en:'Pasta' },
-  { id:'sides',    ar:'المقبلات',        en:'Appetizers' },
-  { id:'burgers',  ar:'البرجر',          en:'Burgers' },
-  { id:'pizza',    ar:'البيتزا',         en:'Pizza' },
-  { id:'sandwich', ar:'الساندويتشات',    en:'Sandwiches' },
-  { id:'kids',     ar:'وجبات أطفال',     en:'Kids Meals' },
+  { id:'box',      s:'kitchen', ar:'الفطار',          en:'Breakfast' },
+  { id:'salad',    s:'kitchen', ar:'السلطات',         en:'Salads' },
+  { id:'soup',     s:'kitchen', ar:'الشوربة',         en:'Soups' },
+  { id:'tagine',   s:'kitchen', ar:'الطواجن',         en:'Casseroles' },
+  { id:'meals',    s:'kitchen', ar:'الوجبات',         en:'Main Meals' },
+  { id:'grills',   s:'kitchen', ar:'المشويات',        en:'Grills' },
+  { id:'pasta',    s:'kitchen', ar:'الباستا',         en:'Pasta' },
+  { id:'sides',    s:'kitchen', ar:'المقبلات',        en:'Appetizers' },
+  { id:'burgers',  s:'kitchen', ar:'البرجر',          en:'Burgers' },
+  { id:'pizza',    s:'kitchen', ar:'البيتزا',         en:'Pizza' },
+  { id:'sandwich', s:'kitchen', ar:'الساندويتشات',    en:'Sandwiches' },
+  { id:'kids',     s:'kitchen', ar:'وجبات أطفال',     en:'Kids Meals' },
+  // ↓↓↓ تصنيفات البار هتتضاف هنا ↓↓↓
 ];
 
 const S = 'https://xrajwseaukolbidvwfsp.supabase.co/storage/v1/object/public/menu-images/';
@@ -320,7 +351,7 @@ const menu = document.getElementById('menu');
 const navLinks = {};
 const sections = [];
 
-CATS.forEach(cat=>{
+function renderCategory(cat){
   const items = PRODUCTS.filter(p=>p.c===cat.id);
   if(!items.length) return;
 
@@ -359,6 +390,26 @@ CATS.forEach(cat=>{
   sec.appendChild(grid);
   menu.appendChild(sec);
   sections.push(sec);
+}
+
+/* رندر بالأقسام الرئيسية: المطبخ ثم البار */
+SECTIONS.forEach(section=>{
+  const secCats = CATS.filter(c=>c.s===section.id);
+
+  const banner = document.createElement('div');
+  banner.className = 'section-head';
+  banner.id = 'sec-'+section.id;
+  banner.innerHTML = '<span class="rule"></span><h2>'+section.ar+'<span class="en">'+section.en+'</span></h2><span class="rule"></span>';
+  menu.appendChild(banner);
+
+  if(!secCats.length){
+    const soon = document.createElement('div');
+    soon.className = 'soon';
+    soon.textContent = '🍹 قسم '+section.ar+' — قريبًا';
+    menu.appendChild(soon);
+    return;
+  }
+  secCats.forEach(renderCategory);
 });
 
 /* ---- تظليل التصنيف المفتوح + تحريك الشريط معاه ---- */
