@@ -170,6 +170,19 @@
   .price .num{color:var(--gold);font-weight:800;font-size:1.3rem}
   .price .cur{color:var(--muted);font-size:.8rem;font-weight:600}
 
+  /* Bar list (name + price, no images) */
+  .menu-list{display:grid;grid-template-columns:1fr;gap:0 46px}
+  @media(min-width:720px){ .menu-list{grid-template-columns:1fr 1fr} }
+  .menu-row{
+    display:flex;align-items:center;gap:12px;
+    padding:12px 6px;border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .menu-row .info{flex:1;min-width:0}
+  .menu-row .r-ar{font-size:1.05rem;font-weight:700;line-height:1.3}
+  .menu-row .r-en{font-size:.72rem;color:var(--muted);margin-top:2px;letter-spacing:.3px}
+  .menu-row .r-price{color:var(--gold);font-weight:800;font-size:1.2rem;white-space:nowrap}
+  .menu-row .r-price small{color:var(--muted);font-size:.68rem;font-weight:600;margin-inline-start:4px}
+
   footer{text-align:center;color:var(--muted);font-size:.85rem;padding:40px 16px 10px;border-top:1px solid var(--line);margin-top:20px}
   footer .g{color:var(--gold)}
 
@@ -190,6 +203,9 @@
     .section-head h2{font-size:1.5rem;letter-spacing:2px}
     .tabs{padding:10px 12px 6px;gap:8px}
     .tabs button{min-width:0;flex:1 1 0;font-size:.92rem;padding:9px 10px}
+    .menu-row{padding:10px 4px}
+    .menu-row .r-ar{font-size:.94rem}
+    .menu-row .r-price{font-size:1.05rem}
     .cat-head .count{font-size:.72rem}
     .card{border-radius:13px}
     .body{padding:10px 11px 12px;gap:3px}
@@ -243,7 +259,21 @@ const CATS = [
   { id:'pizza',    s:'kitchen', ar:'البيتزا',         en:'Pizza' },
   { id:'sandwich', s:'kitchen', ar:'الساندويتشات',    en:'Sandwiches' },
   { id:'kids',     s:'kitchen', ar:'وجبات أطفال',     en:'Kids Meals' },
-  // ↓↓↓ تصنيفات البار هتتضاف هنا ↓↓↓
+  // ---- البار ----
+  { id:'b_tea',      s:'bar', ar:'شاي',              en:'Tea' },
+  { id:'b_caffeine', s:'bar', ar:'كافيين',           en:'Caffeine' },
+  { id:'b_herbals',  s:'bar', ar:'أعشاب',            en:'Herbals' },
+  { id:'b_coffee',   s:'bar', ar:'قهوة',             en:'Coffee' },
+  { id:'b_sahlab',   s:'bar', ar:'سحلب',             en:'Sahlab' },
+  { id:'b_hotchoc',  s:'bar', ar:'هوت شوكليت',       en:'Hot Chocolate' },
+  { id:'b_ice',      s:'bar', ar:'آيس',              en:'Ice' },
+  { id:'b_shake',    s:'bar', ar:'ميلك شيك',         en:'Milk Shake' },
+  { id:'b_frappe',   s:'bar', ar:'فرابيه',           en:'Frappe' },
+  { id:'b_smoothie', s:'bar', ar:'سموذي',            en:'Smoothie' },
+  { id:'b_juice',    s:'bar', ar:'عصير طازة',        en:'Fresh Juice' },
+  { id:'b_cocktail', s:'bar', ar:'كوكتيل',           en:'Cocktail' },
+  { id:'b_soft',     s:'bar', ar:'مشروبات غازية',    en:'Soft Drinks' },
+  { id:'b_souda',    s:'bar', ar:'صودا',             en:'Souda' },
 ];
 
 const S = 'https://xrajwseaukolbidvwfsp.supabase.co/storage/v1/object/public/menu-images/';
@@ -347,6 +377,126 @@ const PRODUCTS = [
   {c:'kids', ar:'هابي ميل', en:'Happy Meal', p:200, img:S+'1.jpg'},
 ];
 
+/* ---- منتجات البار (بدون صور) ---- */
+const BAR = [
+  // شاي
+  {c:'b_tea', ar:'شاي', en:'Tea', p:30},
+  {c:'b_tea', ar:'شاي نعناع / قرنفل', en:'Tea Mint / Clove', p:35},
+  {c:'b_tea', ar:'شاي أخضر', en:'Green Tea', p:35},
+  {c:'b_tea', ar:'براد شاي صغير / كبير', en:'Tea Pot Small / Large', p:'40 / 60'},
+  {c:'b_tea', ar:'شاي بالحليب', en:'Milk Tea', p:60},
+  {c:'b_tea', ar:'شاي كرك', en:'Karak Tea', p:55},
+  // كافيين
+  {c:'b_caffeine', ar:'اسبريسو سنجل / دبل', en:'Espresso Single / Double', p:'40 / 50'},
+  {c:'b_caffeine', ar:'هابي اسبريسو', en:'Happy Espresso', p:75},
+  {c:'b_caffeine', ar:'ميكاتو', en:'Macchiato', p:65},
+  {c:'b_caffeine', ar:'كورتادو', en:'Cortado', p:65},
+  {c:'b_caffeine', ar:'فلات وايت', en:'Flat White', p:80},
+  {c:'b_caffeine', ar:'كابتشينو كلاسيك / فلفر', en:'Cappuccino Classic / Flavor', p:'80 / 85'},
+  {c:'b_caffeine', ar:'لاتيه', en:'Latte', p:80},
+  {c:'b_caffeine', ar:'سبانش لاتيه', en:'Spanish Latte', p:95},
+  // أعشاب
+  {c:'b_herbals', ar:'كوندريلا (جنزبيل عسل ليمون)', en:'Condrella (Ginger Lime Honey)', p:45},
+  {c:'b_herbals', ar:'أعشاب (نعناع ينسون كركديه)', en:'Herbals (Mint Anise Hibiscus)', p:35},
+  {c:'b_herbals', ar:'هوت سيدر', en:'Hot Cider', p:65},
+  {c:'b_herbals', ar:'هوت سينامون', en:'Hot Cinnamon', p:70},
+  // قهوة
+  {c:'b_coffee', ar:'قهوة تركي سنجل / دبل', en:'Turkish Coffee Single / Double', p:'35 / 40'},
+  {c:'b_coffee', ar:'قهوة فرنساوي', en:'French Coffee', p:45},
+  {c:'b_coffee', ar:'قهوة بندق', en:'Hazelnut Coffee', p:50},
+  // سحلب
+  {c:'b_sahlab', ar:'سحلب مكسرات', en:'Sahlab Nuts', p:80},
+  {c:'b_sahlab', ar:'سحلب نوتيلا / لوتس', en:'Sahlab Nutella / Lotus', p:95},
+  {c:'b_sahlab', ar:'سحلب اوريو', en:'Sahlab Oreo', p:95},
+  {c:'b_sahlab', ar:'سحلب فواكه', en:'Sahlab Fruit', p:125},
+  // هوت شوكليت
+  {c:'b_hotchoc', ar:'هوت شوكليت كلاسيك', en:'Hot Chocolate Classic', p:70},
+  {c:'b_hotchoc', ar:'هوت شوكليت نوتيلا', en:'Hot Chocolate Nutella', p:80},
+  {c:'b_hotchoc', ar:'هوت شوكليت لوتس', en:'Hot Chocolate Lotus', p:80},
+  // آيس
+  {c:'b_ice', ar:'ايس امريكانو', en:'Ice Americano', p:70},
+  {c:'b_ice', ar:'ايس كابتشينو', en:'Ice Cappuccino', p:85},
+  {c:'b_ice', ar:'ايس لاتيه', en:'Ice Latte', p:80},
+  {c:'b_ice', ar:'ايس سبانش لاتيه', en:'Ice Spanish Latte', p:90},
+  {c:'b_ice', ar:'ايس ميكاتو', en:'Ice Macchiato', p:85},
+  {c:'b_ice', ar:'ايس موكا', en:'Ice Mocha', p:95},
+  {c:'b_ice', ar:'ايس نوتيلا', en:'Ice Nutella', p:90},
+  {c:'b_ice', ar:'ايس كراميل', en:'Ice Caramel', p:85},
+  {c:'b_ice', ar:'ايس تشوكليت', en:'Ice Chocolate', p:85},
+  // ميلك شيك
+  {c:'b_shake', ar:'ميلك شيك فانيليا', en:'Vanilla Milk Shake', p:85},
+  {c:'b_shake', ar:'ميلك شيك تشوكلت', en:'Chocolate Milk Shake', p:85},
+  {c:'b_shake', ar:'ميلك شيك فراولة', en:'Strawberry Milk Shake', p:85},
+  {c:'b_shake', ar:'ميلك شيك مانجو', en:'Mango Milk Shake', p:85},
+  {c:'b_shake', ar:'ميلك شيك كراميل', en:'Caramel Milk Shake', p:95},
+  {c:'b_shake', ar:'ميلك شيك بلوبيري', en:'Blueberry Milk Shake', p:95},
+  {c:'b_shake', ar:'ميلك شيك اوريو', en:'Oreo Milk Shake', p:95},
+  {c:'b_shake', ar:'ميلك تشيز (نوتيلا/لوتس/بيستاشيو/كيندر)', en:'Milk Cheese', p:100},
+  // فرابيه
+  {c:'b_frappe', ar:'فرابيه كوفي', en:'Frappe Coffee', p:85},
+  {c:'b_frappe', ar:'فرابيه كراميل', en:'Frappe Caramel', p:100},
+  {c:'b_frappe', ar:'فرابيه فانيليا', en:'Frappe Vanilla', p:85},
+  {c:'b_frappe', ar:'فرابيه تشوكلت', en:'Frappe Chocolate', p:85},
+  {c:'b_frappe', ar:'فرابيه نوتيلا', en:'Frappe Nutella', p:100},
+  {c:'b_frappe', ar:'فرابيه لوتس', en:'Frappe Lotus', p:100},
+  // سموذي
+  {c:'b_smoothie', ar:'ليمون نعناع', en:'Lemon Mint', p:90},
+  {c:'b_smoothie', ar:'اناناس', en:'Pineapple', p:95},
+  {c:'b_smoothie', ar:'تروبيكا', en:'Tropica', p:95},
+  {c:'b_smoothie', ar:'بلو اوشن', en:'Blue Ocean', p:95},
+  {c:'b_smoothie', ar:'باشون فروت', en:'Passion Fruit', p:90},
+  {c:'b_smoothie', ar:'كيوي', en:'Kiwi', p:100},
+  {c:'b_smoothie', ar:'مانجو', en:'Mango', p:95},
+  {c:'b_smoothie', ar:'فراولة', en:'Strawberry', p:85},
+  {c:'b_smoothie', ar:'بلوبيري', en:'Blueberry', p:95},
+  {c:'b_smoothie', ar:'ميكس بيري', en:'Mix Berries', p:85},
+  {c:'b_smoothie', ar:'بطيخ', en:'Watermelon', p:90},
+  {c:'b_smoothie', ar:'خوخ', en:'Peach', p:90},
+  {c:'b_smoothie', ar:'تفاح أخضر', en:'Green Apple', p:90},
+  // عصير طازة
+  {c:'b_juice', ar:'برتقال', en:'Orange', p:85},
+  {c:'b_juice', ar:'رمان', en:'Pomegranate', p:80},
+  {c:'b_juice', ar:'ليمون', en:'Lemon', p:80},
+  {c:'b_juice', ar:'ليمون نعناع', en:'Lemon Mint', p:85},
+  {c:'b_juice', ar:'بلح', en:'Dates', p:90},
+  {c:'b_juice', ar:'زبادي', en:'Yogurt', p:80},
+  {c:'b_juice', ar:'افوكادو', en:'Avocado', p:115},
+  {c:'b_juice', ar:'مانجو', en:'Mango', p:90},
+  {c:'b_juice', ar:'فراولة', en:'Strawberry', p:80},
+  {c:'b_juice', ar:'جوافة', en:'Guava', p:80},
+  {c:'b_juice', ar:'اناناس', en:'Pineapple', p:90},
+  {c:'b_juice', ar:'كيوي', en:'Kiwi', p:95},
+  {c:'b_juice', ar:'موز', en:'Banana', p:80},
+  {c:'b_juice', ar:'بطيخ', en:'Watermelon', p:85},
+  // كوكتيل
+  {c:'b_cocktail', ar:'فلوريدا (مانجو فراولة جوافة)', en:'Florida', p:95},
+  {c:'b_cocktail', ar:'روج (مانجو فراولة موز)', en:'Roug', p:95},
+  {c:'b_cocktail', ar:'جرين لايت (جوافة ليمون نعناع)', en:'Green Light', p:90},
+  {c:'b_cocktail', ar:'ماجيك جرين (كيوي مانجو)', en:'Magic Green', p:95},
+  {c:'b_cocktail', ar:'مانجو بيتش (مانجو خوخ باشون)', en:'Mango Peach', p:95},
+  {c:'b_cocktail', ar:'هوريكان (مانجو افوكادو بلوبيري)', en:'Hurricane', p:125},
+  {c:'b_cocktail', ar:'إنرجي (افوكادو بلح مكسرات)', en:'Energy', p:125},
+  {c:'b_cocktail', ar:'باور (افوكادو مانجو مكسرات)', en:'Power', p:125},
+  {c:'b_cocktail', ar:'زبادي فواكه', en:'Fruit Yogurt', p:110},
+  // مشروبات غازية
+  {c:'b_soft', ar:'مياه معدنية', en:'Water', p:15},
+  {c:'b_soft', ar:'مشروب غازي (بيبسي/سفن/ميرندا)', en:'Soft Drinks', p:50},
+  {c:'b_soft', ar:'فيروز', en:'Fayrouz', p:60},
+  {c:'b_soft', ar:'بيريل', en:'Birell', p:60},
+  {c:'b_soft', ar:'ريد بول', en:'Red Bull', p:95},
+  // صودا
+  {c:'b_souda', ar:'موهيتو كلاسيك', en:'Mojito Classic', p:85},
+  {c:'b_souda', ar:'موهيتو فروت', en:'Mojito Fruit', p:95},
+  {c:'b_souda', ar:'موهيتو ريد بول', en:'Mojito Red Bull', p:125},
+  {c:'b_souda', ar:'ريد بول ميكس', en:'Red Bull Mix', p:145},
+  {c:'b_souda', ar:'شيري كولا', en:'Cherry Cola', p:85},
+  {c:'b_souda', ar:'صن شاين', en:'SunShine', p:85},
+  {c:'b_souda', ar:'صودا بلوبيري', en:'Souda Blueberry', p:90},
+  {c:'b_souda', ar:'صودا فراولة', en:'Souda Strawberry', p:90},
+  {c:'b_souda', ar:'صودا كيوي', en:'Souda Kiwi', p:90},
+];
+PRODUCTS.push(...BAR);
+
 /* ---- صور بديلة حسب التصنيف (تظهر مكان أي صورة مش متاحة) ---- */
 const FBQ = '?w=500&q=72&auto=format&fit=crop';
 const FALLBACK = {
@@ -396,23 +546,39 @@ function renderCategory(cat){
   head.innerHTML = '<h2>'+cat.ar+'</h2><span class="line"></span><span class="count">'+items.length+' صنف</span>';
   sec.appendChild(head);
 
-  const grid = document.createElement('div');
-  grid.className = 'grid';
-  items.forEach(p=>{
-    const card = document.createElement('div');
-    card.className = 'card';
-    const fallback = FALLBACK[p.c] || '';
-    const imgTag = '<img src="'+(p.img||fallback)+'" data-fb="'+fallback+'" alt="'+p.ar+'" loading="lazy" onerror="fb(this)" />';
-    card.innerHTML =
-      '<div class="thumb">'+imgTag+'</div>'+
-      '<div class="body">'+
-        '<div class="name-ar">'+p.ar+'</div>'+
-        '<div class="name-en">'+p.en+'</div>'+
-        '<div class="price"><span class="num">'+p.p+'</span><span class="cur">ج.م</span></div>'+
-      '</div>';
-    grid.appendChild(card);
-  });
-  sec.appendChild(grid);
+  if(cat.s==='bar'){
+    // البار: قائمة اسم + سعر بدون صور
+    const list = document.createElement('div');
+    list.className = 'menu-list';
+    items.forEach(p=>{
+      const row = document.createElement('div');
+      row.className = 'menu-row';
+      row.innerHTML =
+        '<div class="info"><div class="r-ar">'+p.ar+'</div><div class="r-en">'+p.en+'</div></div>'+
+        '<div class="r-price">'+p.p+'<small>ج.م</small></div>';
+      list.appendChild(row);
+    });
+    sec.appendChild(list);
+  } else {
+    // المطبخ: كروت بصور
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    items.forEach(p=>{
+      const card = document.createElement('div');
+      card.className = 'card';
+      const fallback = FALLBACK[p.c] || '';
+      const imgTag = '<img src="'+(p.img||fallback)+'" data-fb="'+fallback+'" alt="'+p.ar+'" loading="lazy" onerror="fb(this)" />';
+      card.innerHTML =
+        '<div class="thumb">'+imgTag+'</div>'+
+        '<div class="body">'+
+          '<div class="name-ar">'+p.ar+'</div>'+
+          '<div class="name-en">'+p.en+'</div>'+
+          '<div class="price"><span class="num">'+p.p+'</span><span class="cur">ج.م</span></div>'+
+        '</div>';
+      grid.appendChild(card);
+    });
+    sec.appendChild(grid);
+  }
   menu.appendChild(sec);
   sections.push(sec);
 }
