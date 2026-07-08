@@ -4,6 +4,7 @@ import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, 
 import { db, supabase } from '../lib/supabase';
 import { warehouseHoldsItem, warehouseValue, warehouseStock } from '../lib/warehouse';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
+import { compressImage } from '../utils/imageUtils';
 import * as XLSX from 'xlsx';
 
 const getLocalDayStr = (d = new Date()) => {
@@ -4803,17 +4804,20 @@ export default function AdminDashboard({
                       <span>{language === 'ar' ? 'رفع لوجو' : 'Upload'}</span>
                       <input 
                         type="file" 
-                        accept="image/*" 
+                        accept="image/*"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setSetLogoUrl(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
+                            // ضغط اللوجو لـ WebP ~400px (يحافظ على الشفافية)
+                            compressImage(file, { maxSize: 400, quality: 0.8 })
+                              .then(setSetLogoUrl)
+                              .catch(() => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => setSetLogoUrl(reader.result as string);
+                                reader.readAsDataURL(file);
+                              });
                           }
-                        }} 
+                        }}
                         style={{ display: 'none' }} 
                       />
                     </label>
@@ -6937,17 +6941,20 @@ export default function AdminDashboard({
                       <span>{language === 'ar' ? 'رفع صورة' : 'Upload'}</span>
                       <input 
                         type="file" 
-                        accept="image/*" 
+                        accept="image/*"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setProdImageUrl(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
+                            // ضغط الصورة لـ WebP ~800px قبل التخزين لتوفير الـ egress
+                            compressImage(file, { maxSize: 800, quality: 0.72 })
+                              .then(setProdImageUrl)
+                              .catch(() => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => setProdImageUrl(reader.result as string);
+                                reader.readAsDataURL(file);
+                              });
                           }
-                        }} 
+                        }}
                         style={{ display: 'none' }} 
                       />
                     </label>
