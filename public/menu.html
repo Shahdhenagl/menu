@@ -20,6 +20,7 @@
     --text:#f2f2f0;
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
   body{
     font-family:'Cairo',system-ui,'Segoe UI',Tahoma,sans-serif;
     background:var(--bg);
@@ -53,17 +54,28 @@
   /* Category nav */
   nav{
     position:sticky;top:0;z-index:20;
-    background:rgba(7,7,7,.92);backdrop-filter:blur(10px);
+    background:rgba(7,7,7,.94);backdrop-filter:blur(10px);
     border-bottom:1px solid var(--line);
-    display:flex;flex-wrap:wrap;justify-content:center;gap:8px;
-    padding:12px 14px;margin-bottom:34px;
+    display:flex;gap:9px;overflow-x:auto;overflow-y:hidden;
+    padding:13px 14px;margin-bottom:34px;
+    scrollbar-width:thin;scrollbar-color:var(--gold-dark) transparent;
+    -webkit-overflow-scrolling:touch;
   }
+  nav::-webkit-scrollbar{height:6px}
+  nav::-webkit-scrollbar-track{background:transparent}
+  nav::-webkit-scrollbar-thumb{background:var(--gold-dark);border-radius:10px}
   nav a{
-    color:var(--muted);text-decoration:none;font-weight:600;font-size:.85rem;
-    padding:6px 13px;border:1px solid var(--line);border-radius:999px;white-space:nowrap;
-    transition:.2s;
+    flex:0 0 auto;color:var(--muted);text-decoration:none;font-weight:700;font-size:.92rem;
+    padding:8px 17px;border:1px solid var(--line);border-radius:999px;white-space:nowrap;
+    background:var(--card);transition:.2s;
   }
-  nav a:hover{color:var(--bg);background:var(--gold);border-color:var(--gold)}
+  nav a:hover{color:var(--text);border-color:var(--gold)}
+  nav a.active{
+    color:#1a1400;
+    background:linear-gradient(180deg,var(--gold-light),var(--gold));
+    border-color:var(--gold);font-weight:800;
+    box-shadow:0 4px 16px rgba(212,175,55,.4);
+  }
 
   /* Category section */
   .cat{margin-bottom:46px;scroll-margin-top:70px}
@@ -122,8 +134,8 @@
     h1{font-size:2rem}
     .subtitle{font-size:.85rem;margin-top:6px}
     .divider{margin-top:16px}
-    nav{padding:10px 10px}
-    nav a{font-size:.78rem;padding:5px 11px}
+    nav{padding:11px 12px}
+    nav a{font-size:.84rem;padding:7px 14px}
     .cat{margin-bottom:34px}
     .cat-head{gap:10px;margin-bottom:16px}
     .cat-head h2{font-size:1.2rem}
@@ -299,6 +311,9 @@ function fb(el){
 const nav = document.getElementById('nav');
 const menu = document.getElementById('menu');
 
+const navLinks = {};
+const sections = [];
+
 CATS.forEach(cat=>{
   const items = PRODUCTS.filter(p=>p.c===cat.id);
   if(!items.length) return;
@@ -306,6 +321,8 @@ CATS.forEach(cat=>{
   const a = document.createElement('a');
   a.href = '#cat-'+cat.id;
   a.textContent = cat.ar;
+  a.dataset.cat = cat.id;
+  navLinks[cat.id] = a;
   nav.appendChild(a);
 
   const sec = document.createElement('section');
@@ -335,6 +352,28 @@ CATS.forEach(cat=>{
   });
   sec.appendChild(grid);
   menu.appendChild(sec);
+  sections.push(sec);
+});
+
+/* ---- تظليل التصنيف المفتوح + تحريك الشريط معاه ---- */
+let activeId = null;
+function setActive(id){
+  if(id===activeId) return;
+  activeId = id;
+  for(const k in navLinks) navLinks[k].classList.toggle('active', k===id);
+  const a = navLinks[id];
+  if(a) a.scrollIntoView({block:'nearest', inline:'center', behavior:'smooth'});
+}
+const spy = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting) setActive(e.target.id.replace('cat-','')); });
+}, { rootMargin:'-42% 0px -52% 0px', threshold:0 });
+sections.forEach(s=>spy.observe(s));
+if(sections[0]) setActive(sections[0].id.replace('cat-',''));
+
+/* ضغطة على تصنيف = تظليله فورًا */
+nav.addEventListener('click', e=>{
+  const a = e.target.closest('a');
+  if(a && a.dataset.cat) setActive(a.dataset.cat);
 });
 </script>
 </body>
