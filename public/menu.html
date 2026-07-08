@@ -273,6 +273,28 @@ const PRODUCTS = [
   {c:'kids', ar:'هابي ميل', en:'Happy Meal', p:200, img:S+'1.jpg'},
 ];
 
+/* ---- صور بديلة مؤقتة حسب التصنيف (تظهر مكان أي صورة مش متاحة) ---- */
+const FBQ = '?w=500&q=72&auto=format&fit=crop';
+const FALLBACK = {
+  box:      'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666'+FBQ,
+  salad:    'https://images.unsplash.com/photo-1512621776951-a57141f2eefd'+FBQ,
+  soup:     'https://images.unsplash.com/photo-1547592166-23ac45744acd'+FBQ,
+  tagine:   'https://images.unsplash.com/photo-1585937421612-70a008356fbe'+FBQ,
+  meals:    'https://images.unsplash.com/photo-1544025162-d76694265947'+FBQ,
+  grills:   'https://images.unsplash.com/photo-1544025162-d76694265947'+FBQ,
+  pasta:    'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9'+FBQ,
+  sides:    'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b'+FBQ,
+  burgers:  'https://images.unsplash.com/photo-1568901346375-23c9450c58cd'+FBQ,
+  pizza:    'https://images.unsplash.com/photo-1513104890138-7c749659a591'+FBQ,
+  sandwich: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af'+FBQ,
+  kids:     'https://images.unsplash.com/photo-1571091718767-18b5b1457add'+FBQ,
+};
+function fb(el){
+  const f = el.getAttribute('data-fb');
+  if (f && !el.dataset.done){ el.dataset.done='1'; el.src=f; }
+  else { el.classList.add('hide'); }
+}
+
 /* ---- render ---- */
 const nav = document.getElementById('nav');
 const menu = document.getElementById('menu');
@@ -300,9 +322,8 @@ CATS.forEach(cat=>{
   items.forEach(p=>{
     const card = document.createElement('div');
     card.className = 'card';
-    const imgTag = p.img
-      ? '<img src="'+p.img+'" alt="'+p.ar+'" loading="lazy" onerror="this.classList.add(\'hide\')" />'
-      : '';
+    const fallback = FALLBACK[p.c] || '';
+    const imgTag = '<img src="'+(p.img||fallback)+'" data-fb="'+fallback+'" alt="'+p.ar+'" loading="lazy" onerror="fb(this)" />';
     card.innerHTML =
       '<div class="thumb">'+imgTag+'</div>'+
       '<div class="body">'+
