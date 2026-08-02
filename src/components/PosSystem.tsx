@@ -940,6 +940,27 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         {/* Top Floating Controls */}
         <div style={{ position: 'absolute', top: '1rem', left: '1rem', right: '1rem', display: 'flex', justifyContent: 'space-between', zIndex: 100 }}>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {view === 'menu' && (
+              <button
+                onClick={() => { if (selectedWaiter || role === 'waiter') setView('waiter_dashboard'); else setView('customer_info'); }}
+                style={{
+                  background: 'rgba(0,0,0,0.5)',
+                  border: '1px solid var(--gold-primary)',
+                  color: 'var(--gold-primary)',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontFamily: 'inherit',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem'
+                }}
+              >
+                <ArrowRight size={18} />
+                {t.back}
+              </button>
+            )}
             {setLanguage && (
               <button 
                 onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
