@@ -176,7 +176,7 @@ export default function FinancialsView({
   };
 
   const formatCurrency = (amount: number) => {
-    return amount.toLocaleString() + (language === 'ar' ? ' ج.م' : ' EGP');
+    return (Number(amount) || 0).toLocaleString() + (language === 'ar' ? ' ج.م' : ' EGP');
   };
 
   const handleTransferSubmit = async () => {
@@ -275,7 +275,7 @@ export default function FinancialsView({
             {language === 'ar' ? 'أرصدة الخزينة والحسابات (خلال الفترة)' : 'Treasury Balances (Period)'}
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-            {['cash', 'visa', 'wallet', 'bar_wallet', 'instapay', 'deferred'].map(method => (
+            {['cash', 'visa', 'wallet_restaurant', 'wallet_bar', 'instapay', 'deferred'].map(method => (
               <div key={method} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '12px', border: `1px solid ${getMethodColor(method)}` }}>
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-gray)' }}>{getMethodLabel(method)}</div>
                 <div className="font-en" style={{ fontSize: '1.4rem', fontWeight: '800', color: getMethodColor(method) }}>
