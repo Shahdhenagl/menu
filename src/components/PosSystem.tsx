@@ -1230,7 +1230,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           )}
 
           {view === 'menu' && (
-            <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', display: 'flex' }}>
+            <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', display: 'flex', paddingTop: '3.75rem' }}>
               <div className="pos-menu-sidebar">
                 <div style={{ display: 'flex', padding: '10px', gap: '5px', borderBottom: '1px solid #333' }}>
                   <button 
