@@ -492,35 +492,32 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     return p.price;
   };
 
-  const addToCart = (p: Product) => {
-    const price = getProductPrice(p);
-    
+  // حالة المخزون للصنف: 'out' نفذ، 'low' قرب يخلص، 'ok' متاح
+  const getStockStatus = (p: Product): 'out' | 'low' | 'ok' => {
     const dept = p.department || 'restaurant';
     const stockField = dept === 'bar' ? 'stock_bar' : 'stock_factory';
-
-    // Negative stock warning check
-    let stockWarning = false;
     const recipeItems = productRecipes.filter(r => r.product_id === p.id);
     if (recipeItems.length > 0) {
       for (const rec of recipeItems) {
         const invItem = inventoryItems.find(i => i.id === rec.inventory_item_id);
-        if (invItem && (invItem[stockField] || 0) - rec.quantity <= 0) {
-          stockWarning = true;
-          break;
-        }
+        if (!invItem) continue;
+        const s = Number(invItem[stockField]) || 0;
+        if (s <= 0) return 'out';
+        if (s - rec.quantity <= 0) return 'low';
       }
-    } else {
-      // Check if product is sold directly
-      const invItem = inventoryItems.find(i => i.id === p.id);
-      if (invItem && (invItem[stockField] || 0) - 1 <= 0) {
-        stockWarning = true;
-      }
+      return 'ok';
     }
-
-    if (stockWarning) {
-      alert(language === 'ar' ? '⚠️ تحذير: هذا الصنف أو مكوناته على وشك النفاذ من المخزون!' : '⚠️ Warning: This item or its ingredients are out of stock!');
+    const invItem = inventoryItems.find(i => i.id === p.id);
+    if (invItem) {
+      const s = Number(invItem[stockField]) || 0;
+      if (s <= 0) return 'out';
+      if (s - 1 <= 0) return 'low';
     }
+    return 'ok';
+  };
 
+  const addToCart = (p: Product) => {
+    const price = getProductPrice(p);
     setCart(prev => {
       const existing = prev.find(item => item.id === p.id);
       if (existing) {
@@ -1254,8 +1251,22 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 ))}
               </div>
               <div className="pos-products">
-                {getVisibleProducts().map(p => (
-                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} key={p.id} className="pos-product-card" onClick={() => addToCart(p)}>
+                {getVisibleProducts().map(p => {
+                  const stockStatus = getStockStatus(p);
+                  return (
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} key={p.id} className="pos-product-card" style={{ position: 'relative' }} onClick={() => addToCart(p)}>
+                    {stockStatus !== 'ok' && (
+                      <div style={{
+                        position: 'absolute', top: 8, insetInlineStart: 8, zIndex: 3,
+                        padding: '3px 10px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700,
+                        color: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,.45)',
+                        background: stockStatus === 'out' ? '#c0392b' : '#e08e0b'
+                      }}>
+                        {stockStatus === 'out'
+                          ? (language === 'ar' ? 'نفذ' : 'Out')
+                          : (language === 'ar' ? 'قرب يخلص' : 'Low')}
+                      </div>
+                    )}
                     {p.image_url ? (
                       <img src={p.image_url} alt={p.name_en} className="pos-product-img" />
                     ) : (
@@ -1268,7 +1279,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       </div>
                     </div>
                   </motion.div>
-                ))}
+                  );
+                })}
               </div>
               <div className="pos-cart-panel">
                 <div style={{ padding: '1.5rem', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
