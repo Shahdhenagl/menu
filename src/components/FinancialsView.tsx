@@ -58,17 +58,20 @@ export default function FinancialsView({
     return true;
   };
 
+  // تحويل أي قيمة لرقم آمن (أعمدة numeric في Supabase بترجع كنصوص)
+  const num = (v: any): number => Number(v) || 0;
+
   // Only consider completed orders, excluding hospitality. Deferred is now INCLUDED in revenue
-  const filteredOrders = orders.filter(o => 
-    o.status === 'completed' && 
-    o.payment_method !== 'hospitality' && 
-    (o.id ? filterDate(Number.isInteger(parseInt(o.id)) ? parseInt(o.id) : o.id) : true)
+  const filteredOrders = orders.filter(o =>
+    o.status === 'completed' &&
+    o.payment_method !== 'hospitality' &&
+    filterDate(o.created_at || '')
   );
-  
+
   const filteredExpenses = expenses.filter(e => filterDate(e.expense_date || e.created_at || ''));
 
-  const totalRevenue = filteredOrders.reduce((sum, o) => sum + o.total_price, 0);
-  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalRevenue = filteredOrders.reduce((sum, o) => sum + num(o.total_price), 0);
+  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + num(e.amount), 0);
   const netCashflow = totalRevenue - totalExpenses; // Note: Revenue now includes deferred, so true net cashflow requires checking balances
 
   // Revenue Breakdown
@@ -77,20 +80,19 @@ export default function FinancialsView({
 
   filteredOrders.forEach(o => {
     if (o.payment_method === 'split' && o.payment_details) {
-      revenueByType.cash += (o.payment_details.cash || 0);
-      revenueByType.visa += (o.payment_details.visa || 0);
-      revenueByType.wallet += (o.payment_details.wallet || 0);
-      revenueByType.wallet_restaurant += (o.payment_details.wallet_restaurant || 0);
-      revenueByType.wallet_bar += (o.payment_details.wallet_bar || 0);
-
-      revenueByType.instapay += (o.payment_details.instapay || 0);
-      revenueByType.deferred += (o.payment_details.deferred || 0);
+      revenueByType.cash += num(o.payment_details.cash);
+      revenueByType.visa += num(o.payment_details.visa);
+      revenueByType.wallet += num(o.payment_details.wallet);
+      revenueByType.wallet_restaurant += num(o.payment_details.wallet_restaurant);
+      revenueByType.wallet_bar += num(o.payment_details.wallet_bar);
+      revenueByType.instapay += num(o.payment_details.instapay);
+      revenueByType.deferred += num(o.payment_details.deferred);
     } else {
       const method = o.payment_method || 'cash';
       if (revenueByType[method as keyof typeof revenueByType] !== undefined) {
-        revenueByType[method as keyof typeof revenueByType] += o.total_price;
+        revenueByType[method as keyof typeof revenueByType] += num(o.total_price);
       } else {
-        revenueByType.cash += o.total_price; // fallback
+        revenueByType.cash += num(o.total_price); // fallback
       }
     }
   });
@@ -103,20 +105,19 @@ export default function FinancialsView({
   const allCompletedOrders = orders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality');
   allCompletedOrders.forEach(o => {
     if (o.payment_method === 'split' && o.payment_details) {
-      actualBalances.cash += (o.payment_details.cash || 0);
-      actualBalances.visa += (o.payment_details.visa || 0);
-      actualBalances.wallet += (o.payment_details.wallet || 0);
-      actualBalances.wallet_restaurant += (o.payment_details.wallet_restaurant || 0);
-      actualBalances.wallet_bar += (o.payment_details.wallet_bar || 0);
-
-      actualBalances.instapay += (o.payment_details.instapay || 0);
-      actualBalances.deferred += (o.payment_details.deferred || 0);
+      actualBalances.cash += num(o.payment_details.cash);
+      actualBalances.visa += num(o.payment_details.visa);
+      actualBalances.wallet += num(o.payment_details.wallet);
+      actualBalances.wallet_restaurant += num(o.payment_details.wallet_restaurant);
+      actualBalances.wallet_bar += num(o.payment_details.wallet_bar);
+      actualBalances.instapay += num(o.payment_details.instapay);
+      actualBalances.deferred += num(o.payment_details.deferred);
     } else {
       const method = o.payment_method || 'cash';
       if (actualBalances[method as keyof typeof actualBalances] !== undefined) {
-        actualBalances[method as keyof typeof actualBalances] += o.total_price;
+        actualBalances[method as keyof typeof actualBalances] += num(o.total_price);
       } else {
-        actualBalances.cash += o.total_price; // fallback
+        actualBalances.cash += num(o.total_price); // fallback
       }
     }
   });
@@ -125,24 +126,24 @@ export default function FinancialsView({
   expenses.forEach(e => {
     const method = e.payment_method || 'cash';
     if (actualBalances[method as keyof typeof actualBalances] !== undefined) {
-      actualBalances[method as keyof typeof actualBalances] -= e.amount;
+      actualBalances[method as keyof typeof actualBalances] -= num(e.amount);
     }
   });
 
   // 3. Apply All Financial Transactions (Transfers & Debt Settlements)
   financialTransactions.forEach(tx => {
     if (tx.from_method && actualBalances[tx.from_method as keyof typeof actualBalances] !== undefined) {
-      actualBalances[tx.from_method as keyof typeof actualBalances] -= tx.amount;
+      actualBalances[tx.from_method as keyof typeof actualBalances] -= num(tx.amount);
     }
     if (tx.to_method && actualBalances[tx.to_method as keyof typeof actualBalances] !== undefined) {
-      actualBalances[tx.to_method as keyof typeof actualBalances] += tx.amount;
+      actualBalances[tx.to_method as keyof typeof actualBalances] += num(tx.amount);
     }
   });
 
 
-  const stockMainValue = inventoryItems.reduce((sum, i) => sum + ((i.stock_main || 0) * (i.avg_purchase_price || 0)), 0);
-  const stockFactoryValue = inventoryItems.reduce((sum, i) => sum + ((i.stock_factory || 0) * (i.avg_purchase_price || 0)), 0);
-  const stockDistValue = inventoryItems.reduce((sum, i) => sum + ((i.stock_bar || 0) * (i.avg_purchase_price || 0)), 0);
+  const stockMainValue = inventoryItems.reduce((sum, i) => sum + (num(i.stock_main) * num(i.avg_purchase_price)), 0);
+  const stockFactoryValue = inventoryItems.reduce((sum, i) => sum + (num(i.stock_factory) * num(i.avg_purchase_price)), 0);
+  const stockDistValue = inventoryItems.reduce((sum, i) => sum + (num(i.stock_bar) * num(i.avg_purchase_price)), 0);
 
   const getMethodLabel = (method: string) => {
     switch(method) {
@@ -320,10 +321,10 @@ export default function FinancialsView({
                         </span>
                       </div>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>
-                        {new Date(Number.isInteger(parseInt(order.id)) ? parseInt(order.id) : order.id).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}
+                        {new Date(order.created_at || '').toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}
                       </span>
                     </div>
-                    <span style={{ fontWeight: 'bold', color: '#10b981' }}>+{order.total_price}</span>
+                    <span style={{ fontWeight: 'bold', color: '#10b981' }}>+{num(order.total_price)}</span>
                   </div>
                 ))
               )}
@@ -354,7 +355,7 @@ export default function FinancialsView({
                         {expense.type} • {new Date(expense.expense_date || expense.created_at || '').toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
                       </span>
                     </div>
-                    <span style={{ fontWeight: 'bold', color: '#ef4444' }}>-{expense.amount}</span>
+                    <span style={{ fontWeight: 'bold', color: '#ef4444' }}>-{num(expense.amount)}</span>
                   </div>
                 ))
               )}
