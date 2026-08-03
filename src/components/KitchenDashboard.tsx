@@ -294,7 +294,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
           <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--border-color)', padding: '0.5rem', borderRadius: '12px', flexWrap: 'wrap' }}>
             <button
               onClick={() => setActiveTab('kitchen')}
-              style={{ padding: '0.5rem 1rem', background: activeTab === 'kitchen' ? 'var(--gold-primary)' : 'transparent', color: activeTab === 'kitchen' ? '#000' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              style={{ padding: '0.5rem 1rem', background: activeTab === 'kitchen' ? 'var(--gold-primary)' : 'transparent', color: activeTab === 'kitchen' ? '#000' : 'var(--text-white)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <ChefHat size={16} />
               {language === 'ar' ? 'المطبخ' : 'Kitchen'}
               <span style={{ background: activeTab === 'kitchen' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.12)', borderRadius: '999px', padding: '0 0.5rem', fontSize: '0.8rem' }}>{kitchenCount}</span>
@@ -308,7 +308,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
             </button>
             <button
               onClick={() => setActiveTab('inventory')}
-              style={{ padding: '0.5rem 1rem', background: activeTab === 'inventory' ? 'var(--gold-primary)' : 'transparent', color: activeTab === 'inventory' ? '#000' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease' }}>
+              style={{ padding: '0.5rem 1rem', background: activeTab === 'inventory' ? 'var(--gold-primary)' : 'transparent', color: activeTab === 'inventory' ? '#000' : 'var(--text-white)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease' }}>
               {language === 'ar' ? 'المخزون والنواقص' : 'Inventory & Shortages'}
             </button>
           </div>
@@ -494,7 +494,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                       border: 'none',
                       cursor: hasShortages && !hasRequested ? 'not-allowed' : 'pointer',
                       background: hasShortages && !hasRequested ? '#4b5563' : '#3b82f6',
-                      color: hasShortages && !hasRequested ? 'var(--text-muted)' : 'white',
+                      color: hasShortages && !hasRequested ? 'var(--text-muted)' : 'var(--text-white)',
                       transition: 'all 0.2s ease'
                     }}
                   >

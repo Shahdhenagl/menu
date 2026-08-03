@@ -1218,7 +1218,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     onClick={() => setSelectedWaiter(w)}
                     style={{ 
                       background: selectedWaiter?.id === w.id ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : 'var(--bg-card)',
-                      color: selectedWaiter?.id === w.id ? '#000' : '#fff',
+                      color: selectedWaiter?.id === w.id ? '#000' : 'var(--text-white)',
                       border: selectedWaiter?.id === w.id ? '2px solid transparent' : '2px solid var(--border-color)',
                       borderRadius: '16px', padding: '1.5rem', cursor: 'pointer',
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.8rem',
@@ -1339,7 +1339,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               padding: '0.8rem 1.4rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontFamily: 'inherit', fontSize: '1rem',
                               border: selectedHall === h.name ? '2px solid var(--gold-primary)' : '2px solid var(--border-color)',
                               background: selectedHall === h.name ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : 'var(--bg-card)',
-                              color: selectedHall === h.name ? '#000' : '#fff'
+                              color: selectedHall === h.name ? '#000' : 'var(--text-white)'
                             }}>
                             {h.name}{h.tax_percent ? <span style={{ display: 'block', fontSize: '0.72rem', opacity: 0.85 }}>{language === 'ar' ? 'ضريبة' : 'Tax'} {h.tax_percent}%</span> : null}
                           </button>
@@ -1369,12 +1369,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 <div style={{ display: 'flex', padding: '10px', gap: '5px', borderBottom: '1px solid var(--border-color)' }}>
                   <button 
                     onClick={() => setPosDepartment('restaurant')} 
-                    style={{ flex: 1, padding: '8px', background: posDepartment === 'restaurant' ? 'var(--gold-primary)' : 'var(--border-color)', color: posDepartment === 'restaurant' ? '#000' : '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    style={{ flex: 1, padding: '8px', background: posDepartment === 'restaurant' ? 'var(--gold-primary)' : 'var(--border-color)', color: posDepartment === 'restaurant' ? '#000' : 'var(--text-white)', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                     {language === 'ar' ? 'المطعم' : 'Restaurant'}
                   </button>
                   <button 
                     onClick={() => setPosDepartment('bar')} 
-                    style={{ flex: 1, padding: '8px', background: posDepartment === 'bar' ? '#3b82f6' : 'var(--border-color)', color: posDepartment === 'bar' ? '#fff' : '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    style={{ flex: 1, padding: '8px', background: posDepartment === 'bar' ? '#3b82f6' : 'var(--border-color)', color: posDepartment === 'bar' ? 'var(--text-white)' : 'var(--text-white)', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                     {language === 'ar' ? 'البار' : 'Bar'}
                   </button>
                 </div>
@@ -1457,7 +1457,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 style={{ 
                                   background: cannotDecrease ? 'var(--border-color)' : 'var(--border-color)', 
                                   border: 'none', 
-                                  color: cannotDecrease ? '#555' : '#fff', 
+                                  color: cannotDecrease ? '#555' : 'var(--text-white)', 
                                   width: '32px', height: '32px', borderRadius: '6px', 
                                   cursor: cannotDecrease ? 'not-allowed' : 'pointer' 
                                 }}
@@ -1604,10 +1604,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <h2>{language === 'ar' ? `الطلبات النشطة` : `Active Orders`}</h2>
                   <div style={{ display: 'flex', background: 'var(--bg-darker)', borderRadius: '8px', padding: '4px' }}>
-                    <button onClick={() => setViewAllOrders(false)} style={{ padding: '0.5rem 1rem', background: !viewAllOrders ? 'var(--gold-primary)' : 'transparent', color: !viewAllOrders ? '#000' : '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    <button onClick={() => setViewAllOrders(false)} style={{ padding: '0.5rem 1rem', background: !viewAllOrders ? 'var(--gold-primary)' : 'transparent', color: !viewAllOrders ? '#000' : 'var(--text-white)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
                       {language === 'ar' ? 'طلباتي' : 'My Orders'}
                     </button>
-                    <button onClick={() => setViewAllOrders(true)} style={{ padding: '0.5rem 1rem', background: viewAllOrders ? 'var(--gold-primary)' : 'transparent', color: viewAllOrders ? '#000' : '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    <button onClick={() => setViewAllOrders(true)} style={{ padding: '0.5rem 1rem', background: viewAllOrders ? 'var(--gold-primary)' : 'transparent', color: viewAllOrders ? '#000' : 'var(--text-white)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
                       {language === 'ar' ? 'الكل' : 'All'}
                     </button>
                   </div>
@@ -2156,7 +2156,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                     cursor: 'pointer',
                                     borderBottom: '1px solid var(--border-color)',
                                     background: payCustomerId === c.id ? 'var(--gold-primary)' : 'transparent',
-                                    color: payCustomerId === c.id ? '#000' : '#fff',
+                                    color: payCustomerId === c.id ? '#000' : 'var(--text-white)',
                                     fontWeight: payCustomerId === c.id ? 'bold' : 'normal'
                                   }}
                                 >
