@@ -658,30 +658,27 @@ export const db = {
     if (supabase) {
       try {
         const currentSettings = await this.getSettings();
-        let { data, error } = await supabase
-          .from('restaurant_settings')
-          .update(settings)
-          .eq('id', currentSettings.id)
-          .select()
-          .single();
-        if (error) {
-          // عمود جديد لسه مش متضاف في الداتا بيز — نعيد المحاولة بالتدريج
-          // عشان ما نضيّعش أعمدة موجودة (زي halls لو الناقص هو أعمدة الطابعات بس)
-          console.warn("Settings update failed, retrying progressively...", error);
-          const attempt = (payload: any) =>
-            supabase!.from('restaurant_settings').update(payload).eq('id', currentSettings.id).select().single();
-          // (1) شيل أعمدة الطابعة الإضافية (v22) واحتفظ بالصالات
-          const noPrinters: any = { ...settings };
-          delete noPrinters.qz_printer_kitchen_2;
-          delete noPrinters.qz_printer_bar_2;
-          let res = await attempt(noPrinters);
-          if (res.error) {
-            // (2) شيل الصالات كمان لو عمودها (v23) لسه مش موجود
-            const noHalls = { ...noPrinters };
-            delete noHalls.halls;
-            res = await attempt(noHalls);
-          }
+        const payload: any = { ...settings };
+        let data: any = null, error: any = null;
+        // نحاول الحفظ، ولو رفض بسبب عمود مش موجود في الداتا بيز نشيله ونعيد المحاولة
+        for (let i = 0; i < 12; i++) {
+          const res = await supabase
+            .from('restaurant_settings')
+            .update(payload)
+            .eq('id', currentSettings.id)
+            .select()
+            .single();
           data = res.data; error = res.error;
+          if (!error) break;
+          const msg = (error.message || '') + ' ' + ((error as any).details || '');
+          const m = msg.match(/'([^']+)' column|column ["']?([\w]+)["']?/i);
+          const badCol = m ? (m[1] || m[2]) : null;
+          if (badCol && Object.prototype.hasOwnProperty.call(payload, badCol)) {
+            console.warn(`Settings: العمود "${badCol}" مش موجود في الداتا بيز — بيتشال ويُعاد الحفظ (شغّل الـ migration عشان يتحفظ فعلاً).`);
+            delete payload[badCol];
+            continue;
+          }
+          break; // خطأ مش سببه عمود ناقص → نوقف
         }
         if (error) throw error;
         return data;
