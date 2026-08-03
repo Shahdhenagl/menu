@@ -634,11 +634,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       });
     }
 
-    // Auto-print customer receipt and kitchen/bar tickets
-    printCustomerReceipt(placedOrder, language, settings);
-    setTimeout(() => {
-      printOrderTickets(placedOrder, categories, products, printers, language, settings);
-    }, 1500);
+    // طباعة بونات المطبخ/البار تلقائي عند تأكيد الأوردر (فاتورة العميل تطبع وقت الدفع)
+    printOrderTickets(placedOrder, categories, products, printers, language, settings);
   };
 
   const handleTransferSubmit = async () => {
@@ -2114,12 +2111,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 customer_id: remaining > 0.01 && payIsDeferred ? payCustomerId : undefined
                               };
 
-                              await db.updateOrder(collectPaymentOrder.id, {
+                              const paidOrder = await db.updateOrder(collectPaymentOrder.id, {
                                 status: 'completed',
                                 payment_method: finalMethod,
                                 payment_details: paymentDetails,
                                 customer_id: payCustomerId || collectPaymentOrder.customer_id
                               }, selectedWaiter?.name);
+
+                              // طباعة فاتورة العميل تلقائي عند الدفع
+                              printCustomerReceipt(paidOrder || ({ ...collectPaymentOrder, status: 'completed', payment_method: finalMethod, payment_details: paymentDetails } as any), language, settings);
 
                               setCollectPaymentOrder(null);
                               loadData();
@@ -2147,12 +2147,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           onClick={() => {
                             triggerOtpProtectedAction('تسجيل كضيافة', 'Log as Hospitality', async () => {
                                try {
-                                 await db.updateOrder(collectPaymentOrder.id, {
+                                 const hospOrder = await db.updateOrder(collectPaymentOrder.id, {
                                    status: 'completed',
                                    payment_method: 'hospitality',
                                    total_price: 0,
                                    payment_details: { type: 'hospitality', original_price: collectPaymentOrder.total_price }
                                  }, selectedWaiter?.name);
+                                 printCustomerReceipt(hospOrder || ({ ...collectPaymentOrder, status: 'completed', payment_method: 'hospitality', total_price: 0 } as any), language, settings);
                                  setCollectPaymentOrder(null);
                                  loadData();
                                } catch (e) {
