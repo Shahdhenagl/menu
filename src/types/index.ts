@@ -49,6 +49,7 @@ export interface Order {
   customer_phone: string;
   customer_id?: string; // For deferred payment tracking
   table_number: string;
+  hall?: string;            // اسم الصالة (لطلبات الصالة)
   promo_code?: string | null;
   items: OrderItem[];
   total_price: number;
@@ -93,6 +94,7 @@ export interface RestaurantSettings {
   location_url?: string;
   tax_percent?: number;
   service_percent?: number;
+  halls?: { name: string; tax_percent: number }[];  // الصالات وكل صالة نسبة ضريبتها
   telegram_bot_token?: string;
   telegram_chat_id?: string;
   enable_qz_printing?: boolean;

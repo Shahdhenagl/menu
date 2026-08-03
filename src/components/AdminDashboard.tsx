@@ -156,6 +156,7 @@ export default function AdminDashboard({
   const [setLocationUrl, setSetLocationUrl] = useState((settings as any).location_url || '');
   const [taxPercent, setTaxPercent] = useState<number>(settings.tax_percent || 0);
   const [servicePercent, setServicePercent] = useState<number>(settings.service_percent || 0);
+  const [halls, setHalls] = useState<{ name: string; tax_percent: number }[]>(settings.halls || []);
   const [telegramBotToken, setTelegramBotToken] = useState(settings.telegram_bot_token || '');
   const [telegramChatId, setTelegramChatId] = useState(settings.telegram_chat_id || '');
   const [enableQzPrinting, setEnableQzPrinting] = useState(settings.enable_qz_printing || false);
@@ -1444,6 +1445,7 @@ export default function AdminDashboard({
     setSetTalabat(settings.talabat_url || '');
     setSetLocationUrl(settings.location_url || '');
     setTaxPercent(settings.tax_percent || 0);
+    setHalls(settings.halls || []);
     setServicePercent(settings.service_percent || 0);
     setPromos(settings.promo_codes || {});
     setOffers(settings.offers || []);
@@ -2371,6 +2373,7 @@ export default function AdminDashboard({
         location_url: setLocationUrl,
         tax_percent: taxPercent,
         service_percent: servicePercent,
+        halls: halls,
         telegram_bot_token: telegramBotToken,
         telegram_chat_id: telegramChatId,
         enable_qz_printing: enableQzPrinting,
@@ -4986,6 +4989,32 @@ export default function AdminDashboard({
                     {language === 'ar' ? 'القيمة الافتراضية 0% (تُحسب على المجموع الفرعي الصافي)' : 'Default is 0% (calculated on net subtotal)'}
                   </span>
                 </div>
+              </div>
+
+              {/* Halls & per-hall tax */}
+              <h3 style={{ color: 'var(--gold-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span>🏛️</span>
+                <span>{language === 'ar' ? 'الصالات وضريبة كل صالة' : 'Halls & Per-Hall Tax'}</span>
+              </h3>
+              <div style={{ marginBottom: '2rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.85rem' }}>
+                  {language === 'ar'
+                    ? 'أضف الصالات (مثلاً: صالة 1، صالة 2) وحدّد نسبة ضريبة لكل صالة. في الكاشير عند اختيار "صالة" هيطلب تختار الصالة ثم رقم الطاولة، وتتطبّق ضريبة الصالة على الطلب.'
+                    : 'Add halls (e.g. Hall 1, Hall 2) and set a tax % for each. On dine-in, the cashier picks the hall then the table, and the hall tax is applied.'}
+                </span>
+                {halls.map((h, idx) => (
+                  <div key={idx} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.6rem' }}>
+                    <input type="text" className="input-gold" style={{ flex: 2 }} placeholder={language === 'ar' ? 'اسم الصالة' : 'Hall name'} value={h.name}
+                      onChange={e => setHalls(halls.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} />
+                    <input type="number" className="input-gold" style={{ flex: 1 }} min="0" max="100" step="0.01" placeholder="0" value={h.tax_percent}
+                      onChange={e => setHalls(halls.map((x, i) => i === idx ? { ...x, tax_percent: e.target.value === '' ? 0 : Number(e.target.value) } : x))} />
+                    <span style={{ color: 'var(--text-muted)' }}>%</span>
+                    <button type="button" className="btn-delete" onClick={() => setHalls(halls.filter((_, i) => i !== idx))}><Trash2 size={16} /></button>
+                  </div>
+                ))}
+                <button type="button" className="btn-outline-gold" style={{ marginTop: '0.5rem' }} onClick={() => setHalls([...halls, { name: '', tax_percent: 0 }])}>
+                  + {language === 'ar' ? 'إضافة صالة' : 'Add Hall'}
+                </button>
               </div>
 
               {/* Telegram Bot Settings */}

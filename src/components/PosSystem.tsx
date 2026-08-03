@@ -68,6 +68,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [customerName, setCustomerName] = useState('');
   const [orderType, setOrderType] = useState<'takeaway' | 'talabat' | 'dine_in' | 'delivery' | 'website' | null>(null);
   const [tableNumber, setTableNumber] = useState('');
+  const [selectedHall, setSelectedHall] = useState('');
   
   // Payment and Customers
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -539,7 +540,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     }));
   };
 
-  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const hallTaxPercent = (orderType === 'dine_in' && selectedHall)
+    ? (settings?.halls?.find(h => h.name === selectedHall)?.tax_percent || 0)
+    : 0;
+  const cartTaxAmount = cartSubtotal * (hallTaxPercent / 100);
+  const cartTotal = cartSubtotal + cartTaxAmount;
 
   const placeOrder = async () => {
     if (cart.length === 0) return;
@@ -601,6 +607,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       customer_name: customerName || 'Guest',
       customer_phone: customerPhone || 'N/A',
       table_number: tableNumber || '-',
+      hall: orderType === 'dine_in' && selectedHall ? selectedHall : undefined,
       items: cart,
       total_price: cartTotal,
       status: 'pending',
@@ -1234,15 +1241,37 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               </div>
 
               {orderType === 'dine_in' && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ marginTop: '2rem', textAlign: 'center' }}>
-                  <h3>{t.tableNum}</h3>
-                  <input type="text" className="pos-input" style={{ maxWidth: '200px' }} value={tableNumber} onChange={e => setTableNumber(e.target.value)} placeholder="e.g. 5" />
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ marginTop: '2rem', textAlign: 'center', width: '100%', maxWidth: '540px' }}>
+                  {(settings?.halls && settings.halls.length > 0) && (
+                    <div style={{ marginBottom: '1.5rem' }}>
+                      <h3 style={{ marginBottom: '1rem' }}>{language === 'ar' ? 'اختر الصالة' : 'Select Hall'}</h3>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'center' }}>
+                        {settings.halls.map((h, i) => (
+                          <button key={i} type="button" onClick={() => setSelectedHall(h.name)}
+                            style={{
+                              padding: '0.8rem 1.4rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontFamily: 'inherit', fontSize: '1rem',
+                              border: selectedHall === h.name ? '2px solid var(--gold-primary)' : '2px solid #333',
+                              background: selectedHall === h.name ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : '#1a1a1a',
+                              color: selectedHall === h.name ? '#000' : '#fff'
+                            }}>
+                            {h.name}{h.tax_percent ? <span style={{ display: 'block', fontSize: '0.72rem', opacity: 0.85 }}>{language === 'ar' ? 'ضريبة' : 'Tax'} {h.tax_percent}%</span> : null}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(!settings?.halls || settings.halls.length === 0 || selectedHall) && (
+                    <div>
+                      <h3 style={{ marginBottom: '0.75rem' }}>{t.tableNum}</h3>
+                      <input type="text" className="pos-input" style={{ maxWidth: '200px' }} value={tableNumber} onChange={e => setTableNumber(e.target.value)} placeholder="e.g. 5" />
+                    </div>
+                  )}
                 </motion.div>
               )}
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '3rem' }}>
                 <button className="pos-btn-outline" onClick={() => setView('customer_info')}>{t.back}</button>
-                <button className="pos-btn" disabled={!orderType || (orderType === 'dine_in' && !tableNumber)} onClick={() => setView('menu')}>{t.continue}</button>
+                <button className="pos-btn" disabled={!orderType || (orderType === 'dine_in' && (!tableNumber || ((settings?.halls?.length ?? 0) > 0 && !selectedHall)))} onClick={() => setView('menu')}>{t.continue}</button>
               </div>
             </motion.div>
           )}
@@ -1366,6 +1395,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </AnimatePresence>
                 </div>
                 <div style={{ padding: '1.5rem', background: '#1a1a1a', borderTop: '1px solid #333' }}>
+                  {hallTaxPercent > 0 && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', color: '#aaa', marginBottom: '0.4rem' }}>
+                        <span>{language === 'ar' ? 'المجموع الفرعي' : 'Subtotal'}</span>
+                        <span>{cartSubtotal.toFixed(2)} EGP</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', color: '#aaa', marginBottom: '0.6rem' }}>
+                        <span>{language === 'ar' ? `ضريبة ${selectedHall} (${hallTaxPercent}%)` : `Tax ${selectedHall} (${hallTaxPercent}%)`}</span>
+                        <span>{cartTaxAmount.toFixed(2)} EGP</span>
+                      </div>
+                    </>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>
                     <span>{t.total}</span>
                     <span style={{ color: 'var(--gold-primary)' }}>{cartTotal.toFixed(2)} EGP</span>
@@ -1454,15 +1495,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 )}
                 {role === 'waiter' && (
                   <button className="pos-btn-outline" onClick={() => {
-                    setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setOrderType(null); setView('waiter_dashboard');
+                    setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setView('waiter_dashboard');
                   }}>{language === 'ar' ? 'لوحة القيادة' : 'Dashboard'}</button>
                 )}
                 <button className="pos-btn" onClick={() => {
-                  setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setOrderType(null); setView('customer_info');
+                  setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setView('customer_info');
                 }}>{t.newOrder}</button>
                 
                 <button className="pos-btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444' }} onClick={() => {
-                  setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setOrderType(null); setRole('waiter'); setSelectedWaiter(null); setView('waiter_auth');
+                  setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setRole('waiter'); setSelectedWaiter(null); setView('waiter_auth');
                 }}>
                   {language === 'ar' ? 'خروج' : 'Exit'}
                 </button>
@@ -1485,7 +1526,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                  <button className="pos-btn" onClick={() => { setCustomerPhone(''); setCustomerName(''); setTableNumber(''); setOrderType(null); setCart([]); setView('customer_info'); }}>
+                  <button className="pos-btn" onClick={() => { setCustomerPhone(''); setCustomerName(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setCart([]); setView('customer_info'); }}>
                     {t.newOrder}
                   </button>
                   <button className="pos-btn-outline" onClick={async () => {
