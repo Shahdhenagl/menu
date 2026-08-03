@@ -11,6 +11,16 @@ const buildQrDataUrl = async (data: string): Promise<string> => {
   }
 };
 
+// يرجّع أسماء كل الطابعات المتوصلة بالجهاز زي ما هي في نظام التشغيل (عربي/إنجليزي)
+export const listQzPrinters = async (): Promise<string[]> => {
+  if (!qz.websocket.isActive()) {
+    await qz.websocket.connect();
+  }
+  const found = await qz.printers.find();
+  const arr = Array.isArray(found) ? found : [found];
+  return arr.filter((p): p is string => typeof p === 'string' && p.trim() !== '');
+};
+
 // يطبع HTML على قائمة طابعات محددة بالاسم عبر QZ Tray (كل طابعة على حدة)
 const printWithQZ = async (htmlContent: string, targetPrinters: (string | undefined)[]): Promise<boolean> => {
   const printers = targetPrinters.filter((p): p is string => !!p && p.trim() !== '');

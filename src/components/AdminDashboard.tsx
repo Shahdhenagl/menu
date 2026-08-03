@@ -3,7 +3,7 @@ import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, 
 
 import { db, supabase } from '../lib/supabase';
 import { warehouseHoldsItem, warehouseValue, warehouseStock } from '../lib/warehouse';
-import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
+import { printOrderTickets, printCustomerReceipt, listQzPrinters } from '../utils/printUtils';
 import { compressImage } from '../utils/imageUtils';
 import * as XLSX from 'xlsx';
 
@@ -166,6 +166,24 @@ export default function AdminDashboard({
   const [qzPrinterKitchen2, setQzPrinterKitchen2] = useState(settings.qz_printer_kitchen_2 || '');
   const [qzPrinterBar, setQzPrinterBar] = useState(settings.qz_printer_bar || '');
   const [qzPrinterBar2, setQzPrinterBar2] = useState(settings.qz_printer_bar_2 || '');
+  const [detectedPrinters, setDetectedPrinters] = useState<string[]>([]);
+  const [detectingPrinters, setDetectingPrinters] = useState(false);
+
+  const handleDetectPrinters = async () => {
+    setDetectingPrinters(true);
+    try {
+      const list = await listQzPrinters();
+      setDetectedPrinters(list);
+      if (list.length === 0) {
+        alert(language === 'ar' ? 'مفيش طابعات ظهرت. اتأكدي إن QZ Tray شغّال والطابعات متوصلة.' : 'No printers found. Make sure QZ Tray is running and printers are connected.');
+      }
+    } catch (err) {
+      console.error('Detect printers failed', err);
+      alert(language === 'ar' ? 'فشل الاتصال بـ QZ Tray. اتأكدي إن البرنامج مفتوح وشغّال في الخلفية.' : 'Could not connect to QZ Tray. Make sure the app is open and running.');
+    } finally {
+      setDetectingPrinters(false);
+    }
+  };
 
   const getSubUnitLabel = (baseUnit: string) => {
     if (!baseUnit) return null;
@@ -5077,13 +5095,30 @@ export default function AdminDashboard({
 
               {enableQzPrinting && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '1.5rem', background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
+                  {/* زر اكتشاف الطابعات المتوصلة */}
+                  <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                    <button type="button" className="btn-gold" style={{ height: '40px', borderRadius: '10px', padding: '0 1.25rem' }} onClick={handleDetectPrinters} disabled={detectingPrinters}>
+                      <PrinterIcon size={16} />
+                      <span>{detectingPrinters ? (language === 'ar' ? 'جارِ الاكتشاف...' : 'Detecting...') : (language === 'ar' ? '🔍 اكتشف الطابعات المتوصلة' : '🔍 Detect Connected Printers')}</span>
+                    </button>
+                    {detectedPrinters.length > 0 && (
+                      <span style={{ fontSize: '0.85rem', color: 'var(--success)' }}>
+                        {language === 'ar' ? `تم العثور على ${detectedPrinters.length} طابعة — اختاريها من القوائم` : `Found ${detectedPrinters.length} printers — pick from the lists`}
+                      </span>
+                    )}
+                  </div>
+                  {/* قائمة الطابعات المكتشفة (تظهر كاقتراحات في كل خانة) */}
+                  <datalist id="qz-printers-list">
+                    {detectedPrinters.map((p, i) => <option key={i} value={p} />)}
+                  </datalist>
                   <div className="form-group">
                     <label>{language === 'ar' ? 'طابعة الكاشير' : 'Cashier Printer'}</label>
-                    <input 
-                      type="text" 
-                      className="input-gold" 
-                      value={qzPrinterCashier} 
-                      onChange={(e) => setQzPrinterCashier(e.target.value)} 
+                    <input
+                      type="text"
+                      className="input-gold"
+                      list="qz-printers-list"
+                      value={qzPrinterCashier}
+                      onChange={(e) => setQzPrinterCashier(e.target.value)}
                       placeholder="e.g. EPSON TM-T20III"
                     />
                   </div>
@@ -5092,6 +5127,7 @@ export default function AdminDashboard({
                     <input
                       type="text"
                       className="input-gold"
+                      list="qz-printers-list"
                       value={qzPrinterKitchen}
                       onChange={(e) => setQzPrinterKitchen(e.target.value)}
                       placeholder="e.g. Kitchen Printer 1"
@@ -5102,6 +5138,7 @@ export default function AdminDashboard({
                     <input
                       type="text"
                       className="input-gold"
+                      list="qz-printers-list"
                       value={qzPrinterKitchen2}
                       onChange={(e) => setQzPrinterKitchen2(e.target.value)}
                       placeholder="e.g. Kitchen Printer 2"
@@ -5112,6 +5149,7 @@ export default function AdminDashboard({
                     <input
                       type="text"
                       className="input-gold"
+                      list="qz-printers-list"
                       value={qzPrinterBar}
                       onChange={(e) => setQzPrinterBar(e.target.value)}
                       placeholder="e.g. Bar Printer 1"
@@ -5122,13 +5160,14 @@ export default function AdminDashboard({
                     <input
                       type="text"
                       className="input-gold"
+                      list="qz-printers-list"
                       value={qzPrinterBar2}
                       onChange={(e) => setQzPrinterBar2(e.target.value)}
                       placeholder="e.g. Bar Printer 2"
                     />
                   </div>
                   <div style={{ gridColumn: '1 / -1', fontSize: '0.85rem', color: '#ff9800' }}>
-                    {language === 'ar' ? 'ملاحظة: يجب كتابة اسم الطابعة كما هو موجود في نظام التشغيل بالضبط. ويجب أن يكون برنامج QZ Tray يعمل في الخلفية.' : 'Note: Printer name must exactly match the OS printer name. QZ Tray app must be running.'}
+                    {language === 'ar' ? 'ملاحظة: دوسي "اكتشف الطابعات" وبعدين اختاري كل طابعة من القائمة (الاسم بيتحط صح تلقائيًا حتى لو عربي). لازم برنامج QZ Tray يكون شغّال في الخلفية.' : 'Note: Click "Detect Printers" then pick each one from the list (the exact name — even Arabic — is filled in automatically). QZ Tray must be running in the background.'}
                   </div>
                 </div>
               )}
