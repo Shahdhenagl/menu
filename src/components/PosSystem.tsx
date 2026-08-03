@@ -2549,7 +2549,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 </div>
 
                 {/* Modal Body */}
-                <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '2rem', gap: '2rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flex: 1, minHeight: 0, overflowY: 'auto', padding: '2rem', gap: '2rem', flexWrap: 'wrap' }}>
                   {/* Left Column: Camera View */}
                   <div style={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
                     <div style={{ position: 'relative', width: '100%', maxWidth: '320px', height: '240px', background: '#09090b', borderRadius: '16px', overflow: 'hidden', border: '2px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2580,7 +2580,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
 
                   {/* Right Column: Employees List */}
-                  <div style={{ flex: '1.2 1 350px', display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden' }}>
+                  <div style={{ flex: '1.2 1 350px', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '1rem', overflow: 'hidden' }}>
                     {/* Search Bar */}
                     <div style={{ position: 'relative' }}>
                       <input 
@@ -2595,7 +2595,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     </div>
 
                     {/* Scrollable list */}
-                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem', paddingRight: '4px' }}>
+                    <div style={{ flex: 1, minHeight: 0, maxHeight: '62vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem', paddingRight: '4px' }}>
                       {employeesList
                         .filter(emp => {
                           const q = searchEmployeeQuery.toLowerCase();
