@@ -3838,6 +3838,8 @@ export default function AdminDashboard({
           <DailyClosingView
             orders={orders}
             expenses={expenses}
+            categories={categories}
+            products={products}
             financialTransactions={financialTransactions}
             settings={settings}
             language={language}

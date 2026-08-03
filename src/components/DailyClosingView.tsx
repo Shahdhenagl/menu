@@ -1,11 +1,14 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Printer, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, Wallet, ArrowRightLeft, Lock, Unlock, CheckCircle2, AlertTriangle } from 'lucide-react';
-import type { Order, Expense, RestaurantSettings, DailyClosing, DailyClosingMethod, PaymentMethodKey } from '../types';
+import type { Order, Expense, RestaurantSettings, DailyClosing, DailyClosingMethod, PaymentMethodKey, Category, Product } from '../types';
 import { db } from '../lib/supabase';
+import ShiftClosingView from './ShiftClosingView';
 
 interface DailyClosingViewProps {
   orders: Order[];
   expenses: Expense[];
+  categories?: Category[];
+  products?: Product[];
   financialTransactions?: any[];
   settings?: RestaurantSettings;
   language: 'ar' | 'en';
@@ -24,6 +27,8 @@ const num = (v: any): number => Number(v) || 0;
 export default function DailyClosingView({
   orders,
   expenses,
+  categories = [],
+  products = [],
   financialTransactions = [],
   settings,
   language,
@@ -514,6 +519,16 @@ export default function DailyClosingView({
             </table>
           </div>
         </div>
+
+        {/* ===== تقفيل شفت لكل صالة ===== */}
+        <ShiftClosingView
+          dayOrders={dayOrders}
+          categories={categories}
+          products={products}
+          settings={settings}
+          language={language}
+          dayLabel={dayLabel}
+        />
 
         {/* ===== تقفيل كل وسيلة ===== */}
         <div style={{ background: 'var(--bg-darker)', borderRadius: '12px', padding: '1.5rem', border: `1px solid ${isClosed ? '#10b981' : 'var(--border-color)'}` }}>
