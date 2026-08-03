@@ -3,7 +3,10 @@ import { Printer, Lock, RefreshCw } from 'lucide-react';
 import type { Order, Category, Product, RestaurantSettings, ShiftClosing } from '../types';
 import { db } from '../lib/supabase';
 import { printShiftClosing } from '../utils/printUtils';
-import { buildShiftReport, bucketOf, bucketLabel } from '../utils/shiftClosing';
+import { buildShiftReport, drawerOf, drawerName, DRAWERS } from '../utils/shiftClosing';
+
+// مفتاح البوكيت بقى الخزنة: drawer:1 / drawer:2
+const bucketOfDrawer = (id: 1 | 2) => `drawer:${id}`;
 
 interface ShiftClosingViewProps {
   /** كل الأوردرات (بنفلتر المكتملة بنفسنا) */
@@ -56,28 +59,26 @@ export default function ShiftClosingView({
     [orders]
   );
 
-  // الصالات: المعرّفة في الإعدادات + أي بوكيت ظهر في أوردرات مفتوحة + اللي اتقفل قبل كده
-  const bucketKeys = useMemo(() => {
-    const keys = new Set<string>();
-    (settings?.halls || []).forEach(h => keys.add(h.name));
-    completed.forEach(o => keys.add(bucketOf(o)));
-    Object.keys(lastByBucket).forEach(k => keys.add(k));
-    return [...keys];
-  }, [settings, completed, lastByBucket]);
+  // خزنتين بس: خزنة 1 وخزنة 2
+  const bucketKeys = useMemo(() => DRAWERS.map(bucketOfDrawer), []);
+  const labelOf = useCallback(
+    (bucket: string) => drawerName(bucket === 'drawer:2' ? 2 : 1, settings, ar),
+    [settings, ar]
+  );
 
-  /** بداية الفترة الحالية لصالة: آخر تقفيل، وإلا أول أوردر ليها، وإلا بداية النهاردة */
+  /** بداية الفترة الحالية للخزنة: آخر تقفيل، وإلا أول أوردر ليها، وإلا بداية النهاردة */
   const periodStart = useCallback((bucket: string): Date => {
     const last = lastByBucket[bucket];
     if (last) return new Date(last.to_at);
     const first = completed
-      .filter(o => bucketOf(o) === bucket)
+      .filter(o => bucketOfDrawer(drawerOf(o, settings)) === bucket)
       .map(o => new Date(o.created_at).getTime())
       .sort((a, b) => a - b)[0];
     if (first) return new Date(first);
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
-  }, [lastByBucket, completed]);
+  }, [lastByBucket, completed, settings]);
 
   /** أوردرات الفترة المفتوحة: بعد آخر تقفيل ولحد دلوقتي */
   const openOrdersOf = useCallback((bucket: string): Order[] => {
@@ -86,24 +87,25 @@ export default function ShiftClosingView({
     // الأوردرات اللي دخلت آخر تقفيل — حماية إضافية لو أوردر اتقفل واتعدّل وقته
     const closedIds = new Set<string>(last?.order_ids || []);
     return completed.filter(o => {
-      if (bucketOf(o) !== bucket) return false;
+      if (bucketOfDrawer(drawerOf(o, settings)) !== bucket) return false;
       if (closedIds.has(o.id)) return false;
       const t = new Date(o.created_at).getTime();
       // بعد آخر تقفيل تمامًا (أو من أول أوردر لو مفيش تقفيل سابق)
       return last ? t > start : t >= start;
     });
-  }, [completed, lastByBucket, periodStart]);
+  }, [completed, lastByBucket, periodStart, settings]);
 
   const buildReport = useCallback((bucket: string, bucketOrders: Order[], from: Date, to: Date) =>
     buildShiftReport({
-      title: bucketLabel(bucket, ar),
+      title: labelOf(bucket),
       orders: bucketOrders,
       categories,
       products,
+      settings,
       from,
       to,
       ar,
-    }), [categories, products, ar]);
+    }), [categories, products, settings, ar, labelOf]);
 
   const handleClose = async (bucket: string) => {
     const bucketOrders = openOrdersOf(bucket);
@@ -113,7 +115,7 @@ export default function ShiftClosingView({
     }
     const from = periodStart(bucket);
     const to = new Date();
-    const label = bucketLabel(bucket, ar);
+    const label = labelOf(bucket);
     const ok = window.confirm(
       ar
         ? `تقفيل شفت "${label}"\n\nمن: ${timeOf(from.toISOString())}\nإلى: ${timeOf(to.toISOString())}\nعدد الأوردرات: ${bucketOrders.length}\n\nبعد التقفيل الأوردرات دي مش هتتحسب في الشفت الجاي.`
@@ -136,6 +138,8 @@ export default function ShiftClosingView({
         discount: report.discount,
         collected: report.collected,
         methods: report.methodsRaw,
+        order_types: report.orderTypes,
+        tax_groups: report.taxGroups,
         categories: report.categories,
         order_ids: bucketOrders.map(o => o.id),
         closed_by: userName || '-',
@@ -175,8 +179,8 @@ export default function ShiftClosingView({
       </div>
       <p style={{ color: 'var(--text-gray)', fontSize: '0.88rem', margin: '0 0 1.25rem' }}>
         {ar
-          ? 'كل صالة بتتقفل من آخر تقفيل ليها لحد لحظة الضغط على الزر. الأوردرات اللي اتقفلت مش بتتحسب تاني في الشفت الجاي.'
-          : 'Each hall closes from its last closing up to the moment you press the button. Closed orders never count again.'}
+          ? 'التقفيل على مستوى الخزنة. كل خزنة بتتقفل من آخر تقفيل ليها لحد لحظة الضغط على الزر، والأوردرات اللي اتقفلت مش بتتحسب تاني. الصالات بتروح لخزنتها من الإعدادات، والدليفري/التيك أواي/الطلبات بتروح للخزنة اللي الكاشير اختارها وقت التحصيل.'
+          : 'Closing happens per drawer. Each drawer closes from its last closing to the moment you press the button, and closed orders never count again.'}
       </p>
 
       {loading ? (
@@ -186,7 +190,7 @@ export default function ShiftClosingView({
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
             <thead>
               <tr style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>
-                <th style={{ textAlign: ar ? 'right' : 'left', padding: '0.6rem 0.5rem' }}>{ar ? 'الصالة / النوع' : 'Hall / Type'}</th>
+                <th style={{ textAlign: ar ? 'right' : 'left', padding: '0.6rem 0.5rem' }}>{ar ? 'الخزنة' : 'Drawer'}</th>
                 <th style={{ textAlign: ar ? 'right' : 'left', padding: '0.6rem 0.5rem' }}>{ar ? 'الفترة المفتوحة' : 'Open period'}</th>
                 <th style={{ textAlign: 'center', padding: '0.6rem 0.5rem' }}>{ar ? 'أوردرات' : 'Orders'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'قبل الضريبة' : 'Before tax'}</th>
@@ -198,7 +202,7 @@ export default function ShiftClosingView({
             <tbody>
               {rows.map(({ bucket, bucketOrders, report, last }) => (
                 <tr key={bucket} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                  <td style={{ padding: '0.7rem 0.5rem', color: 'var(--text-light)', fontWeight: 700 }}>{bucketLabel(bucket, ar)}</td>
+                  <td style={{ padding: '0.7rem 0.5rem', color: 'var(--text-light)', fontWeight: 700 }}>{labelOf(bucket)}</td>
                   <td style={{ padding: '0.7rem 0.5rem', color: 'var(--text-gray)', fontSize: '0.82rem' }}>
                     <div>{ar ? 'من' : 'From'} {timeOf(periodStart(bucket).toISOString())}</div>
                     <div style={{ opacity: 0.7 }}>

@@ -447,13 +447,21 @@ export const db = {
 
     if (supabase) {
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .insert([newOrder])
-          .select()
-          .single();
-        if (error) throw error;
-        return data;
+        const payload: any = { ...newOrder };
+        let res = await supabase.from('orders').insert([payload]).select().single();
+        // لو الداتا بيز ناقصها عمود جديد (زي drawer قبل تشغيل patch v27) نشيله ونعيد
+        // المحاولة بدل ما الأوردر يروح على الداتا بيز المحلية ويختفي عن باقي الأجهزة
+        for (let i = 0; i < 6 && res.error; i++) {
+          const msg = (res.error.message || '') + ' ' + ((res.error as any).details || '');
+          const m = msg.match(/'([^']+)' column|column ["']?([\w]+)["']?/i);
+          const badCol = m ? (m[1] || m[2]) : null;
+          if (!badCol || !Object.prototype.hasOwnProperty.call(payload, badCol)) break;
+          console.warn(`Orders: العمود "${badCol}" مش موجود في الداتا بيز — بيتشال (شغّل الـ migration).`);
+          delete payload[badCol];
+          res = await supabase.from('orders').insert([payload]).select().single();
+        }
+        if (res.error) throw res.error;
+        return res.data;
       } catch (err) {
         console.warn("Supabase order insert failed, falling back to mock database.", err);
       }
@@ -566,11 +574,23 @@ export const db = {
           
           if (error) {
             console.warn("Update failed, retrying without new columns...", error);
-            const fallbackUpdates = { ...updates };
+            const fallbackUpdates: any = { ...updates };
             delete fallbackUpdates.inventory_deducted;
             delete fallbackUpdates.total_cost;
             delete fallbackUpdates.customer_id; // Added to prevent PGRST204 if column is missing
-            const res = await supabase.from('orders').update(fallbackUpdates).eq('id', id).select().single();
+            delete fallbackUpdates.drawer;      // العمود ده بيتضاف في patch v27
+            let res = await supabase.from('orders').update(fallbackUpdates).eq('id', id).select().single();
+            // لو لسه في عمود ناقص، نشيله بالاسم من رسالة الخطأ ونعيد المحاولة —
+            // التحصيل لازم يعدّي حتى لو الداتا بيز ما اتحدّثتش بعد
+            for (let i = 0; i < 6 && res.error; i++) {
+              const msg = (res.error.message || '') + ' ' + ((res.error as any).details || '');
+              const m = msg.match(/'([^']+)' column|column ["']?([\w]+)["']?/i);
+              const badCol = m ? (m[1] || m[2]) : null;
+              if (!badCol || !Object.prototype.hasOwnProperty.call(fallbackUpdates, badCol)) break;
+              console.warn(`Orders: العمود "${badCol}" مش موجود في الداتا بيز — بيتشال (شغّل الـ migration).`);
+              delete fallbackUpdates[badCol];
+              res = await supabase.from('orders').update(fallbackUpdates).eq('id', id).select().single();
+            }
             data = res.data; error = res.error;
           }
 

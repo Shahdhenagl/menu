@@ -35,6 +35,9 @@ export interface Product {
   created_at?: string;
 }
 
+/** الخزنة اللي بيتحصّل فيها الأوردر */
+export type DrawerId = 1 | 2;
+
 export interface OrderItem {
   id: string;
   name_ar: string;
@@ -50,6 +53,7 @@ export interface Order {
   customer_id?: string; // For deferred payment tracking
   table_number: string;
   hall?: string;            // اسم الصالة (لطلبات الصالة)
+  drawer?: DrawerId;        // الخزنة اللي اتحصّل فيها (من الصالة أو باختيار الكاشير)
   promo_code?: string | null;
   items: OrderItem[];
   total_price: number;
@@ -96,7 +100,10 @@ export interface RestaurantSettings {
   tax_percent_delivery?: number;          // ضريبة الدليفري
   tax_percent_takeaway?: number;          // ضريبة التيك أواي
   service_percent?: number;
-  halls?: { name: string; tax_percent: number }[];  // الصالات وكل صالة نسبة ضريبتها
+  // الصالات: كل صالة نسبة ضريبتها والخزنة اللي بتحصّل فيها
+  halls?: { name: string; tax_percent: number; drawer?: DrawerId }[];
+  drawer_1_name?: string;                 // اسم خزنة 1 (افتراضي "خزنة 1")
+  drawer_2_name?: string;                 // اسم خزنة 2
   telegram_bot_token?: string;
   telegram_chat_id?: string;
   enable_qz_printing?: boolean;
@@ -344,10 +351,18 @@ export interface DailyClosing {
 export interface ShiftClosingLine { name: string; qty: number; total: number }
 export interface ShiftClosingCategory { name: string; qty: number; total: number; lines: ShiftClosingLine[] }
 export interface ShiftClosingMethod { method: string; label: string; amount: number }
+/** تفصيل حسب نوع الطلب (صالة/دليفري/تيك أواي/طلبات) */
+export interface ShiftClosingTypeRow {
+  type: string; label: string; orders: number; subtotal: number; tax: number; collected: number;
+}
+/** تجميع الضرائب حسب النسبة */
+export interface ShiftClosingTaxRow {
+  percent: number; base: number; tax: number; collected: number; orders: number;
+}
 
 export interface ShiftClosing {
   id: string;
-  bucket: string;           // اسم الصالة أو __type__takeaway
+  bucket: string;           // 'drawer:1' أو 'drawer:2'
   bucket_label: string;
   from_at: string;          // بداية الفترة = آخر تقفيل
   to_at: string;            // لحظة التقفيل
@@ -358,6 +373,8 @@ export interface ShiftClosing {
   discount: number;
   collected: number;
   methods: ShiftClosingMethod[];
+  order_types: ShiftClosingTypeRow[];
+  tax_groups: ShiftClosingTaxRow[];
   categories: ShiftClosingCategory[];
   order_ids: string[];
   closed_by?: string;

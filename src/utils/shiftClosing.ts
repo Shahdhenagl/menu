@@ -1,22 +1,51 @@
-import type { Order, Category, Product, ShiftClosingCategory, ShiftClosingMethod } from '../types';
+import type {
+  Order, Category, Product, RestaurantSettings, DrawerId,
+  ShiftClosingCategory, ShiftClosingMethod, ShiftClosingTypeRow, ShiftClosingTaxRow,
+} from '../types';
 import type { ShiftClosingReport } from './printUtils';
+import { taxPercentForOrder } from './tax';
 
 // وسائل الدفع اللي بتظهر في تقفيل الشفت
 export const METHOD_KEYS = ['cash', 'visa', 'wallet_restaurant', 'wallet_bar', 'instapay', 'deferred', 'petty_cash'] as const;
 
 const num = (v: any): number => Number(v) || 0;
 
-/** مفتاح تجميع الأوردر: اسم الصالة، وإلا نوع الطلب (تيك أواي/دليفري…) */
-export const bucketOf = (o: Order): string => o.hall || `__type__${o.order_type || 'other'}`;
+// ===== الخزن =====
+export const DRAWERS: DrawerId[] = [1, 2];
 
-export const bucketLabel = (key: string, ar: boolean): string => {
-  if (!key.startsWith('__type__')) return key;
-  const t = key.replace('__type__', '');
+export const drawerName = (id: DrawerId, settings?: RestaurantSettings | null, ar = true): string => {
+  const custom = id === 1 ? settings?.drawer_1_name : settings?.drawer_2_name;
+  if (custom && custom.trim()) return custom.trim();
+  return ar ? `خزنة ${id}` : `Drawer ${id}`;
+};
+
+/**
+ * خزنة الأوردر:
+ *  1) لو محفوظة على الأوردر نفسه (الكاشير اختارها أو اتحطت من الصالة) → هي
+ *  2) لو الأوردر صالة → خزنة الصالة من الإعدادات
+ *  3) غير كده → خزنة 1
+ */
+export const drawerOf = (o: Order, settings?: RestaurantSettings | null): DrawerId => {
+  if (o.drawer === 1 || o.drawer === 2) return o.drawer;
+  if (o.hall) {
+    const hall = (settings?.halls || []).find(h => h.name === o.hall);
+    if (hall?.drawer === 1 || hall?.drawer === 2) return hall.drawer;
+  }
+  return 1;
+};
+
+/** خزنة الصالة من الإعدادات (وقت إنشاء الأوردر) */
+export const drawerOfHall = (hall: string | null | undefined, settings?: RestaurantSettings | null): DrawerId => {
+  const h = (settings?.halls || []).find(x => x.name === hall);
+  return h?.drawer === 2 ? 2 : 1;
+};
+
+export const orderTypeLabel = (t: string | undefined, ar: boolean): string => {
   if (t === 'takeaway') return ar ? 'تيك أواي' : 'Takeaway';
   if (t === 'delivery') return ar ? 'دليفري' : 'Delivery';
   if (t === 'talabat') return ar ? 'طلبات' : 'Talabat';
   if (t === 'website') return ar ? 'الموقع الإلكتروني' : 'Website';
-  if (t === 'dine_in') return ar ? 'صالة (بدون تحديد)' : 'Dine-in (no hall)';
+  if (t === 'dine_in') return ar ? 'صالة' : 'Dine-in';
   return ar ? 'أخرى' : 'Other';
 };
 
@@ -36,34 +65,37 @@ export const methodLabel = (m: string, ar: boolean): string => {
 const stamp = (d: Date, ar: boolean) =>
   d.toLocaleString(ar ? 'ar-EG' : 'en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
+/** الإجمالي الفرعي لأصناف أوردر */
+const orderSubtotal = (o: Order) => o.items.reduce((x, i) => x + num(i.price) * num(i.quantity), 0);
+
 export type BuiltShiftReport = ShiftClosingReport & {
   /** نفس الوسائل بصيغة التخزين (بالمفتاح) */
   methodsRaw: ShiftClosingMethod[];
 };
 
 /**
- * بيحسب تقرير تقفيل شفت لمجموعة أوردرات:
- * الإجماليات، تقسيم الخزنة على وسائل الدفع، والأصناف المباعة مرتبة حسب التصنيف.
+ * بيحسب تقرير تقفيل خزنة:
+ * الإجماليات، تقسيم الخزنة على وسائل الدفع، التفصيل حسب نوع الطلب،
+ * تجميع الضرائب حسب النسبة، والأصناف المباعة مرتبة حسب التصنيف.
  */
 export const buildShiftReport = ({
-  title, orders, categories, products, from, to, ar,
+  title, orders, categories, products, settings, from, to, ar,
 }: {
   title: string;
   orders: Order[];
   categories: Category[];
   products: Product[];
+  settings?: RestaurantSettings | null;
   from: Date;
   to: Date;
   ar: boolean;
 }): BuiltShiftReport => {
-  const subtotal = orders.reduce(
-    (s, o) => s + o.items.reduce((x, i) => x + num(i.price) * num(i.quantity), 0), 0
-  );
+  const subtotal = orders.reduce((s, o) => s + orderSubtotal(o), 0);
   const collected = orders.reduce((s, o) => s + num(o.total_price), 0);
   const tax = Math.max(0, collected - subtotal);
   const discount = Math.max(0, subtotal - collected);
 
-  // تقسيم التحصيل على وسائل الدفع (مع دعم الدفع المقسم)
+  // ===== تقسيم التحصيل على وسائل الدفع (مع دعم الدفع المقسم) =====
   const byMethod: Record<string, number> = {};
   METHOD_KEYS.forEach(m => (byMethod[m] = 0));
   orders.forEach(o => {
@@ -85,7 +117,41 @@ export const buildShiftReport = ({
     .filter(m => Math.abs(byMethod[m]) > 0.001)
     .map(m => ({ method: m, label: methodLabel(m, ar), amount: byMethod[m] }));
 
-  // الأصناف المباعة مرتبة حسب التصنيف
+  // ===== التفصيل حسب نوع الطلب =====
+  const typeMap = new Map<string, ShiftClosingTypeRow>();
+  // ===== تجميع الضرائب حسب النسبة =====
+  const taxMap = new Map<number, ShiftClosingTaxRow>();
+
+  orders.forEach(o => {
+    const base = orderSubtotal(o);
+    const total = num(o.total_price);
+    const t = Math.max(0, total - base);
+    const type = o.order_type || 'dine_in';
+
+    const row = typeMap.get(type) || {
+      type, label: orderTypeLabel(type, ar), orders: 0, subtotal: 0, tax: 0, collected: 0,
+    };
+    row.orders += 1;
+    row.subtotal += base;
+    row.tax += t;
+    row.collected += total;
+    typeMap.set(type, row);
+
+    // النسبة المعرّفة لنوع الطلب/الصالة — بنجمّع عليها
+    const percent = taxPercentForOrder(settings, o.order_type, o.hall);
+    const key = Number(percent) || 0;
+    const trow = taxMap.get(key) || { percent: key, base: 0, tax: 0, collected: 0, orders: 0 };
+    trow.orders += 1;
+    trow.base += base;
+    trow.tax += t;
+    trow.collected += total;
+    taxMap.set(key, trow);
+  });
+
+  const orderTypes = [...typeMap.values()].sort((a, b) => b.collected - a.collected);
+  const taxGroups = [...taxMap.values()].sort((a, b) => b.percent - a.percent);
+
+  // ===== الأصناف المباعة مرتبة حسب التصنيف =====
   const otherKey = ar ? 'غير مصنّف' : 'Uncategorised';
   const grouped = new Map<string, { sort: number; lines: Map<string, { name: string; qty: number; total: number }> }>();
 
@@ -134,6 +200,8 @@ export const buildShiftReport = ({
     collected,
     itemsCount,
     methods: methodsRaw.map(m => ({ label: m.label, amount: m.amount })),
+    orderTypes,
+    taxGroups,
     categories: categoriesSorted,
     methodsRaw,
   };

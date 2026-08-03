@@ -74,6 +74,8 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
       discount: num(r.discount),
       collected: num(r.collected),
       methods: (r.methods || []).map(m => ({ label: m.label, amount: num(m.amount) })),
+      orderTypes: r.order_types || [],
+      taxGroups: r.tax_groups || [],
       categories: r.categories || [],
     }, language, settings);
   };
@@ -186,6 +188,47 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.6rem 0', borderTop: '2px solid var(--gold-primary)', marginTop: '0.4rem' }}>
                         <b style={{ color: 'var(--text-light)' }}>{ar ? 'الإجمالي' : 'Total'}</b>
                         <b style={{ color: '#10b981' }}>{fmt(r.collected)}</b>
+                      </div>
+
+                      {/* حسب نوع الطلب */}
+                      <h4 style={{ color: 'var(--gold-primary)', margin: '1.5rem 0 0.75rem' }}>{ar ? 'حسب نوع الطلب' : 'By order type'}</h4>
+                      {(r.order_types || []).length === 0 ? (
+                        <p style={{ color: 'var(--text-gray)' }}>{ar ? 'لا يوجد' : 'None'}</p>
+                      ) : (r.order_types || []).map((t, i) => (
+                        <div key={i} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.6rem', marginBottom: '0.5rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-light)', fontWeight: 800 }}>
+                            <span>{t.label}</span><span>{t.orders} {ar ? 'أوردر' : 'ord.'}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-gray)', marginTop: '0.3rem' }}>
+                            <span>{ar ? 'قبل الضريبة' : 'Before tax'}</span><span>{fmt(t.subtotal)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#f59e0b' }}>
+                            <span>{ar ? 'الضريبة' : 'Tax'}</span><span>{fmt(t.tax)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#10b981', fontWeight: 800 }}>
+                            <span>{ar ? 'المحصل' : 'Collected'}</span><span>{fmt(t.collected)}</span>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* تجميع الضرائب */}
+                      <h4 style={{ color: 'var(--gold-primary)', margin: '1.5rem 0 0.75rem' }}>{ar ? 'تجميع الضرائب' : 'Tax summary'}</h4>
+                      {(r.tax_groups || []).length === 0 ? (
+                        <p style={{ color: 'var(--text-gray)' }}>{ar ? 'لا يوجد' : 'None'}</p>
+                      ) : (r.tax_groups || []).map((g, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                          <span style={{ color: 'var(--text-light)' }}>
+                            {g.percent > 0 ? (ar ? `ضريبة ${g.percent}%` : `Tax ${g.percent}%`) : (ar ? 'بدون ضريبة' : 'No tax')}
+                            <span style={{ color: 'var(--text-gray)', fontSize: '0.8rem', marginInlineStart: '0.5rem' }}>
+                              ({ar ? 'وعاء' : 'base'} {fmt(g.base)})
+                            </span>
+                          </span>
+                          <b style={{ color: '#f59e0b' }}>{fmt(g.tax)}</b>
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.6rem 0', borderTop: '2px solid #f59e0b', marginTop: '0.4rem' }}>
+                        <b style={{ color: 'var(--text-light)' }}>{ar ? 'إجمالي الضرائب' : 'Total tax'}</b>
+                        <b style={{ color: '#f59e0b' }}>{fmt(r.tax)}</b>
                       </div>
                     </div>
 

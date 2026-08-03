@@ -1,4 +1,7 @@
-import type { Order, Category, Product, Printer, RestaurantSettings } from '../types';
+import type {
+  Order, Category, Product, Printer, RestaurantSettings,
+  ShiftClosingTypeRow, ShiftClosingTaxRow, ShiftClosingCategory,
+} from '../types';
 import { db } from '../lib/supabase';
 import { configureQzSecurity } from './qzSecurity';
 import { taxPercentForOrder } from './tax';
@@ -464,10 +467,11 @@ export type ShiftClosingReport = {
   collected: number;    // إجمالي المحصل بالضريبة
   itemsCount: number;
   methods: { label: string; amount: number }[];
-  categories: {
-    name: string; qty: number; total: number;
-    lines: { name: string; qty: number; total: number }[];
-  }[];
+  /** تفصيل حسب نوع الطلب */
+  orderTypes: ShiftClosingTypeRow[];
+  /** تجميع الضرائب حسب النسبة */
+  taxGroups: ShiftClosingTaxRow[];
+  categories: ShiftClosingCategory[];
 };
 
 export const printShiftClosing = async (
@@ -483,6 +487,28 @@ export const printShiftClosing = async (
   const methodRows = report.methods.filter(m => Math.abs(m.amount) > 0.001).map(m => `
     <div class="row"><span>${m.label}</span><span class="v">${money(m.amount)}</span></div>`).join('')
     || `<div class="row empty">${isAr ? 'لا يوجد تحصيل' : 'Nothing collected'}</div>`;
+
+  // تفصيل حسب نوع الطلب — كل نوع بإجماليه وضريبته
+  const typeRows = report.orderTypes.map(t => `
+    <div class="grp">
+      <div class="grp-h"><span>${t.label}</span><span>${t.orders} ${isAr ? 'أوردر' : 'ord.'}</span></div>
+      <div class="row sm"><span>${isAr ? 'قبل الضريبة' : 'Before tax'}</span><span class="v">${money(t.subtotal)}</span></div>
+      <div class="row sm"><span>${isAr ? 'الضريبة' : 'Tax'}</span><span class="v">${money(t.tax)}</span></div>
+      <div class="row sm b"><span>${isAr ? 'المحصل' : 'Collected'}</span><span class="v">${money(t.collected)}</span></div>
+    </div>`).join('')
+    || `<div class="row empty">${isAr ? 'لا يوجد' : 'None'}</div>`;
+
+  // تجميع الضرائب حسب النسبة
+  const taxRows = report.taxGroups.map(g => `
+    <div class="grp">
+      <div class="grp-h">
+        <span>${g.percent > 0 ? (isAr ? `ضريبة ${g.percent}%` : `Tax ${g.percent}%`) : (isAr ? 'بدون ضريبة' : 'No tax')}</span>
+        <span>${g.orders} ${isAr ? 'أوردر' : 'ord.'}</span>
+      </div>
+      <div class="row sm"><span>${isAr ? 'الوعاء الضريبي' : 'Taxable base'}</span><span class="v">${money(g.base)}</span></div>
+      <div class="row sm b"><span>${isAr ? 'قيمة الضريبة' : 'Tax amount'}</span><span class="v">${money(g.tax)}</span></div>
+    </div>`).join('')
+    || `<div class="row empty">${isAr ? 'لا يوجد' : 'None'}</div>`;
 
   const categoryBlocks = report.categories.map(c => `
     <div class="cat">${c.name}</div>
@@ -506,6 +532,11 @@ export const printShiftClosing = async (
       .row { display:flex; justify-content:space-between; font-size:13px; padding:4px 0; }
       .row .v, .item .v, .catsum .v { font-variant-numeric:tabular-nums; font-weight:700; }
       .row.empty { justify-content:center; color:#666; font-size:12px; }
+      .row.sm { font-size:12px; padding:2px 6px; }
+      .row.b { font-weight:900; border-top:1px solid #999; }
+      .grp { border:1px solid #000; border-radius:5px; margin:6px 0; overflow:hidden; }
+      .grp-h { display:flex; justify-content:space-between; background:#000; color:#fff;
+               font-size:12.5px; font-weight:900; padding:4px 6px; }
       .sec { text-align:center; font-size:13px; font-weight:900; margin:9px 0 3px;
              border-top:1px dashed #000; border-bottom:1px dashed #000; padding:4px 0; }
       .cat { background:#000; color:#fff; font-size:13px; font-weight:900; padding:4px 6px; margin:7px 0 3px; border-radius:3px; }
@@ -543,6 +574,15 @@ export const printShiftClosing = async (
       ${methodRows}
       <div class="row" style="border-top:1px solid #000; font-weight:900;">
         <span>${isAr ? 'إجمالي المحصل' : 'Total collected'}</span><span class="v">${money(report.collected)}</span>
+      </div>
+
+      <div class="sec">${isAr ? 'حسب نوع الطلب' : 'BY ORDER TYPE'}</div>
+      ${typeRows}
+
+      <div class="sec">${isAr ? 'تجميع الضرائب' : 'TAX SUMMARY'}</div>
+      ${taxRows}
+      <div class="row" style="border-top:1px solid #000; font-weight:900;">
+        <span>${isAr ? 'إجمالي الضرائب' : 'Total tax'}</span><span class="v">${money(report.tax)}</span>
       </div>
 
       <div class="sec">${isAr ? 'الأصناف المباعة حسب التصنيف' : 'ITEMS BY CATEGORY'}</div>

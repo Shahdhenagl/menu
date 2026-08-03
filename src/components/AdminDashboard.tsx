@@ -158,10 +158,12 @@ export default function AdminDashboard({
   const [setTalabat, setSetTalabat] = useState(settings.talabat_url || '');
   const [setLocationUrl, setSetLocationUrl] = useState((settings as any).location_url || '');
   const [taxPercent, setTaxPercent] = useState<number>(settings.tax_percent || 0);
+  const [drawer1Name, setDrawer1Name] = useState<string>(settings.drawer_1_name || '');
+  const [drawer2Name, setDrawer2Name] = useState<string>(settings.drawer_2_name || '');
   const [taxPercentDelivery, setTaxPercentDelivery] = useState<number>(settings.tax_percent_delivery || 0);
   const [taxPercentTakeaway, setTaxPercentTakeaway] = useState<number>(settings.tax_percent_takeaway || 0);
   const [servicePercent, setServicePercent] = useState<number>(settings.service_percent || 0);
-  const [halls, setHalls] = useState<{ name: string; tax_percent: number }[]>(settings.halls || []);
+  const [halls, setHalls] = useState<{ name: string; tax_percent: number; drawer?: 1 | 2 }[]>(settings.halls || []);
   const [telegramBotToken, setTelegramBotToken] = useState(settings.telegram_bot_token || '');
   const [telegramChatId, setTelegramChatId] = useState(settings.telegram_chat_id || '');
   const [enableQzPrinting, setEnableQzPrinting] = useState(settings.enable_qz_printing || false);
@@ -1478,6 +1480,8 @@ export default function AdminDashboard({
     setTaxPercent(settings.tax_percent || 0);
     setTaxPercentDelivery(settings.tax_percent_delivery || 0);
     setTaxPercentTakeaway(settings.tax_percent_takeaway || 0);
+    setDrawer1Name(settings.drawer_1_name || '');
+    setDrawer2Name(settings.drawer_2_name || '');
     setHalls(settings.halls || []);
     setServicePercent(settings.service_percent || 0);
     setPromos(settings.promo_codes || {});
@@ -2407,6 +2411,8 @@ export default function AdminDashboard({
         tax_percent: taxPercent,
         tax_percent_delivery: taxPercentDelivery,
         tax_percent_takeaway: taxPercentTakeaway,
+        drawer_1_name: drawer1Name,
+        drawer_2_name: drawer2Name,
         service_percent: servicePercent,
         halls: halls,
         telegram_bot_token: telegramBotToken,
@@ -5089,10 +5095,35 @@ export default function AdminDashboard({
                 </div>
               </div>
 
+              {/* الخزن */}
+              <h3 style={{ color: 'var(--gold-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span>🗄️</span>
+                <span>{language === 'ar' ? 'الخزن (خزنة 1 و خزنة 2)' : 'Cash Drawers'}</span>
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'اسم خزنة 1' : 'Drawer 1 name'}</label>
+                  <input type="text" className="input-gold" value={drawer1Name}
+                    onChange={e => setDrawer1Name(e.target.value)}
+                    placeholder={language === 'ar' ? 'خزنة 1' : 'Drawer 1'} />
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'اسم خزنة 2' : 'Drawer 2 name'}</label>
+                  <input type="text" className="input-gold" value={drawer2Name}
+                    onChange={e => setDrawer2Name(e.target.value)}
+                    placeholder={language === 'ar' ? 'خزنة 2' : 'Drawer 2'} />
+                </div>
+                <div style={{ gridColumn: '1 / -1', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {language === 'ar'
+                    ? 'كل صالة بتحصّل في خزنة (بتحددها تحت مع الصالة). الدليفري والتيك أواي والطلبات الكاشير بيختار خزنتها وقت التحصيل. والتقفيل بيتم على مستوى الخزنة — خزنة 1 وخزنة 2 بس.'
+                    : 'Each hall collects into a drawer (set below). For delivery, takeaway and Talabat the cashier picks the drawer at payment time. Closing happens per drawer.'}
+                </div>
+              </div>
+
               {/* Halls & per-hall tax */}
               <h3 style={{ color: 'var(--gold-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span>🏛️</span>
-                <span>{language === 'ar' ? 'الصالات وضريبة كل صالة' : 'Halls & Per-Hall Tax'}</span>
+                <span>{language === 'ar' ? 'الصالات: الضريبة والخزنة' : 'Halls: Tax & Drawer'}</span>
               </h3>
               <div style={{ marginBottom: '2rem' }}>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.85rem' }}>
@@ -5101,16 +5132,23 @@ export default function AdminDashboard({
                     : 'Add halls (e.g. Hall 1, Hall 2) and set a tax % for each. On dine-in, the cashier picks the hall then the table, and the hall tax is applied.'}
                 </span>
                 {halls.map((h, idx) => (
-                  <div key={idx} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.6rem' }}>
-                    <input type="text" className="input-gold" style={{ flex: 2 }} placeholder={language === 'ar' ? 'اسم الصالة' : 'Hall name'} value={h.name}
+                  <div key={idx} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
+                    <input type="text" className="input-gold" style={{ flex: 2, minWidth: '140px' }} placeholder={language === 'ar' ? 'اسم الصالة' : 'Hall name'} value={h.name}
                       onChange={e => setHalls(halls.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} />
-                    <input type="number" className="input-gold" style={{ flex: 1 }} min="0" max="100" step="0.01" placeholder="0" value={h.tax_percent}
+                    <input type="number" className="input-gold" style={{ flex: 1, minWidth: '80px' }} min="0" max="100" step="0.01" placeholder="0" value={h.tax_percent}
                       onChange={e => setHalls(halls.map((x, i) => i === idx ? { ...x, tax_percent: e.target.value === '' ? 0 : Number(e.target.value) } : x))} />
                     <span style={{ color: 'var(--text-muted)' }}>%</span>
+                    {/* الخزنة اللي الصالة دي بتحصّل فيها */}
+                    <select className="input-gold" style={{ flex: 1, minWidth: '130px' }}
+                      value={h.drawer || 1}
+                      onChange={e => setHalls(halls.map((x, i) => i === idx ? { ...x, drawer: (Number(e.target.value) === 2 ? 2 : 1) as 1 | 2 } : x))}>
+                      <option value={1}>{drawer1Name || (language === 'ar' ? 'خزنة 1' : 'Drawer 1')}</option>
+                      <option value={2}>{drawer2Name || (language === 'ar' ? 'خزنة 2' : 'Drawer 2')}</option>
+                    </select>
                     <button type="button" className="btn-delete" onClick={() => setHalls(halls.filter((_, i) => i !== idx))}><Trash2 size={16} /></button>
                   </div>
                 ))}
-                <button type="button" className="btn-outline-gold" style={{ marginTop: '0.5rem' }} onClick={() => setHalls([...halls, { name: '', tax_percent: 0 }])}>
+                <button type="button" className="btn-outline-gold" style={{ marginTop: '0.5rem' }} onClick={() => setHalls([...halls, { name: '', tax_percent: 0, drawer: 1 }])}>
                   + {language === 'ar' ? 'إضافة صالة' : 'Add Hall'}
                 </button>
               </div>
