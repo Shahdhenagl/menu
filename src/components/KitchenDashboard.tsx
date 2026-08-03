@@ -6,6 +6,7 @@ import { ChefHat, CheckCircle2, AlertTriangle, Clock, X, Package, Search, Wine, 
 // ألوان الصالات — كل صالة بتاخد لون ثابت حسب ترتيبها في الإعدادات
 const HALL_COLORS = ['#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#3b82f6', '#14b8a6'];
 const TYPE_COLORS: Record<string, string> = {
+  dine_in: '#eab308',
   takeaway: '#a855f7',
   delivery: '#0ea5e9',
   talabat: '#f97316',

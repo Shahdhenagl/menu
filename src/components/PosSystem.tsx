@@ -20,12 +20,13 @@ import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe } from '../types';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import { taxPercentForOrder } from '../utils/tax';
+import { drawerOfHall, drawerName } from '../utils/shiftClosing';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
 
 // ألوان الصالات وأنواع الطلبات (نفس ألوان شاشة المطبخ للتناسق)
 const HALL_COLORS = ['#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#3b82f6', '#14b8a6'];
 const TYPE_COLORS: Record<string, string> = {
-  dine_in: '#f59e0b',
+  dine_in: '#eab308',
   takeaway: '#a855f7',
   delivery: '#0ea5e9',
   talabat: '#f97316',
@@ -101,6 +102,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [payInstapay, setPayInstapay] = useState<number | ''>('');
   const [payIsDeferred, setPayIsDeferred] = useState(false);
   const [payCustomerId, setPayCustomerId] = useState('');
+  // الخزنة اللي هيتحصّل فيها الأوردر (1 أو 2)
+  const [payDrawer, setPayDrawer] = useState<1 | 2>(1);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -667,6 +670,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       customer_phone: customerPhone || 'N/A',
       table_number: tableNumber || '-',
       hall: orderType === 'dine_in' && selectedHall ? selectedHall : undefined,
+      // طلبات الصالة بتاخد خزنة الصالة أوتوماتيك — غير كده الكاشير بيختار وقت التحصيل
+      drawer: orderType === 'dine_in' && selectedHall ? drawerOfHall(selectedHall, settings) : undefined,
       items: cart,
       total_price: cartTotal,
       status: 'pending',
@@ -1702,6 +1707,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               setPayInstapay('');
                               setPayIsDeferred(false);
                               setPayCustomerId(order.customer_id || '');
+                              // الصالة بتحدد خزنتها لوحدها — غير كده بنبدأ بخزنة 1 والكاشير يغيّر
+                              setPayDrawer(order.drawer || (order.hall ? drawerOfHall(order.hall, settings) : 1));
                             }}>{language === 'ar' ? 'تحصيل الدفع' : 'Collect Payment'}</button>
                             </>
                           ) : order.status === 'prepared' ? (
@@ -1952,6 +1959,36 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     <PrinterIcon size={18} />
                     {language === 'ar' ? 'طباعة الفاتورة للعميل (قبل الدفع)' : 'Print bill for customer (before payment)'}
                   </button>
+                </div>
+
+                {/* ===== الخزنة اللي هيتحصّل فيها ===== */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                    {language === 'ar' ? 'التحصيل في أنهي خزنة؟' : 'Collect into which drawer?'}
+                    {collectPaymentOrder.hall && (
+                      <span style={{ color: '#71717a', fontSize: '0.8rem', marginInlineStart: '0.5rem' }}>
+                        ({language === 'ar' ? `متحددة تلقائيًا من ${collectPaymentOrder.hall}` : `auto from ${collectPaymentOrder.hall}`})
+                      </span>
+                    )}
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    {([1, 2] as const).map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => { playClickSound(); setPayDrawer(d); }}
+                        style={{
+                          flex: 1, padding: '0.9rem', borderRadius: '12px', cursor: 'pointer',
+                          fontWeight: 'bold', fontSize: '1rem', transition: 'all 0.2s',
+                          border: payDrawer === d ? '2px solid var(--gold-primary)' : '2px solid #3f3f46',
+                          background: payDrawer === d ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : '#18181b',
+                          color: payDrawer === d ? '#000' : '#a1a1aa',
+                        }}
+                      >
+                        {drawerName(d, settings, language === 'ar')}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Input Breakdown Fields */}
@@ -2272,6 +2309,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 status: 'completed',
                                 payment_method: finalMethod,
                                 payment_details: paymentDetails,
+                                drawer: payDrawer, // الخزنة اللي اتحصّل فيها — عليها بيتم التقفيل
                                 customer_id: payCustomerId || collectPaymentOrder.customer_id
                               }, selectedWaiter?.name);
 
@@ -2308,6 +2346,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                    status: 'completed',
                                    payment_method: 'hospitality',
                                    total_price: 0,
+                                   drawer: payDrawer,
                                    payment_details: { type: 'hospitality', original_price: collectPaymentOrder.total_price }
                                  }, selectedWaiter?.name);
                                  printCustomerReceipt(hospOrder || ({ ...collectPaymentOrder, status: 'completed', payment_method: 'hospitality', total_price: 0 } as any), language, settings);
