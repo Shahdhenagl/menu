@@ -157,6 +157,8 @@ export default function AdminDashboard({
   const [setTalabat, setSetTalabat] = useState(settings.talabat_url || '');
   const [setLocationUrl, setSetLocationUrl] = useState((settings as any).location_url || '');
   const [taxPercent, setTaxPercent] = useState<number>(settings.tax_percent || 0);
+  const [taxPercentDelivery, setTaxPercentDelivery] = useState<number>(settings.tax_percent_delivery || 0);
+  const [taxPercentTakeaway, setTaxPercentTakeaway] = useState<number>(settings.tax_percent_takeaway || 0);
   const [servicePercent, setServicePercent] = useState<number>(settings.service_percent || 0);
   const [halls, setHalls] = useState<{ name: string; tax_percent: number }[]>(settings.halls || []);
   const [telegramBotToken, setTelegramBotToken] = useState(settings.telegram_bot_token || '');
@@ -1472,6 +1474,8 @@ export default function AdminDashboard({
     setSetTalabat(settings.talabat_url || '');
     setSetLocationUrl(settings.location_url || '');
     setTaxPercent(settings.tax_percent || 0);
+    setTaxPercentDelivery(settings.tax_percent_delivery || 0);
+    setTaxPercentTakeaway(settings.tax_percent_takeaway || 0);
     setHalls(settings.halls || []);
     setServicePercent(settings.service_percent || 0);
     setPromos(settings.promo_codes || {});
@@ -2399,6 +2403,8 @@ export default function AdminDashboard({
         talabat_url: setTalabat,
         location_url: setLocationUrl,
         tax_percent: taxPercent,
+        tax_percent_delivery: taxPercentDelivery,
+        tax_percent_takeaway: taxPercentTakeaway,
         service_percent: servicePercent,
         halls: halls,
         telegram_bot_token: telegramBotToken,
@@ -5036,6 +5042,41 @@ export default function AdminDashboard({
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                     {language === 'ar' ? 'القيمة الافتراضية 0% (تُحسب على المجموع الفرعي الصافي)' : 'Default is 0% (calculated on net subtotal)'}
                   </span>
+                </div>
+              </div>
+
+              {/* ضريبة الدليفري والتيك أواي */}
+              <h3 style={{ color: 'var(--gold-secondary)', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span>🛵</span>
+                <span>{language === 'ar' ? 'ضريبة الدليفري والتيك أواي' : 'Delivery & Takeaway Tax'}</span>
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'نسبة ضريبة الدليفري %' : 'Delivery Tax %'}</label>
+                  <input
+                    type="number" className="input-gold" min="0" max="100" step="0.01" placeholder="0"
+                    value={taxPercentDelivery}
+                    onChange={(e) => setTaxPercentDelivery(e.target.value === '' ? 0 : Number(e.target.value))}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {language === 'ar' ? 'بتتطبّق على طلبات الدليفري فقط' : 'Applied to delivery orders only'}
+                  </span>
+                </div>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'نسبة ضريبة التيك أواي %' : 'Takeaway Tax %'}</label>
+                  <input
+                    type="number" className="input-gold" min="0" max="100" step="0.01" placeholder="0"
+                    value={taxPercentTakeaway}
+                    onChange={(e) => setTaxPercentTakeaway(e.target.value === '' ? 0 : Number(e.target.value))}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {language === 'ar' ? 'بتتطبّق على طلبات التيك أواي فقط' : 'Applied to takeaway orders only'}
+                  </span>
+                </div>
+                <div style={{ gridColumn: '1 / -1', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {language === 'ar'
+                    ? 'ملاحظة: كل نوع طلب بياخد نسبته — الصالة بتاخد نسبة الصالة، والدليفري والتيك أواي النسب اللي فوق. النسبة بتظهر على الفاتورة المطبوعة.'
+                    : 'Each order type uses its own rate — halls use the per-hall rate, delivery and takeaway use the rates above. The rate is shown on the printed receipt.'}
                 </div>
               </div>
 

@@ -48,6 +48,8 @@ const initialSettings: RestaurantSettings = {
   snapchat_url: 'https://snapchat.com/add/meridien',
   talabat_url: 'https://www.talabat.com/egypt',
   tax_percent: 0,
+  tax_percent_delivery: 0,
+  tax_percent_takeaway: 0,
   service_percent: 0,
   telegram_bot_token: '',
   telegram_chat_id: ''

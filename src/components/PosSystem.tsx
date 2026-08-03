@@ -19,6 +19,7 @@ import {
 import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe } from '../types';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
+import { taxPercentForOrder } from '../utils/tax';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
 
 interface PosSystemProps {
@@ -541,9 +542,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
 
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const hallTaxPercent = (orderType === 'dine_in' && selectedHall)
-    ? (settings?.halls?.find(h => h.name === selectedHall)?.tax_percent || 0)
-    : 0;
+  // الضريبة حسب نوع الطلب: صالة (نسبة الصالة) / دليفري / تيك أواي
+  const hallTaxPercent = taxPercentForOrder(settings, orderType, selectedHall);
   const cartTaxAmount = cartSubtotal * (hallTaxPercent / 100);
   const cartTotal = cartSubtotal + cartTaxAmount;
 

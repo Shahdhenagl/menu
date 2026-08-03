@@ -1,6 +1,7 @@
 import type { Order, Category, Product, Printer, RestaurantSettings } from '../types';
 import { db } from '../lib/supabase';
 import { configureQzSecurity } from './qzSecurity';
+import { taxPercentForOrder } from './tax';
 import qz from 'qz-tray';
 import QRCode from 'qrcode';
 
@@ -350,13 +351,8 @@ export const printCustomerReceipt = async (
   const n = (v: any) => Number(v) || 0;
   const itemsSubtotal = order.items.reduce((s, i) => s + n(i.price) * n(i.quantity), 0);
   const grandTotal = n(order.total_price);
-  // نسبة الضريبة (للعرض في العنوان) — من الصالة إن وُجدت وإلا من إعدادات المطعم
-  let taxPercent = 0;
-  if (order.hall && settings?.halls) {
-    const h = settings.halls.find(hh => hh.name === order.hall);
-    if (h) taxPercent = n(h.tax_percent);
-  }
-  if (!taxPercent) taxPercent = n(settings?.tax_percent);
+  // نسبة الضريبة (للعرض في العنوان) — حسب نوع الطلب: صالة / دليفري / تيك أواي
+  const taxPercent = taxPercentForOrder(settings, order.order_type, order.hall);
   const diff = grandTotal - itemsSubtotal;            // موجب = ضريبة/خدمة ، سالب = خصم
   const taxAmount = diff > 0.001 ? diff : 0;
   const discountAmount = diff < -0.001 ? -diff : 0;

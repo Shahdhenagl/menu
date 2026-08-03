@@ -92,7 +92,9 @@ export interface RestaurantSettings {
   snapchat_url: string;
   talabat_url: string;
   location_url?: string;
-  tax_percent?: number;
+  tax_percent?: number;                   // النسبة العامة (الافتراضية)
+  tax_percent_delivery?: number;          // ضريبة الدليفري
+  tax_percent_takeaway?: number;          // ضريبة التيك أواي
   service_percent?: number;
   halls?: { name: string; tax_percent: number }[];  // الصالات وكل صالة نسبة ضريبتها
   telegram_bot_token?: string;
