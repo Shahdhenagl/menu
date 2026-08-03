@@ -312,6 +312,7 @@ export const printCustomerReceipt = async (
       .rname { text-align:center; font-size:22px; font-weight:900; letter-spacing:2px; margin:2px 0 4px; direction:ltr; }
       .info-line { text-align:center; font-size:11px; color:#222; margin:1px 0; word-break:break-all; }
       .info-line.ltr { direction:ltr; }
+      .doctype { text-align:center; font-size:16px; font-weight:900; letter-spacing:1px; padding:5px 0; margin:7px 0 4px; border-top:2px solid #000; border-bottom:2px solid #000; }
       .ticket-type { text-align:center; margin:8px 0; }
       .ticket-type span { display:inline-block; border:2px solid #000; border-radius:6px; padding:3px 14px; font-weight:800; font-size:14px; letter-spacing:1px; }
       .prebill { text-align:center; font-size:15px; font-weight:900; letter-spacing:1px; padding:6px 4px; margin:6px 0; border:3px double #000; border-radius:6px; }
@@ -347,6 +348,7 @@ export const printCustomerReceipt = async (
       <div class="rname">${restaurantName}</div>
       ${phoneHtml}
       ${locationHtml}
+      <div class="doctype">${isAr ? 'فاتورة ضريبية' : 'TAX INVOICE'}</div>
       <div class="ticket-type"><span>${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'طاولة' : 'Table'} ${order.table_number}` : ''}</span></div>
       ${isPreBill ? `<div class="prebill">${isAr ? 'فاتورة مبدئية — غير مدفوعة' : 'PRE-BILL — NOT PAID'}</div>` : ''}
       <hr class="divider"/>
