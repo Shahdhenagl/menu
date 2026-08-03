@@ -88,7 +88,8 @@ export default function DailyClosingView({
 
   // فلترة بيانات اليوم المختار
   const dayOrders = useMemo(
-    () => orders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality' && sameDay(o.created_at)),
+    // الضيافة وفواتير الاستاف مجانية → مش مبيعات
+    () => orders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality' && o.payment_method !== 'staff' && sameDay(o.created_at)),
     [orders, selectedDate]
   );
   const dayHospitality = useMemo(

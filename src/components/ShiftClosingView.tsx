@@ -55,7 +55,8 @@ export default function ShiftClosingView({
 
   // الأوردرات المكتملة بس (من غير الضيافة)
   const completed = useMemo(
-    () => orders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality'),
+    // الضيافة وفواتير الاستاف مجانية → مش مبيعات ومش بتدخل التقفيل
+    () => orders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality' && o.payment_method !== 'staff'),
     [orders]
   );
 

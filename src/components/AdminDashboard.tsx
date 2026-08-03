@@ -2334,7 +2334,9 @@ export default function AdminDashboard({
       const matchName = o.customer_name?.toLowerCase().includes(q);
       const matchPhone = o.customer_phone?.includes(q);
       const matchId = o.id.toLowerCase().includes(q);
-      if (!matchName && !matchPhone && !matchId) return false;
+      // البحث باسم موظف الاستاف كمان
+      const matchStaff = (o.payment_details?.employee_name || '').toLowerCase().includes(q);
+      if (!matchName && !matchPhone && !matchId && !matchStaff) return false;
     }
 
     return true;
@@ -4741,6 +4743,7 @@ export default function AdminDashboard({
                   <option value="split">{language === 'ar' ? '🔀 مقسم' : '🔀 Split'}</option>
                   <option value="deferred">{language === 'ar' ? '📋 آجل' : '📋 Deferred'}</option>
                   <option value="hospitality">{language === 'ar' ? '🎁 ضيافة' : '🎁 Hospitality'}</option>
+                  <option value="staff">{language === 'ar' ? '👨‍🍳 فواتير الاستاف' : '👨‍🍳 Staff Orders'}</option>
                 </select>
               </div>
 
@@ -4811,15 +4814,26 @@ export default function AdminDashboard({
                           {filteredInvoices.map(inv => {
                             const cost = inv.total_cost || 0;
                             const profit = inv.total_price - cost;
-                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet_restaurant' ? '📱 محفظة مطعم' : inv.payment_method === 'wallet_bar' ? '📱 محفظة بار' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : inv.payment_method === 'petty_cash' ? '💼 عهدة' : '💵 كاش';
+                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet_restaurant' ? '📱 محفظة مطعم' : inv.payment_method === 'wallet_bar' ? '📱 محفظة بار' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : inv.payment_method === 'staff' ? '👨‍🍳 استاف' : inv.payment_method === 'petty_cash' ? '💼 عهدة' : '💵 كاش';
 
                             const typeLabel = inv.order_type === 'dine_in' ? '🍽️' : inv.order_type === 'takeaway' ? '🥡' : inv.order_type === 'delivery' ? '🚗' : inv.order_type === 'talabat' ? '📱' : '—';
                             return (
                               <tr key={inv.id}>
                                 <td className="font-en" style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--gold-primary)' }}>#{inv.id.slice(0, 8)}</td>
                                 <td style={{ fontWeight: '600' }}>
-                                  {inv.customer_name}
-                                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{inv.customer_phone}</div>
+                                  {inv.payment_method === 'staff' ? (
+                                    <>
+                                      <span style={{ color: '#38bdf8' }}>👨‍🍳 {inv.payment_details?.employee_name || (language === 'ar' ? 'استاف' : 'Staff')}</span>
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                        {language === 'ar' ? 'فاتورة استاف — قيمتها' : 'Staff order — value'} {Number(inv.payment_details?.original_price || 0).toFixed(2)} EGP
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {inv.customer_name}
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{inv.customer_phone}</div>
+                                    </>
+                                  )}
                                 </td>
                                 <td className="font-en" style={{ fontSize: '0.8rem' }}>{new Date(inv.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}</td>
                                 <td style={{ fontSize: '0.85rem' }}>{typeLabel} {inv.order_type?.toUpperCase()}</td>
@@ -4849,6 +4863,11 @@ export default function AdminDashboard({
                                         }
                                         if (pd?.type === 'hospitality') {
                                           payInfo = `\n🎁 ${language === 'ar' ? 'ضيافة - القيمة الأصلية:' : 'Hospitality - Original:'} ${pd.original_price} EGP`;
+                                        }
+                                        if (pd?.type === 'staff') {
+                                          payInfo = `\n👨‍🍳 ${language === 'ar' ? 'فاتورة استاف' : 'Staff order'}\n` +
+                                            `  ${language === 'ar' ? 'الموظف:' : 'Employee:'} ${pd.employee_name || '-'}\n` +
+                                            `  ${language === 'ar' ? 'القيمة الأصلية:' : 'Original value:'} ${pd.original_price} EGP`;
                                         }
                                         alert(`${language === 'ar' ? 'تفاصيل الفاتورة' : 'Invoice Details'} #${inv.id.slice(0,8)}\n\n${items}\n\n${language === 'ar' ? 'الإجمالي' : 'Total'}: ${inv.total_price} EGP\n${language === 'ar' ? 'التكلفة' : 'Cost'}: ${cost} EGP\n${language === 'ar' ? 'الربح' : 'Profit'}: ${profit} EGP${payInfo}`);
                                       }}

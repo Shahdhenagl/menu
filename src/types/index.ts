@@ -62,7 +62,8 @@ export interface Order {
   order_type?: 'takeaway' | 'talabat' | 'dine_in' | 'delivery' | 'website';
   waiter_id?: string;
   waiter_name?: string;
-  payment_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'split' | 'deferred' | 'hospitality' | 'petty_cash'; // Added hospitality (ضيافة), wallets, and petty_cash
+  // 'staff' = طلب استاف مجاني (بيتسجل بالاسم وبيخصم من المخزون بس مبيتحسبش مبيعات)
+  payment_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'split' | 'deferred' | 'hospitality' | 'petty_cash' | 'staff';
   payment_details?: any; // JSON representation of split payments
   inventory_deducted?: boolean;
   created_at: string;

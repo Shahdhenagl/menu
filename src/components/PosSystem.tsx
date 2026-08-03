@@ -2482,6 +2482,86 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
             </motion.div>
           )}
 
+          {/* ===== مودال فاتورة الاستاف ===== */}
+          {staffModalOpen && collectPaymentOrder && (
+            <motion.div
+              key="staff_order_modal"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 100010, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+              onClick={() => !staffSaving && setStaffModalOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.94, y: 20 }} animate={{ scale: 1, y: 0 }}
+                onClick={e => e.stopPropagation()}
+                style={{ background: '#18181b', border: '1px solid #38bdf8', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '440px', maxHeight: '90vh', overflowY: 'auto' }}
+              >
+                <h3 style={{ margin: '0 0 0.5rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  👨‍🍳 {language === 'ar' ? 'فاتورة استاف' : 'Staff Order'}
+                </h3>
+                <p style={{ color: '#a1a1aa', fontSize: '0.88rem', margin: '0 0 1.5rem', lineHeight: 1.6 }}>
+                  {language === 'ar'
+                    ? 'الطلب هيتسجّل مجاني باسم الموظف، ومش هيتحسب في المبيعات — بس هيتخصم من المخزون عادي ويظهر في التقارير.'
+                    : 'The order is recorded free under the employee name. It is excluded from sales but still deducts inventory and appears in reports.'}
+                </p>
+
+                <div style={{ background: 'rgba(56,189,248,0.06)', border: '1px dashed rgba(56,189,248,0.3)', borderRadius: '10px', padding: '0.9rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                    <span>{language === 'ar' ? 'قيمة الطلب:' : 'Order value:'}</span>
+                    <b style={{ color: '#fff' }}>{collectPaymentOrder.total_price.toFixed(2)} EGP</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem', marginTop: '0.4rem' }}>
+                    <span>{language === 'ar' ? 'المطلوب تحصيله:' : 'To collect:'}</span>
+                    <b style={{ color: '#38bdf8' }}>{language === 'ar' ? 'مجاني' : 'Free'}</b>
+                  </div>
+                </div>
+
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                  {language === 'ar' ? 'الموظف المستفيد *' : 'Employee *'}
+                </label>
+                <select
+                  className="pos-input"
+                  value={staffEmployeeId}
+                  onChange={e => setStaffEmployeeId(e.target.value)}
+                  style={{ marginBottom: '1.25rem', background: '#111', textAlign: 'start' }}
+                >
+                  <option value="">{language === 'ar' ? '— اختر الموظف —' : '— Select employee —'}</option>
+                  {employeesList.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                  {language === 'ar' ? 'كلمة السر *' : 'Password *'}
+                </label>
+                <input
+                  type="password"
+                  className="pos-input"
+                  value={staffPasscode}
+                  onChange={e => setStaffPasscode(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleStaffOrder(); } }}
+                  placeholder={language === 'ar' ? 'كلمة سر فواتير الاستاف' : 'Staff orders password'}
+                  style={{ marginBottom: '1.5rem', background: '#111', letterSpacing: '0.3rem' }}
+                />
+
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button
+                    className="pos-btn"
+                    style={{ flex: 2, background: '#38bdf8', color: '#000' }}
+                    disabled={staffSaving || !staffEmployeeId || !staffPasscode}
+                    onClick={handleStaffOrder}
+                  >
+                    {staffSaving
+                      ? (language === 'ar' ? 'جاري التسجيل…' : 'Saving…')
+                      : (language === 'ar' ? 'تسجيل الفاتورة' : 'Record order')}
+                  </button>
+                  <button className="pos-btn-outline" style={{ flex: 1 }} disabled={staffSaving} onClick={() => setStaffModalOpen(false)}>
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
           {/* Transfer Item Modal */}
           {transferItem && editingOrder && (
             <motion.div 

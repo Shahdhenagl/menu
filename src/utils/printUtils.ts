@@ -341,7 +341,10 @@ export const printCustomerReceipt = async (
     order.payment_method === 'petty_cash' ? (isAr ? 'عهدة الشريك' : 'Petty Cash') :
     order.payment_method === 'split' ? (isAr ? 'مقسم' : 'Split') :
     order.payment_method === 'deferred' ? (isAr ? 'آجل' : 'Deferred') :
-    order.payment_method === 'hospitality' ? (isAr ? 'ضيافة' : 'Hospitality') : '';
+    order.payment_method === 'hospitality' ? (isAr ? 'ضيافة' : 'Hospitality') :
+    order.payment_method === 'staff'
+      ? (isAr ? `استاف — ${order.payment_details?.employee_name || ''}` : `Staff — ${order.payment_details?.employee_name || ''}`)
+      : '';
 
   const logoSrc = settings?.logo_url ? await toPrintableLogo(settings.logo_url) : '';
   const logoHtml = logoSrc
@@ -438,6 +441,9 @@ export const printCustomerReceipt = async (
       <div class="doctype">${isAr ? 'فاتورة ضريبية' : 'TAX INVOICE'}</div>
       <div class="ticket-type"><span>${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'طاولة' : 'Table'} ${order.table_number}` : ''}</span></div>
       ${isPreBill ? `<div class="prebill">${isAr ? 'فاتورة مبدئية — غير مدفوعة' : 'PRE-BILL — NOT PAID'}</div>` : ''}
+      ${order.payment_method === 'staff' ? `<div class="prebill">${isAr
+        ? `فاتورة استاف (مجانية)<br/>${order.payment_details?.employee_name || ''}`
+        : `STAFF ORDER (FREE)<br/>${order.payment_details?.employee_name || ''}`}</div>` : ''}
       <hr class="divider"/>
       <div class="meta">
         <div><span>${isAr ? 'فاتورة' : 'Invoice'}</span><b>#${order.id.slice(-6).toUpperCase()}</b></div>
