@@ -1135,7 +1135,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           )}
 
           {view === 'waiter_auth' && (
-            <motion.div key="w_auth" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+            <motion.div key="w_auth" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '2rem', overflowY: 'auto', maxHeight: '100%', WebkitOverflowScrolling: 'touch' }}>
               <h2 style={{ fontSize: '2rem', marginBottom: '2rem', color: 'var(--gold-primary)' }}>{t.selectWaiter}</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem', width: '100%', maxWidth: '800px', margin: '0 auto 3rem auto' }}>
                 {waiters.map(w => (
@@ -1175,7 +1175,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <h3 style={{ textAlign: 'center', marginBottom: '1.5rem', color: 'var(--gold-primary)' }}>
                         {language === 'ar' ? `مرحباً كابتن ${selectedWaiter.name}` : `Welcome Capt. ${selectedWaiter.name}`}
                       </h3>
-                      <input type="password" placeholder={t.enterPasscode} className="pos-input" style={{ marginBottom: '1.5rem', background: '#111', fontSize: '1.5rem', letterSpacing: '0.5rem' }} value={waiterPasscode} onChange={e => setWaiterPasscode(e.target.value)} />
+                      <input type="password" autoFocus placeholder={t.enterPasscode} className="pos-input" style={{ marginBottom: '1.5rem', background: '#111', fontSize: '1.5rem', letterSpacing: '0.5rem' }} value={waiterPasscode} onChange={e => setWaiterPasscode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleWaiterLogin(); } }} />
                       <button className="pos-btn" style={{ width: '100%' }} onClick={handleWaiterLogin}>{t.login}</button>
                     </div>
                   </motion.div>
