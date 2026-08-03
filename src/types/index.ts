@@ -207,6 +207,8 @@ export interface PurchaseInvoice {
   paid_visa?: number;
   paid_wallet?: number;
   paid_instapay?: number;
+  paid_petty_cash?: number;   // مدفوع من عهدة الشريك
+  partner_id?: string;        // الشريك اللي اتخصم من عهدته
   remaining_amount?: number;
   created_at?: string;
 }

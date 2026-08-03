@@ -606,13 +606,16 @@ export default function AdminDashboard({
   const [invoicePaidVisa, setInvoicePaidVisa] = useState<number | ''>('');
   const [invoicePaidWallet, setInvoicePaidWallet] = useState<number | ''>('');
   const [invoicePaidInstapay, setInvoicePaidInstapay] = useState<number | ''>('');
+  const [invoicePaidPettyCash, setInvoicePaidPettyCash] = useState<number | ''>('');
+  const [invoicePartnerId, setInvoicePartnerId] = useState('');
+  const [payPartnerId, setPayPartnerId] = useState('');
 
   // Supplier Profile and Debt states
   const [selectedSupplierProfile, setSelectedSupplierProfile] = useState<Supplier | null>(null);
   const [payDebtModalOpen, setPayDebtModalOpen] = useState(false);
   const [selectedInvoiceToPay, setSelectedInvoiceToPay] = useState<PurchaseInvoice | null>(null);
   const [payAmount, setPayAmount] = useState<number | ''>('');
-  const [payMethod, setPayMethod] = useState<'cash' | 'visa' | 'wallet' | 'instapay'>('cash');
+  const [payMethod, setPayMethod] = useState<'cash' | 'visa' | 'wallet' | 'instapay' | 'petty_cash'>('cash');
 
 
   // Phase 2: Manufacturing Orders & Notifications
@@ -763,6 +766,10 @@ export default function AdminDashboard({
       alert(language === 'ar' ? 'المبلغ المدفوع أكبر من المتبقي!' : 'Paid amount cannot exceed remaining amount!');
       return;
     }
+    if (payMethod === 'petty_cash' && !payPartnerId) {
+      alert(language === 'ar' ? 'يرجى اختيار الشريك الذي سيُخصم من عُهدته!' : 'Please select the partner to deduct from!');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -775,11 +782,26 @@ export default function AdminDashboard({
         updates.paid_wallet = (selectedInvoiceToPay.paid_wallet ?? 0) + amountToPay;
       } else if (payMethod === 'instapay') {
         updates.paid_instapay = (selectedInvoiceToPay.paid_instapay ?? 0) + amountToPay;
+      } else if (payMethod === 'petty_cash') {
+        updates.paid_petty_cash = (selectedInvoiceToPay.paid_petty_cash ?? 0) + amountToPay;
+        updates.partner_id = payPartnerId;
       }
       updates.remaining_amount = currentRemaining - amountToPay;
 
       const updatedInvoice = await db.updatePurchaseInvoice(selectedInvoiceToPay.id!, updates);
-      
+
+      // لو الدفع من عُهدة شريك: نسجّل خصم (debit) على الشريك
+      if (payMethod === 'petty_cash') {
+        const partnerName = expPartners.find(p => p.id === payPartnerId)?.name || '';
+        await db.addPartnerTransaction({
+          partner_id: payPartnerId,
+          type: 'debit',
+          amount: amountToPay,
+          description: `سداد فاتورة مشتريات من العُهدة: ${selectedInvoiceToPay.supplier_name || ''}${partnerName ? ' (' + partnerName + ')' : ''}`
+        });
+      }
+      setPayPartnerId('');
+
       await fetchInventoryData();
       setSelectedInvoiceToPay(updatedInvoice);
       setPayDebtModalOpen(false);
@@ -965,7 +987,13 @@ export default function AdminDashboard({
       const paidVisa = Number(invoicePaidVisa) || 0;
       const paidWallet = Number(invoicePaidWallet) || 0;
       const paidInstapay = Number(invoicePaidInstapay) || 0;
-      const remaining = Math.max(0, total - (paidCash + paidVisa + paidWallet + paidInstapay));
+      const paidPettyCash = Number(invoicePaidPettyCash) || 0;
+      if (paidPettyCash > 0 && !invoicePartnerId) {
+        alert(language === 'ar' ? 'يرجى اختيار الشريك الذي سيُخصم من عُهدته!' : 'Please select the partner to deduct from!');
+        setLoading(false);
+        return;
+      }
+      const remaining = Math.max(0, total - (paidCash + paidVisa + paidWallet + paidInstapay + paidPettyCash));
 
       await db.addPurchaseInvoice({
         supplier_id: invoiceSupplierId,
@@ -977,9 +1005,22 @@ export default function AdminDashboard({
         paid_visa: paidVisa,
         paid_wallet: paidWallet,
         paid_instapay: paidInstapay,
+        paid_petty_cash: paidPettyCash,
+        partner_id: paidPettyCash > 0 ? invoicePartnerId : undefined,
         remaining_amount: remaining
       });
-      
+
+      // لو جزء اتدفع من عُهدة شريك: خصم على الشريك
+      if (paidPettyCash > 0 && invoicePartnerId) {
+        const partnerName = expPartners.find(p => p.id === invoicePartnerId)?.name || '';
+        await db.addPartnerTransaction({
+          partner_id: invoicePartnerId,
+          type: 'debit',
+          amount: paidPettyCash,
+          description: `فاتورة مشتريات من العُهدة: ${sup ? sup.name : ''}${partnerName ? ' (' + partnerName + ')' : ''}`
+        });
+      }
+
       await fetchInventoryData();
       setInvoiceModalOpen(false);
       setInvoiceCart([]);
@@ -989,6 +1030,8 @@ export default function AdminDashboard({
       setInvoicePaidVisa('');
       setInvoicePaidWallet('');
       setInvoicePaidInstapay('');
+      setInvoicePaidPettyCash('');
+      setInvoicePartnerId('');
       alert(language === 'ar' ? '✅ تم حفظ الفاتورة بنجاح' : '✅ Invoice saved successfully');
     } catch (err) {
       console.error(err);
@@ -5912,7 +5955,8 @@ export default function AdminDashboard({
                             {inv.paid_visa ? <div>💳 {language === 'ar' ? 'فيزا: ' : 'Visa: '}{inv.paid_visa.toFixed(2)}</div> : null}
                             {inv.paid_wallet ? <div>📱 {language === 'ar' ? 'محفظة: ' : 'Wallet: '}{inv.paid_wallet.toFixed(2)}</div> : null}
                             {inv.paid_instapay ? <div>⚡ {language === 'ar' ? 'إنستاباي: ' : 'Instapay: '}{inv.paid_instapay.toFixed(2)}</div> : null}
-                            {!inv.paid_cash && !inv.paid_visa && !inv.paid_wallet && !inv.paid_instapay ? <span style={{ color: 'var(--text-gray)' }}>-</span> : null}
+                            {inv.paid_petty_cash ? <div>💼 {language === 'ar' ? 'عهدة: ' : 'Petty: '}{inv.paid_petty_cash.toFixed(2)}</div> : null}
+                            {!inv.paid_cash && !inv.paid_visa && !inv.paid_wallet && !inv.paid_instapay && !inv.paid_petty_cash ? <span style={{ color: 'var(--text-gray)' }}>-</span> : null}
                           </td>
                           <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{inv.total_amount.toFixed(2)}</td>
                           <td style={{ color: (inv.remaining_amount ?? 0) > 0 ? '#ff4d4d' : '#2ecc71', fontWeight: 'bold' }}>
@@ -8636,11 +8680,24 @@ export default function AdminDashboard({
                     <label>{language === 'ar' ? 'مدفوع إنستاباي' : 'Paid Instapay'}</label>
                     <input type="number" className="input-gold" value={invoicePaidInstapay} onChange={e => setInvoicePaidInstapay(e.target.value === '' ? '' : parseFloat(e.target.value))} placeholder="0.00" min="0" step="0.01" />
                   </div>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'مدفوع من عهدة الشريك' : 'Paid from Partner Petty Cash'}</label>
+                    <input type="number" className="input-gold" value={invoicePaidPettyCash} onChange={e => setInvoicePaidPettyCash(e.target.value === '' ? '' : parseFloat(e.target.value))} placeholder="0.00" min="0" step="0.01" />
+                  </div>
+                  {(Number(invoicePaidPettyCash) || 0) > 0 && (
+                    <div className="form-group">
+                      <label>{language === 'ar' ? 'اختر الشريك (العُهدة)' : 'Select Partner (Petty Cash)'} *</label>
+                      <select className="input-gold" value={invoicePartnerId} onChange={e => setInvoicePartnerId(e.target.value)} required>
+                        <option value="">{language === 'ar' ? 'اختر الشريك...' : 'Select Partner...'}</option>
+                        {expPartners.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                      </select>
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', padding: '0.5rem', background: '#333', borderRadius: '4px' }}>
                   <span style={{ fontWeight: 'bold' }}>{language === 'ar' ? 'المبلغ المتبقي (آجل):' : 'Remaining Amount (Credit):'}</span>
-                  <span style={{ color: (invoiceCart.reduce((sum, c) => sum + (c.quantity * c.unit_price), 0) - ((Number(invoicePaidCash) || 0) + (Number(invoicePaidVisa) || 0) + (Number(invoicePaidWallet) || 0) + (Number(invoicePaidInstapay) || 0))) > 0 ? '#ff4d4d' : '#2ecc71', fontWeight: 'bold' }}>
-                    {Math.max(0, invoiceCart.reduce((sum, c) => sum + (c.quantity * c.unit_price), 0) - ((Number(invoicePaidCash) || 0) + (Number(invoicePaidVisa) || 0) + (Number(invoicePaidWallet) || 0) + (Number(invoicePaidInstapay) || 0))).toFixed(2)}
+                  <span style={{ color: (invoiceCart.reduce((sum, c) => sum + (c.quantity * c.unit_price), 0) - ((Number(invoicePaidCash) || 0) + (Number(invoicePaidVisa) || 0) + (Number(invoicePaidWallet) || 0) + (Number(invoicePaidInstapay) || 0) + (Number(invoicePaidPettyCash) || 0))) > 0 ? '#ff4d4d' : '#2ecc71', fontWeight: 'bold' }}>
+                    {Math.max(0, invoiceCart.reduce((sum, c) => sum + (c.quantity * c.unit_price), 0) - ((Number(invoicePaidCash) || 0) + (Number(invoicePaidVisa) || 0) + (Number(invoicePaidWallet) || 0) + (Number(invoicePaidInstapay) || 0) + (Number(invoicePaidPettyCash) || 0))).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -9237,7 +9294,8 @@ export default function AdminDashboard({
                             {inv.paid_visa ? <div>💳 {language === 'ar' ? 'فيزا: ' : 'Visa: '}{inv.paid_visa.toFixed(2)}</div> : null}
                             {inv.paid_wallet ? <div>📱 {language === 'ar' ? 'محفظة: ' : 'Wallet: '}{inv.paid_wallet.toFixed(2)}</div> : null}
                             {inv.paid_instapay ? <div>⚡ {language === 'ar' ? 'إنستاباي: ' : 'Instapay: '}{inv.paid_instapay.toFixed(2)}</div> : null}
-                            {!inv.paid_cash && !inv.paid_visa && !inv.paid_wallet && !inv.paid_instapay ? <span style={{ color: 'var(--text-gray)' }}>-</span> : null}
+                            {inv.paid_petty_cash ? <div>💼 {language === 'ar' ? 'عهدة: ' : 'Petty: '}{inv.paid_petty_cash.toFixed(2)}</div> : null}
+                            {!inv.paid_cash && !inv.paid_visa && !inv.paid_wallet && !inv.paid_instapay && !inv.paid_petty_cash ? <span style={{ color: 'var(--text-gray)' }}>-</span> : null}
                           </td>
                           <td style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{inv.total_amount.toFixed(2)}</td>
                           <td style={{ color: (inv.remaining_amount ?? 0) > 0 ? '#ff4d4d' : '#2ecc71', fontWeight: 'bold' }}>
@@ -9323,8 +9381,19 @@ export default function AdminDashboard({
                     <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
                     <option value="wallet">{language === 'ar' ? 'محفظة المطبخ' : 'Kitchen Wallet'}</option>
                     <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
+                    <option value="petty_cash">{language === 'ar' ? 'عهدة الشريك' : 'Partner Petty Cash'}</option>
                   </select>
                 </div>
+
+                {payMethod === 'petty_cash' && (
+                  <div className="form-group" style={{ marginTop: '1rem' }}>
+                    <label>{language === 'ar' ? 'اختر الشريك (العُهدة)' : 'Select Partner (Petty Cash)'} *</label>
+                    <select className="input-gold" value={payPartnerId} onChange={e => setPayPartnerId(e.target.value)} required>
+                      <option value="">{language === 'ar' ? 'اختر الشريك...' : 'Select Partner...'}</option>
+                      {expPartners.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                    </select>
+                  </div>
+                )}
               </div>
               <div className="admin-modal-footer">
                 <button type="button" className="btn-outline-gold" onClick={() => setPayDebtModalOpen(false)}>{t.close}</button>
