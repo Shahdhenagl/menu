@@ -308,6 +308,36 @@ export interface FinancialTransaction {
   created_at?: string;
 }
 
+// ===== التقفيل اليومي =====
+export type PaymentMethodKey = 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'deferred' | 'petty_cash';
+
+/** تقفيل وسيلة دفع واحدة داخل تقفيل اليوم */
+export interface DailyClosingMethod {
+  method: PaymentMethodKey;
+  incoming: number;    // وارد اليوم من الوسيلة دي
+  outgoing: number;    // صادر (مصروفات) من الوسيلة دي
+  expected: number;    // المفروض يكون موجود = وارد - صادر
+  counted: number;     // المعدود فعليًا من الكاشير
+  difference: number;  // counted - expected (موجب = زيادة، سالب = عجز)
+  note?: string;
+}
+
+export interface DailyClosing {
+  id: string;
+  closing_date: string;              // YYYY-MM-DD
+  status: 'closed' | 'reopened';
+  methods: DailyClosingMethod[];
+  total_expected: number;
+  total_counted: number;
+  total_difference: number;
+  orders_count: number;
+  expenses_count: number;
+  notes?: string;
+  closed_by?: string;
+  closed_at?: string;
+  created_at?: string;
+}
+
 export interface Partner {
   id: string;
   name: string;

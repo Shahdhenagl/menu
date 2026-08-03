@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
-import { Printer, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, Wallet, ArrowRightLeft } from 'lucide-react';
-import type { Order, Expense, RestaurantSettings } from '../types';
+import { useState, useMemo, useEffect } from 'react';
+import { Printer, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, Wallet, ArrowRightLeft, Lock, Unlock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import type { Order, Expense, RestaurantSettings, DailyClosing, DailyClosingMethod, PaymentMethodKey } from '../types';
+import { db } from '../lib/supabase';
 
 interface DailyClosingViewProps {
   orders: Order[];
@@ -8,6 +9,10 @@ interface DailyClosingViewProps {
   financialTransactions?: any[];
   settings?: RestaurantSettings;
   language: 'ar' | 'en';
+  /** اسم اللي بيقفل — بيتسجّل على التقفيل */
+  userName?: string;
+  /** لو 'admin' يقدر يفتح يوم مقفول تاني */
+  userRole?: string;
 }
 
 // وسائل الدفع المعروضة في التقفيل
@@ -22,6 +27,8 @@ export default function DailyClosingView({
   financialTransactions = [],
   settings,
   language,
+  userName,
+  userRole,
 }: DailyClosingViewProps) {
   const ar = language === 'ar';
 
@@ -129,6 +136,133 @@ export default function DailyClosingView({
   const totalOutgoing = METHODS.reduce((s, m) => s + outgoingByMethod[m], 0);
   const net = totalIncoming - totalOutgoing;
 
+  // ===== التقفيل: المفروض / المعدود / الفرق لكل وسيلة =====
+  // المفروض في كل وسيلة = وارد اليوم - صادر اليوم منها
+  const expectedByMethod = useMemo(() => {
+    const map: Record<string, number> = {};
+    METHODS.forEach(m => (map[m] = incomingByMethod[m] - outgoingByMethod[m]));
+    return map;
+  }, [incomingByMethod, outgoingByMethod]);
+
+  const [closing, setClosing] = useState<DailyClosing | null>(null);
+  const [loadingClosing, setLoadingClosing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  // المعدود اللي بيكتبه الكاشير لكل وسيلة (نص عشان الحقل يفضل يقبل الفراغ)
+  const [counted, setCounted] = useState<Record<string, string>>({});
+  const [methodNotes, setMethodNotes] = useState<Record<string, string>>({});
+  const [closingNotes, setClosingNotes] = useState('');
+
+  const isClosed = closing?.status === 'closed';
+
+  // نجيب تقفيل اليوم المختار (لو موجود) ونملّي بيه الحقول
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingClosing(true);
+    db.getDailyClosing(selectedDate)
+      .then(found => {
+        if (cancelled) return;
+        setClosing(found);
+        const c: Record<string, string> = {};
+        const n: Record<string, string> = {};
+        (found?.methods || []).forEach(m => {
+          c[m.method] = String(num(m.counted));
+          if (m.note) n[m.method] = m.note;
+        });
+        setCounted(c);
+        setMethodNotes(n);
+        setClosingNotes(found?.notes || '');
+      })
+      .catch(() => { if (!cancelled) setClosing(null); })
+      .finally(() => { if (!cancelled) setLoadingClosing(false); });
+    return () => { cancelled = true; };
+  }, [selectedDate]);
+
+  // الوسائل اللي ليها حركة النهارده + أي وسيلة اتقفلت قبل كده (عشان متختفيش)
+  const closableMethods = useMemo(() => {
+    const previouslyClosed = new Set((closing?.methods || []).map(m => m.method));
+    return METHODS.filter(m =>
+      incomingByMethod[m] !== 0 || outgoingByMethod[m] !== 0 || previouslyClosed.has(m)
+    );
+  }, [incomingByMethod, outgoingByMethod, closing]);
+
+  const countedOf = (m: Method) => (counted[m] === '' || counted[m] === undefined ? 0 : num(counted[m]));
+  const diffOf = (m: Method) => countedOf(m) - expectedByMethod[m];
+  // وسيلة تعتبر متقفّلة لما الكاشير يكتب فيها رقم (حتى لو صفر)
+  const isMethodFilled = (m: Method) => counted[m] !== undefined && counted[m] !== '';
+
+  const totalExpected = closableMethods.reduce((s, m) => s + expectedByMethod[m], 0);
+  const totalCounted = closableMethods.reduce((s, m) => s + countedOf(m), 0);
+  const totalDifference = totalCounted - totalExpected;
+  const allFilled = closableMethods.length > 0 && closableMethods.every(isMethodFilled);
+
+  const buildMethodRows = (): DailyClosingMethod[] =>
+    closableMethods.map(m => ({
+      method: m as PaymentMethodKey,
+      incoming: incomingByMethod[m],
+      outgoing: outgoingByMethod[m],
+      expected: expectedByMethod[m],
+      counted: countedOf(m),
+      difference: diffOf(m),
+      note: methodNotes[m] || '',
+    }));
+
+  // اختصار: يحط المفروض في خانة المعدود (مفيد للفيزا/إنستاباي/الآجل اللي رقمها معروف)
+  const fillWithExpected = (m: Method) =>
+    setCounted(prev => ({ ...prev, [m]: String(Number(expectedByMethod[m].toFixed(2))) }));
+  const fillAllWithExpected = () =>
+    setCounted(closableMethods.reduce((acc, m) => {
+      acc[m] = String(Number(expectedByMethod[m].toFixed(2)));
+      return acc;
+    }, { ...counted } as Record<string, string>));
+
+  const handleSaveClosing = async () => {
+    if (!allFilled) {
+      alert(ar ? 'اكتب المبلغ المعدود في كل وسيلة الأول.' : 'Enter the counted amount for every method first.');
+      return;
+    }
+    const bigDiff = closableMethods.filter(m => Math.abs(diffOf(m)) > 0.009);
+    if (bigDiff.length) {
+      const details = bigDiff.map(m => `• ${label(m)}: ${diffOf(m) > 0 ? '+' : ''}${fmt(diffOf(m))}`).join('\n');
+      const ok = window.confirm(
+        (ar ? `في فروقات في التقفيل:\n\n${details}\n\nتحب تكمّل وتقفل اليوم؟` : `There are differences:\n\n${details}\n\nClose the day anyway?`)
+      );
+      if (!ok) return;
+    }
+    setSaving(true);
+    try {
+      const saved = await db.saveDailyClosing({
+        closing_date: selectedDate,
+        status: 'closed',
+        methods: buildMethodRows(),
+        total_expected: totalExpected,
+        total_counted: totalCounted,
+        total_difference: totalDifference,
+        orders_count: dayOrders.length,
+        expenses_count: dayExpenses.length,
+        notes: closingNotes,
+        closed_by: userName || '-',
+      });
+      setClosing(saved);
+      alert(ar ? 'تم تقفيل اليوم بنجاح.' : 'Day closed successfully.');
+    } catch (err) {
+      console.error(err);
+      alert(ar ? 'حصل خطأ أثناء حفظ التقفيل.' : 'Failed to save the closing.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    if (!window.confirm(ar ? 'تأكيد إعادة فتح تقفيل اليوم ده؟' : 'Reopen this day for editing?')) return;
+    setSaving(true);
+    try {
+      await db.reopenDailyClosing(selectedDate, userName);
+      setClosing(prev => (prev ? { ...prev, status: 'reopened' } : prev));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const restaurantName = ar
     ? (settings?.restaurant_name_ar || 'مريديان')
     : (settings?.restaurant_name_en || 'Meridien');
@@ -165,6 +299,26 @@ export default function DailyClosingView({
         <td class="ta-end">- ${fmt(num(e.amount))}</td>
       </tr>`).join('') || `<tr><td colspan="4" class="empty">${ar ? 'لا يوجد' : 'None'}</td></tr>`;
 
+    // صفوف التقفيل (المفروض / المعدود / الفرق لكل وسيلة)
+    const closingRows = closableMethods.map(m => {
+      const d = diffOf(m);
+      const filled = isMethodFilled(m);
+      return `
+      <tr>
+        <td class="lbl"><span class="dot" style="background:${color(m)}"></span>${label(m)}</td>
+        <td class="ta-end">${fmt(expectedByMethod[m])}</td>
+        <td class="ta-end">${filled ? fmt(countedOf(m)) : '—'}</td>
+        <td class="ta-end" style="color:${!filled ? '#999' : Math.abs(d) < 0.01 ? '#059669' : d > 0 ? '#2563eb' : '#dc2626'}">
+          ${filled ? (d > 0 ? '+' : '') + fmt(d) + (Math.abs(d) >= 0.01 ? ` (${d > 0 ? (ar ? 'زيادة' : 'Over') : (ar ? 'عجز' : 'Short')})` : '') : '—'}
+        </td>
+        <td>${methodNotes[m] || '-'}</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="5" class="empty">${ar ? 'لا توجد وسائل للتقفيل' : 'Nothing to close'}</td></tr>`;
+
+    const closedLine = isClosed
+      ? `${ar ? 'تم التقفيل بواسطة' : 'Closed by'}: ${closing?.closed_by || '-'} — ${closing?.closed_at ? new Date(closing.closed_at).toLocaleString(ar ? 'ar-EG' : 'en-GB') : ''}`
+      : `${ar ? 'اليوم لسه مش مقفول رسميًا' : 'This day is not officially closed yet'}`;
+
     const transferRows = dayTransfers.map(t => `
       <tr>
         <td>${label(t.from_method || '-')}</td>
@@ -200,6 +354,7 @@ export default function DailyClosingView({
       .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-inline-end:6px; vertical-align:middle; }
       tfoot td { font-weight:800; background:#111; color:#fff; }
       .empty { text-align:center; color:#999; padding:14px; }
+      .sign { margin:8px 0 4px; font-size:12px; color:#333; font-weight:600; }
       .foot { margin-top:22px; text-align:center; color:#888; font-size:11px; border-top:1px solid #ddd; padding-top:10px; }
       @media print { body { padding:0; } @page { margin:14mm; } }
     </style></head><body>
@@ -222,6 +377,27 @@ export default function DailyClosingView({
         <tbody>${rows || `<tr><td colspan="4" class="empty">${ar ? 'لا توجد حركة' : 'No movement'}</td></tr>`}</tbody>
         <tfoot><tr><td>${ar ? 'الإجمالي' : 'Total'}</td><td>${fmt(totalIncoming)}</td><td>- ${fmt(totalOutgoing)}</td><td>${fmt(net)}</td></tr></tfoot>
       </table>
+
+      <h2>${ar ? 'التقفيل — المفروض مقابل المعدود' : 'Closing — Expected vs Counted'}</h2>
+      <table class="pm">
+        <thead><tr>
+          <th>${ar ? 'الوسيلة' : 'Method'}</th>
+          <th>${ar ? 'المفروض' : 'Expected'}</th>
+          <th>${ar ? 'المعدود' : 'Counted'}</th>
+          <th>${ar ? 'الفرق' : 'Difference'}</th>
+          <th>${ar ? 'ملاحظة' : 'Note'}</th>
+        </tr></thead>
+        <tbody>${closingRows}</tbody>
+        <tfoot><tr>
+          <td>${ar ? 'الإجمالي' : 'Total'}</td>
+          <td>${fmt(totalExpected)}</td>
+          <td>${fmt(totalCounted)}</td>
+          <td>${(totalDifference > 0 ? '+' : '') + fmt(totalDifference)}</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+      <p class="sign">${closedLine}</p>
+      ${closingNotes ? `<p class="sign">${ar ? 'ملاحظات:' : 'Notes:'} ${closingNotes}</p>` : ''}
 
       <h2>${ar ? 'الوارد — الأوردرات' : 'Incoming — Orders'} (${dayOrders.length})</h2>
       <table>
@@ -337,6 +513,166 @@ export default function DailyClosingView({
               </tfoot>
             </table>
           </div>
+        </div>
+
+        {/* ===== تقفيل كل وسيلة ===== */}
+        <div style={{ background: 'var(--bg-darker)', borderRadius: '12px', padding: '1.5rem', border: `1px solid ${isClosed ? '#10b981' : 'var(--border-color)'}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {isClosed ? <Lock size={18} color="#10b981" /> : <Unlock size={18} color="var(--gold-primary)" />}
+              {ar ? 'تقفيل الوسائل' : 'Close by Method'}
+            </h3>
+            {isClosed && (
+              <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', padding: '0.4rem 0.9rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 700 }}>
+                {ar ? 'مقفول' : 'Closed'} · {closing?.closed_by || '-'} · {closing?.closed_at ? new Date(closing.closed_at).toLocaleString(ar ? 'ar-EG' : 'en-GB') : ''}
+              </span>
+            )}
+            {closing?.status === 'reopened' && (
+              <span style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', padding: '0.4rem 0.9rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 700 }}>
+                {ar ? 'مفتوح للتعديل' : 'Reopened'}
+              </span>
+            )}
+            {!isClosed && closableMethods.length > 0 && (
+              <button className="btn-gold outline" style={{ padding: '0.45rem 0.9rem', fontSize: '0.85rem' }} onClick={fillAllWithExpected}>
+                {ar ? 'ملء الكل بالمفروض' : 'Fill all with expected'}
+              </button>
+            )}
+          </div>
+
+          {loadingClosing ? (
+            <p style={{ color: 'var(--text-gray)', padding: '1rem 0' }}>{ar ? 'جاري التحميل…' : 'Loading…'}</p>
+          ) : closableMethods.length === 0 ? (
+            <p style={{ color: 'var(--text-gray)', textAlign: 'center', padding: '2rem' }}>
+              {ar ? 'مفيش حركة في اليوم ده تتقفل' : 'No movement to close on this day'}
+            </p>
+          ) : (
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '720px' }}>
+                  <thead>
+                    <tr style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>
+                      <th style={thStyle(ar)}>{ar ? 'الوسيلة' : 'Method'}</th>
+                      <th style={thStyle(ar, 'end')}>{ar ? 'وارد' : 'In'}</th>
+                      <th style={thStyle(ar, 'end')}>{ar ? 'صادر' : 'Out'}</th>
+                      <th style={thStyle(ar, 'end')}>{ar ? 'المفروض' : 'Expected'}</th>
+                      <th style={thStyle(ar, 'end')}>{ar ? 'المعدود فعليًا' : 'Counted'}</th>
+                      <th style={thStyle(ar, 'end')}>{ar ? 'الفرق' : 'Difference'}</th>
+                      <th style={thStyle(ar)}>{ar ? 'ملاحظة' : 'Note'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {closableMethods.map(m => {
+                      const d = diffOf(m);
+                      const filled = isMethodFilled(m);
+                      const dColor = !filled ? 'var(--text-gray)' : Math.abs(d) < 0.01 ? '#10b981' : d > 0 ? '#3b82f6' : '#ef4444';
+                      return (
+                        <tr key={m} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                          <td style={tdStyle(ar)}>
+                            <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: color(m), marginInlineEnd: '8px' }} />
+                            {label(m)}
+                          </td>
+                          <td style={{ ...tdStyle(ar, 'end'), color: '#10b981' }}>{fmt(incomingByMethod[m])}</td>
+                          <td style={{ ...tdStyle(ar, 'end'), color: outgoingByMethod[m] ? '#ef4444' : 'var(--text-gray)' }}>{outgoingByMethod[m] ? '- ' + fmt(outgoingByMethod[m]) : '—'}</td>
+                          <td style={{ ...tdStyle(ar, 'end'), fontWeight: 800 }}>{fmt(expectedByMethod[m])}</td>
+                          <td style={{ ...tdStyle(ar, 'end'), width: '190px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', justifyContent: ar ? 'flex-start' : 'flex-end' }}>
+                              <input
+                                type="number"
+                                step="0.01"
+                                className="input-gold"
+                                disabled={isClosed}
+                                placeholder={ar ? 'المبلغ' : 'Amount'}
+                                value={counted[m] ?? ''}
+                                onChange={e => setCounted(prev => ({ ...prev, [m]: e.target.value }))}
+                                style={{ width: '130px', padding: '0.5rem', borderRadius: '8px', textAlign: 'center', opacity: isClosed ? 0.6 : 1 }}
+                              />
+                              {!isClosed && (
+                                <button
+                                  type="button"
+                                  onClick={() => fillWithExpected(m)}
+                                  title={ar ? 'مطابق للمفروض' : 'Same as expected'}
+                                  style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--gold-primary)', borderRadius: '6px', padding: '0.35rem 0.5rem', cursor: 'pointer', fontWeight: 700 }}
+                                >=</button>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ ...tdStyle(ar, 'end'), color: dColor, fontWeight: 800 }}>
+                            {!filled ? '—' : (d > 0 ? '+' : '') + fmt(d)}
+                            {filled && Math.abs(d) >= 0.01 && (
+                              <div style={{ fontSize: '0.7rem', fontWeight: 600 }}>{d > 0 ? (ar ? 'زيادة' : 'Over') : (ar ? 'عجز' : 'Short')}</div>
+                            )}
+                          </td>
+                          <td style={tdStyle(ar)}>
+                            <input
+                              type="text"
+                              className="input-gold"
+                              disabled={isClosed}
+                              placeholder={ar ? 'سبب الفرق…' : 'Reason…'}
+                              value={methodNotes[m] ?? ''}
+                              onChange={e => setMethodNotes(prev => ({ ...prev, [m]: e.target.value }))}
+                              style={{ width: '100%', minWidth: '130px', padding: '0.5rem', borderRadius: '8px', opacity: isClosed ? 0.6 : 1 }}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid var(--gold-primary)' }}>
+                      <td style={{ ...tdStyle(ar), fontWeight: 800 }}>{ar ? 'الإجمالي' : 'Total'}</td>
+                      <td style={{ ...tdStyle(ar, 'end'), color: '#10b981', fontWeight: 800 }}>{fmt(totalIncoming)}</td>
+                      <td style={{ ...tdStyle(ar, 'end'), color: '#ef4444', fontWeight: 800 }}>- {fmt(totalOutgoing)}</td>
+                      <td style={{ ...tdStyle(ar, 'end'), fontWeight: 900 }}>{fmt(totalExpected)}</td>
+                      <td style={{ ...tdStyle(ar, 'end'), fontWeight: 900, color: 'var(--gold-primary)' }}>{fmt(totalCounted)}</td>
+                      <td style={{ ...tdStyle(ar, 'end'), fontWeight: 900, color: Math.abs(totalDifference) < 0.01 ? '#10b981' : totalDifference > 0 ? '#3b82f6' : '#ef4444' }}>
+                        {(totalDifference > 0 ? '+' : '') + fmt(totalDifference)}
+                      </td>
+                      <td style={tdStyle(ar)} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <label style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>{ar ? 'ملاحظات التقفيل' : 'Closing notes'}</label>
+                <textarea
+                  className="input-gold"
+                  disabled={isClosed}
+                  rows={2}
+                  value={closingNotes}
+                  onChange={e => setClosingNotes(e.target.value)}
+                  placeholder={ar ? 'أي ملاحظات على تقفيل اليوم…' : 'Any notes about this closing…'}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', resize: 'vertical', opacity: isClosed ? 0.6 : 1 }}
+                />
+              </div>
+
+              <div style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                {isClosed ? (
+                  <>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981', fontWeight: 700 }}>
+                      <CheckCircle2 size={18} /> {ar ? 'اليوم مقفول' : 'Day is closed'}
+                    </span>
+                    {userRole?.includes('admin') && (
+                      <button className="btn-gold outline" disabled={saving} onClick={handleReopen}>
+                        <Unlock size={16} /> {ar ? 'إعادة فتح اليوم' : 'Reopen day'}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <button className="btn-gold" disabled={saving || !allFilled} onClick={handleSaveClosing} style={{ opacity: allFilled ? 1 : 0.5 }}>
+                      <Lock size={16} /> {saving ? (ar ? 'جاري الحفظ…' : 'Saving…') : (ar ? 'تقفيل اليوم' : 'Close the day')}
+                    </button>
+                    {!allFilled && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b', fontSize: '0.9rem' }}>
+                        <AlertTriangle size={16} /> {ar ? 'اكتب المعدود في كل وسيلة عشان تقدر تقفل' : 'Enter the counted amount for every method'}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* التفاصيل: أوردرات + مصروفات */}

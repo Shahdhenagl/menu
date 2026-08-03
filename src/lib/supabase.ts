@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, BarProduct } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, BarProduct, DailyClosing } from '../types';
 import { initialCategories, initialProducts, initialInventoryItems, initialProductRecipes } from './seedData';
 
 // Load credentials from environment
@@ -2434,6 +2434,88 @@ export const db = {
     const txs = getLocalData('meridien_employee_transactions', [] as EmployeeTransaction[]);
     const updated = txs.filter(t => t.id !== id);
     saveLocalData('meridien_employee_transactions', updated);
+    return true;
+  },
+
+  // --- DAILY CLOSINGS (التقفيل اليومي) ---
+  async getDailyClosings(): Promise<DailyClosing[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('daily_closings')
+          .select('*')
+          .order('closing_date', { ascending: false });
+        if (!error) return (data || []) as DailyClosing[];
+        console.warn("Supabase fetch daily closings error, falling back to local storage:", error.message);
+      } catch (err) {
+        console.warn("Supabase fetch daily closings failed", err);
+      }
+    }
+    return getLocalData('meridien_daily_closings', [] as DailyClosing[]);
+  },
+
+  async getDailyClosing(date: string): Promise<DailyClosing | null> {
+    const all = await this.getDailyClosings();
+    return all.find(c => c.closing_date === date) || null;
+  },
+
+  /** بيحفظ تقفيل اليوم (بيستبدل تقفيل نفس اليوم لو موجود). */
+  async saveDailyClosing(closing: Omit<DailyClosing, 'id' | 'created_at'> & { id?: string }): Promise<DailyClosing> {
+    const existing = await this.getDailyClosing(closing.closing_date);
+    const record: DailyClosing = {
+      ...(existing || {}),
+      ...closing,
+      id: existing?.id || closing.id || crypto.randomUUID(),
+      closed_at: new Date().toISOString(),
+      created_at: existing?.created_at || new Date().toISOString(),
+    } as DailyClosing;
+
+    if (supabase) {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('daily_closings')
+          .upsert([record], { onConflict: 'closing_date' })
+          .select()
+          .single();
+        if (!error && data) {
+          triggerTelegramLog(
+            'تقفيل يومي',
+            'Daily Closing',
+            `يوم ${record.closing_date} — المفروض: ${record.total_expected.toFixed(2)} | المعدود: ${record.total_counted.toFixed(2)} | الفرق: ${record.total_difference.toFixed(2)}`,
+            record.closed_by
+          );
+          return data as DailyClosing;
+        }
+        console.warn("Supabase save daily closing error, falling back to local storage:", error?.message);
+      } catch (err) {
+        console.warn("Supabase save daily closing failed", err);
+      }
+    }
+    const all = getLocalData('meridien_daily_closings', [] as DailyClosing[]);
+    const rest = all.filter(c => c.closing_date !== record.closing_date);
+    rest.unshift(record);
+    saveLocalData('meridien_daily_closings', rest);
+    return record;
+  },
+
+  /** بيفتح يوم مقفول تاني للتعديل. */
+  async reopenDailyClosing(date: string, byUser?: string): Promise<boolean> {
+    if (supabase) {
+      try {
+        const { error } = await (supabase as any)
+          .from('daily_closings')
+          .update({ status: 'reopened' })
+          .eq('closing_date', date);
+        if (!error) {
+          triggerTelegramLog('إعادة فتح تقفيل', 'Reopen Closing', `تم إعادة فتح تقفيل يوم ${date}`, byUser);
+          return true;
+        }
+      } catch (err) {
+        console.warn("Supabase reopen daily closing failed", err);
+      }
+    }
+    const all = getLocalData('meridien_daily_closings', [] as DailyClosing[]);
+    saveLocalData('meridien_daily_closings', all.map(c => c.closing_date === date ? { ...c, status: 'reopened' as const } : c));
     return true;
   },
 

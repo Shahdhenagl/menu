@@ -3828,6 +3828,8 @@ export default function AdminDashboard({
             financialTransactions={financialTransactions}
             settings={settings}
             language={language}
+            userName={loggedInUser?.name}
+            userRole={loggedInUser?.role}
           />
         )}
 
