@@ -22,6 +22,16 @@ import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import { taxPercentForOrder } from '../utils/tax';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
 
+// ألوان الصالات وأنواع الطلبات (نفس ألوان شاشة المطبخ للتناسق)
+const HALL_COLORS = ['#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#3b82f6', '#14b8a6'];
+const TYPE_COLORS: Record<string, string> = {
+  dine_in: '#f59e0b',
+  takeaway: '#a855f7',
+  delivery: '#0ea5e9',
+  talabat: '#f97316',
+  website: '#22c55e',
+};
+
 interface PosSystemProps {
   onClose: () => void;
   language: 'ar' | 'en';
@@ -36,6 +46,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [products, setProducts] = useState<Product[]>([]);
   const [waiters, setWaiters] = useState<SystemUser[]>([]);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  // فلتر لوحة الطلبات: 'all' | `hall:<اسم>` | `type:<نوع>`
+  const [dashFilter, setDashFilter] = useState<string>('all');
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [settings, setSettings] = useState<RestaurantSettings | null>(null);
   const [lastPlacedOrder, setLastPlacedOrder] = useState<Order | null>(null);
@@ -546,6 +558,32 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const hallTaxPercent = taxPercentForOrder(settings, orderType, selectedHall);
   const cartTaxAmount = cartSubtotal * (hallTaxPercent / 100);
   const cartTotal = cartSubtotal + cartTaxAmount;
+
+  // ===== ألوان وفلاتر لوحة الطلبات (بالصالة / نوع الطلب) =====
+  const hallColor = (hall?: string): string => {
+    if (!hall) return 'var(--gold-primary)';
+    const halls = settings?.halls || [];
+    const idx = halls.findIndex(h => h.name === hall);
+    if (idx >= 0) return HALL_COLORS[idx % HALL_COLORS.length];
+    let hash = 0;
+    for (let i = 0; i < hall.length; i++) hash = (hash * 31 + hall.charCodeAt(i)) >>> 0;
+    return HALL_COLORS[hash % HALL_COLORS.length];
+  };
+  const orderAccent = (o: Order): string =>
+    o.hall ? hallColor(o.hall) : (TYPE_COLORS[o.order_type || ''] || 'var(--gold-primary)');
+  const orderTypeLabel = (o: Order): string => {
+    if (o.order_type === 'takeaway') return language === 'ar' ? 'تيك أواي' : 'Takeaway';
+    if (o.order_type === 'delivery') return language === 'ar' ? 'دليفري' : 'Delivery';
+    if (o.order_type === 'talabat') return language === 'ar' ? 'طلبات' : 'Talabat';
+    if (o.order_type === 'website') return language === 'ar' ? 'موقع' : 'Website';
+    return language === 'ar' ? 'صالة' : 'Dine-in';
+  };
+  const matchesDashFilter = (o: Order): boolean => {
+    if (dashFilter === 'all') return true;
+    if (dashFilter.startsWith('hall:')) return o.hall === dashFilter.slice(5);
+    if (dashFilter.startsWith('type:')) return (o.order_type || '') === dashFilter.slice(5);
+    return true;
+  };
 
   const placeOrder = async () => {
     if (cart.length === 0) return;
@@ -1558,9 +1596,40 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </button>
                 </div>
               </div>
+              {/* فلاتر: بالصالة + نوع الطلب — بألوان مختلفة */}
+              {(() => {
+                const chips: { key: string; label: string; c: string }[] = [
+                  { key: 'all', label: language === 'ar' ? 'الكل' : 'All', c: 'var(--gold-primary)' },
+                  ...(settings?.halls || []).map(h => ({ key: `hall:${h.name}`, label: h.name, c: hallColor(h.name) })),
+                  { key: 'type:takeaway', label: language === 'ar' ? 'تيك أواي' : 'Takeaway', c: TYPE_COLORS.takeaway },
+                  { key: 'type:delivery', label: language === 'ar' ? 'دليفري' : 'Delivery', c: TYPE_COLORS.delivery },
+                  { key: 'type:talabat', label: language === 'ar' ? 'طلبات' : 'Talabat', c: TYPE_COLORS.talabat },
+                ];
+                return (
+                  <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+                    {chips.map(ch => {
+                      const active = dashFilter === ch.key;
+                      return (
+                        <button key={ch.key} onClick={() => setDashFilter(ch.key)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                            padding: '0.45rem 1rem', borderRadius: '999px', cursor: 'pointer',
+                            fontWeight: 'bold', fontSize: '0.9rem',
+                            background: active ? ch.c : 'transparent',
+                            color: active ? '#000' : ch.c,
+                            border: `2px solid ${ch.c}`,
+                          }}>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: active ? '#000' : ch.c, display: 'inline-block' }} />
+                          {ch.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '1.5rem', overflowY: 'auto', flex: 1, alignContent: 'start' }}>
-                {activeOrders.filter(o => viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending')).map(order => (
-                  <div key={order.id} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '16px', padding: '1.5rem', position: 'relative' }}>
+                {activeOrders.filter(o => (viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending')) && matchesDashFilter(o)).map(order => (
+                  <div key={order.id} style={{ background: '#1a1a1a', border: `1px solid #333`, borderTop: `5px solid ${orderAccent(order)}`, borderRadius: '16px', padding: '1.5rem', position: 'relative' }}>
                     {viewAllOrders && order.waiter_id !== selectedWaiter?.id && (
                       <div style={{ position: 'absolute', top: '-10px', right: '10px', background: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>
                         {order.waiter_name || 'Guest'}
@@ -1568,9 +1637,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
                       <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>#{order.id.slice(0, 6)}</span>
-                      <div style={{ display: 'flex', gap: '0.4rem' }}>
-                        <span style={{ background: 'rgba(212,175,55,0.1)', color: 'var(--gold-primary)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                          {order.order_type?.toUpperCase()}
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ background: orderAccent(order), color: '#000', padding: '2px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                          {order.hall ? order.hall : orderTypeLabel(order)}
                         </span>
                         <span style={{ 
                           background: order.status === 'delivered' ? 'rgba(46,204,113,0.15)' : order.status === 'prepared' ? 'rgba(155,89,182,0.15)' : 'rgba(243,156,18,0.15)', 
@@ -1655,7 +1724,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     </div>
                   </div>
                 ))}
-                {activeOrders.filter(o => viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending')).length === 0 && (
+                {activeOrders.filter(o => (viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending')) && matchesDashFilter(o)).length === 0 && (
                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem', color: '#666', fontSize: '1.2rem' }}>
                     {language === 'ar' ? 'لا توجد طلبات نشطة حالياً' : 'No active orders currently'}
                   </div>

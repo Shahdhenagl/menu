@@ -30,6 +30,8 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
   // تبويب المطبخ / تبويب البار — كل واحد بيعرض أصنافه هو بس (زي الطباعة بالظبط)
   const [activeTab, setActiveTab] = useState<'kitchen' | 'bar' | 'inventory'>('kitchen');
   const [searchQuery, setSearchQuery] = useState('');
+  // فلتر بالصالة / نوع الطلب: 'all' | `hall:<اسم>` | `type:<نوع>`
+  const [dashFilter, setDashFilter] = useState<string>('all');
 
   const fetchData = async () => {
     try {
@@ -105,13 +107,21 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
   const itemsForStation = (order: Order, station: 'kitchen' | 'bar'): OrderItem[] =>
     order.items.filter(i => departmentOfItem(i) === station);
 
-  // أوردرات التبويب الحالي: اللي فيها أصناف تخص القسم ده بس
+  const matchesDashFilter = (o: Order): boolean => {
+    if (dashFilter === 'all') return true;
+    if (dashFilter.startsWith('hall:')) return o.hall === dashFilter.slice(5);
+    if (dashFilter.startsWith('type:')) return (o.order_type || '') === dashFilter.slice(5);
+    return true;
+  };
+
+  // أوردرات التبويب الحالي: اللي فيها أصناف تخص القسم ده بس + الفلتر بالصالة/النوع
   const stationOrders = useMemo(() => {
     if (activeTab === 'inventory') return [];
     return orders
+      .filter(matchesDashFilter)
       .map(o => ({ order: o, items: itemsForStation(o, activeTab) }))
       .filter(x => x.items.length > 0);
-  }, [orders, activeTab, products, categories]);
+  }, [orders, activeTab, products, categories, dashFilter]);
 
   const kitchenCount = useMemo(
     () => orders.filter(o => itemsForStation(o, 'kitchen').length > 0).length,
@@ -287,18 +297,37 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
         </div>
       </div>
 
-      {/* دليل ألوان الصالات */}
-      {(activeTab === 'kitchen' || activeTab === 'bar') && (settings?.halls?.length || 0) > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem', background: '#1a1a1a', padding: '0.8rem 1.2rem', borderRadius: '12px', border: '1px solid #333' }}>
-          <span style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>{language === 'ar' ? 'ألوان الصالات:' : 'Hall colours:'}</span>
-          {(settings?.halls || []).map(h => (
-            <span key={h.name} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem' }}>
-              <span style={{ width: '14px', height: '14px', borderRadius: '4px', background: hallColor(h.name), display: 'inline-block' }} />
-              {h.name}
-            </span>
-          ))}
-        </div>
-      )}
+      {/* فلاتر: بالصالة + نوع الطلب — بألوان مختلفة */}
+      {(activeTab === 'kitchen' || activeTab === 'bar') && (() => {
+        const chips: { key: string; label: string; c: string }[] = [
+          { key: 'all', label: language === 'ar' ? 'الكل' : 'All', c: 'var(--gold-primary)' },
+          ...(settings?.halls || []).map(h => ({ key: `hall:${h.name}`, label: h.name, c: hallColor(h.name) })),
+          { key: 'type:takeaway', label: language === 'ar' ? 'تيك أواي' : 'Takeaway', c: TYPE_COLORS.takeaway },
+          { key: 'type:delivery', label: language === 'ar' ? 'دليفري' : 'Delivery', c: TYPE_COLORS.delivery },
+          { key: 'type:talabat', label: language === 'ar' ? 'طلبات' : 'Talabat', c: TYPE_COLORS.talabat },
+        ];
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+            {chips.map(ch => {
+              const active = dashFilter === ch.key;
+              return (
+                <button key={ch.key} onClick={() => setDashFilter(ch.key)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                    padding: '0.45rem 1rem', borderRadius: '999px', cursor: 'pointer',
+                    fontWeight: 'bold', fontSize: '0.9rem',
+                    background: active ? ch.c : 'transparent',
+                    color: active ? '#000' : ch.c,
+                    border: `2px solid ${ch.c}`,
+                  }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: active ? '#000' : ch.c, display: 'inline-block' }} />
+                  {ch.label}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {(activeTab === 'kitchen' || activeTab === 'bar') && (
         <div className="kitchen-orders-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(330px, 100%), 1fr))', gap: '1.5rem' }}>
