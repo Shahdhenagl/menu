@@ -1,7 +1,21 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase, db } from '../lib/supabase';
 import type { Order, OrderItem, InventoryItem, ProductRecipe, Category, Product, RestaurantSettings } from '../types';
-import { ChefHat, CheckCircle2, AlertTriangle, Clock, X, Package, Search, Wine, MapPin } from 'lucide-react';
+import { ChefHat, CheckCircle2, AlertTriangle, Clock, X, Package, Search, Wine, MapPin, Sun, Moon } from 'lucide-react';
+
+// تبديل الثيم (لايت/دارك) — بيحط/يشيل .light-theme على الصفحة زي باقي التطبيق
+const useThemeToggle = () => {
+  const [isLight, setIsLight] = useState(
+    typeof document !== 'undefined' && document.documentElement.classList.contains('light-theme')
+  );
+  const toggleTheme = () => {
+    const next = !isLight;
+    setIsLight(next);
+    document.documentElement.classList.toggle('light-theme', next);
+    try { localStorage.setItem('meridien_theme', next ? 'light' : 'dark'); } catch {}
+  };
+  return { isLight, toggleTheme };
+};
 
 // ألوان الصالات — كل صالة بتاخد لون ثابت حسب ترتيبها في الإعدادات
 const HALL_COLORS = ['#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#3b82f6', '#14b8a6'];
@@ -33,6 +47,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
   const [searchQuery, setSearchQuery] = useState('');
   // فلتر بالصالة / نوع الطلب: 'all' | `hall:<اسم>` | `type:<نوع>`
   const [dashFilter, setDashFilter] = useState<string>('all');
+  const { isLight, toggleTheme } = useThemeToggle();
 
   const fetchData = async () => {
     try {
@@ -250,7 +265,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#070707', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+      <div style={{ minHeight: '100vh', background: 'var(--bg-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-white)' }}>
         <div style={{ width: '50px', height: '50px', borderTop: '3px solid var(--gold-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
         <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
       </div>
@@ -258,10 +273,10 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
   }
 
   return (
-    <div className="kitchen-screen" style={{ minHeight: '100vh', background: '#0f0f0f', color: 'white', padding: '1.5rem', fontFamily: 'Cairo, sans-serif', direction: language === 'ar' ? 'rtl' : 'ltr' }}>
+    <div className="kitchen-screen" style={{ minHeight: '100vh', background: 'var(--bg-dark)', color: 'var(--text-white)', padding: '1.5rem', fontFamily: 'Cairo, sans-serif', direction: language === 'ar' ? 'rtl' : 'ltr' }}>
       
       {/* Header */}
-      <div className="kitchen-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', background: '#1a1a1a', padding: '1rem 1.5rem', borderRadius: '15px', border: '1px solid rgba(212,175,55,0.2)' }}>
+      <div className="kitchen-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', background: 'var(--bg-card)', padding: '1rem 1.5rem', borderRadius: '15px', border: '1px solid rgba(212,175,55,0.2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ padding: '0.8rem', background: 'rgba(212,175,55,0.2)', borderRadius: '10px' }}>
             <ChefHat size={32} color="var(--gold-primary)" />
@@ -276,7 +291,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', background: '#222', padding: '0.5rem', borderRadius: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--border-color)', padding: '0.5rem', borderRadius: '12px', flexWrap: 'wrap' }}>
             <button
               onClick={() => setActiveTab('kitchen')}
               style={{ padding: '0.5rem 1rem', background: activeTab === 'kitchen' ? 'var(--gold-primary)' : 'transparent', color: activeTab === 'kitchen' ? '#000' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -286,7 +301,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
             </button>
             <button
               onClick={() => setActiveTab('bar')}
-              style={{ padding: '0.5rem 1rem', background: activeTab === 'bar' ? '#ec4899' : 'transparent', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              style={{ padding: '0.5rem 1rem', background: activeTab === 'bar' ? '#ec4899' : 'transparent', color: 'var(--text-white)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Wine size={16} />
               {language === 'ar' ? 'البار' : 'Bar'}
               <span style={{ background: 'rgba(255,255,255,0.15)', borderRadius: '999px', padding: '0 0.5rem', fontSize: '0.8rem' }}>{barCount}</span>
@@ -297,6 +312,10 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
               {language === 'ar' ? 'المخزون والنواقص' : 'Inventory & Shortages'}
             </button>
           </div>
+          <button onClick={toggleTheme} title={isLight ? (language === 'ar' ? 'الوضع الداكن' : 'Dark Mode') : (language === 'ar' ? 'الوضع الفاتح' : 'Light Mode')}
+            style={{ padding: '0.6rem', background: 'rgba(212,175,55,0.15)', color: 'var(--gold-primary)', borderRadius: '10px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {isLight ? <Moon size={22} /> : <Sun size={22} />}
+          </button>
           {onClose && (
             <button onClick={onClose} style={{ padding: '0.6rem', background: 'rgba(239,68,68,0.2)', color: '#ef4444', borderRadius: '10px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <X size={24} />
@@ -357,7 +376,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
 
             return (
               <div key={order.id} style={{
-              background: '#1a1a1a',
+              background: 'var(--bg-card)',
               borderRadius: '15px',
               display: 'flex',
               flexDirection: 'column',
@@ -410,8 +429,8 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                 <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1rem 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {/* أصناف القسم ده بس — زي التذكرة المطبوعة بالظبط */}
                   {stationItems.map((item, idx) => (
-                    <li key={idx} style={{ display: 'flex', alignItems: 'center', background: '#222', padding: '0.8rem', borderRadius: '8px' }}>
-                      <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'white' }}>
+                    <li key={idx} style={{ display: 'flex', alignItems: 'center', background: 'var(--border-color)', padding: '0.8rem', borderRadius: '8px' }}>
+                      <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--text-white)' }}>
                         <span style={{ color: accent, marginInlineEnd: '0.8rem' }}>{item.quantity}x</span>
                         {language === 'ar' ? item.name_ar : item.name_en}
                       </span>
@@ -443,7 +462,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                     {!hasRequested ? (
                       <button 
                         onClick={() => handleCreateRequest(order, shortages)}
-                        style={{ width: '100%', background: '#ef4444', color: 'white', border: 'none', padding: '0.8rem', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.9rem' }}
+                        style={{ width: '100%', background: '#ef4444', color: 'var(--text-white)', border: 'none', padding: '0.8rem', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.9rem' }}
                       >
                         {language === 'ar' ? 'إرسال إذن صرف نواقص للمخزن' : 'Send Shortage Request'}
                       </button>
@@ -457,7 +476,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
               </div>
 
               {/* Actions Footer */}
-              <div style={{ padding: '1rem', background: '#222', borderTop: '1px solid #333' }}>
+              <div style={{ padding: '1rem', background: 'var(--border-color)', borderTop: '1px solid var(--border-color)' }}>
                 {order.status === 'pending' && (
                   <button
                     onClick={() => updateOrderStatus(order.id, 'preparing')}
@@ -475,7 +494,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                       border: 'none',
                       cursor: hasShortages && !hasRequested ? 'not-allowed' : 'pointer',
                       background: hasShortages && !hasRequested ? '#4b5563' : '#3b82f6',
-                      color: hasShortages && !hasRequested ? '#9ca3af' : 'white',
+                      color: hasShortages && !hasRequested ? 'var(--text-muted)' : 'white',
                       transition: 'all 0.2s ease'
                     }}
                   >
@@ -490,7 +509,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                       width: '100%',
                       padding: '1rem',
                       background: '#10b981',
-                      color: 'white',
+                      color: 'var(--text-white)',
                       borderRadius: '12px',
                       fontWeight: 'bold',
                       fontSize: '1.1rem',
@@ -530,23 +549,23 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
         {activeTab === 'inventory' && (
           <div className="kitchen-inv-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))', gap: '2rem', alignItems: 'start' }}>
             {/* Section 1: Kitchen Inventory */}
-            <div style={{ background: '#1a1a1a', padding: '1.5rem', borderRadius: '16px', border: '1px solid #333' }}>
+            <div style={{ background: 'var(--bg-card)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
               <h2 style={{ color: 'var(--gold-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Package size={24} /> {language === 'ar' ? 'مخزون المطبخ' : 'Kitchen Stock'}
               </h2>
               <div style={{ marginBottom: '1rem', position: 'relative' }}>
-                <Search size={18} style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', left: language === 'ar' ? 'auto' : '10px', right: language === 'ar' ? '10px' : 'auto', color: '#9ca3af' }} />
+                <Search size={18} style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', left: language === 'ar' ? 'auto' : '10px', right: language === 'ar' ? '10px' : 'auto', color: 'var(--text-muted)' }} />
                 <input 
                   type="text" 
                   placeholder={language === 'ar' ? 'ابحث باسم الصنف...' : 'Search by item name...'}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{ width: '100%', padding: '0.6rem 2.5rem', background: '#222', border: '1px solid #333', color: 'white', borderRadius: '8px' }}
+                  style={{ width: '100%', padding: '0.6rem 2.5rem', background: 'var(--border-color)', border: '1px solid var(--border-color)', color: 'var(--text-white)', borderRadius: '8px' }}
                 />
               </div>
-              <table style={{ width: '100%', color: 'white', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', color: 'var(--text-white)', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #444' }}>
+                  <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
                     <th style={{ textAlign: language==='ar'?'right':'left', padding: '0.5rem' }}>{language === 'ar' ? 'الصنف' : 'Item'}</th>
                     <th style={{ textAlign: language==='ar'?'right':'left', padding: '0.5rem' }}>{language === 'ar' ? 'الكمية' : 'Quantity'}</th>
                   </tr>
@@ -556,7 +575,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                     .filter(i => Number(i.stock_factory) > 0 || mfgOrders.some(m => m.items.some((it:any)=>it.item_id===i.id)))
                     .filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
                     .map(item => (
-                    <tr key={item.id} style={{ borderBottom: '1px solid #333' }}>
+                    <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                       <td style={{ padding: '0.5rem' }}>{item.name}</td>
                       <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>{Number(item.stock_factory).toFixed(4).replace(/\.?0+$/, '')} {item.unit}</td>
                     </tr>
@@ -565,22 +584,22 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                     .filter(i => Number(i.stock_factory) > 0 || mfgOrders.some(m => m.items.some((it:any)=>it.item_id===i.id)))
                     .filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()))
                     .length === 0 && (
-                     <tr><td colSpan={2} style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>{language === 'ar' ? 'المخزون فارغ' : 'Stock is empty'}</td></tr>
+                     <tr><td colSpan={2} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>{language === 'ar' ? 'المخزون فارغ' : 'Stock is empty'}</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
 
             {/* Section 2: Mfg Orders (Shortages requested) */}
-            <div style={{ background: '#1a1a1a', padding: '1.5rem', borderRadius: '16px', border: '1px solid #333' }}>
+            <div style={{ background: 'var(--bg-card)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
               <h2 style={{ color: 'var(--gold-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <Clock size={24} /> {language === 'ar' ? 'أذون النواقص المرسلة' : 'Shortage Requests'}
               </h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {mfgOrders.map(mo => (
-                  <div key={mo.id} style={{ background: '#222', padding: '1rem', borderRadius: '8px', borderLeft: mo.status === 'approved' ? '4px solid #10b981' : mo.status === 'rejected' ? '4px solid #ef4444' : '4px solid #f59e0b' }}>
+                  <div key={mo.id} style={{ background: 'var(--border-color)', padding: '1rem', borderRadius: '8px', borderLeft: mo.status === 'approved' ? '4px solid #10b981' : mo.status === 'rejected' ? '4px solid #ef4444' : '4px solid #f59e0b' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <span style={{ color: '#aaa', fontSize: '0.9rem' }}>{new Date(mo.created_at).toLocaleString()}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{new Date(mo.created_at).toLocaleString()}</span>
                       <span style={{ 
                         color: mo.status === 'approved' ? '#10b981' : mo.status === 'rejected' ? '#ef4444' : '#f59e0b',
                         fontWeight: 'bold', fontSize: '0.9rem'
@@ -590,7 +609,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                     </div>
                     <div>
                       {mo.items.map((i:any, idx:number) => (
-                        <div key={idx} style={{ color: 'white', fontSize: '0.9rem' }}>
+                        <div key={idx} style={{ color: 'var(--text-white)', fontSize: '0.9rem' }}>
                           • {i.item_name} ({Number(i.quantity).toFixed(4).replace(/\.?0+$/, '')} {i.unit})
                         </div>
                       ))}
@@ -598,7 +617,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                   </div>
                 ))}
                 {mfgOrders.length === 0 && (
-                  <p style={{ color: '#aaa', textAlign: 'center', padding: '2rem 0' }}>{language === 'ar' ? 'لا يوجد طلبات سابقة' : 'No previous requests'}</p>
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>{language === 'ar' ? 'لا يوجد طلبات سابقة' : 'No previous requests'}</p>
                 )}
               </div>
             </div>

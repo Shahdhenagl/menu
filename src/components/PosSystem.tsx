@@ -10,11 +10,11 @@ const getLocalDayStr = (d = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
-import { 
-  ShoppingBag, Utensils, CheckCircle, X, 
+import {
+  ShoppingBag, Utensils, CheckCircle, X,
   Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
   Pizza, Coffee, ChefHat, Wine, Cake, MessageCircle, Camera, Search,
-  Bell
+  Bell, Sun, Moon
 } from 'lucide-react';
 import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe } from '../types';
@@ -49,6 +49,16 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   // فلتر لوحة الطلبات: 'all' | `hall:<اسم>` | `type:<نوع>`
   const [dashFilter, setDashFilter] = useState<string>('all');
+  // ثيم لايت/دارك (بيحط .light-theme على الصفحة زي باقي التطبيق)
+  const [isLightTheme, setIsLightTheme] = useState(
+    typeof document !== 'undefined' && document.documentElement.classList.contains('light-theme')
+  );
+  const togglePosTheme = () => {
+    const next = !isLightTheme;
+    setIsLightTheme(next);
+    document.documentElement.classList.toggle('light-theme', next);
+    try { localStorage.setItem('meridien_theme', next ? 'light' : 'dark'); } catch {}
+  };
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [settings, setSettings] = useState<RestaurantSettings | null>(null);
   const [lastPlacedOrder, setLastPlacedOrder] = useState<Order | null>(null);
@@ -786,14 +796,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       <style>{`
         .pos-fullscreen {
           position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-          background: #000; color: #fff; z-index: 99999;
+          background: var(--bg-dark); color: var(--text-white); z-index: 99999;
           display: flex; flex-direction: column;
           font-family: 'Cairo', 'Inter', sans-serif;
           overflow: hidden;
         }
         .pos-header {
           display: flex; justify-content: space-between; padding: 1rem 2rem;
-          background: #111; border-bottom: 2px solid var(--gold-primary);
+          background: var(--bg-card); border-bottom: 2px solid var(--gold-primary);
           align-items: center;
         }
         .pos-content {
@@ -817,7 +827,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           font-size: 1.2rem; font-weight: bold; cursor: pointer;
         }
         .pos-input {
-          background: #222; border: 2px solid #333; color: #fff;
+          background: var(--bg-darker); border: 2px solid var(--border-color); color: var(--text-white);
           padding: 1rem; border-radius: 12px; font-size: 1.2rem; width: 100%;
           text-align: center; outline: none; transition: border-color 0.3s;
         }
@@ -827,7 +837,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           gap: 1.5rem; width: 100%; max-width: 600px; margin: 0 auto;
         }
         .option-card {
-          background: #1a1a1a; border: 2px solid #333; border-radius: 16px;
+          background: var(--bg-card); border: 2px solid var(--border-color); border-radius: 16px;
           padding: 2rem; text-align: center; cursor: pointer;
           transition: all 0.3s; display: flex; flex-direction: column; align-items: center; gap: 1rem;
         }
@@ -836,10 +846,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           transform: translateY(-5px);
         }
         .pos-menu-sidebar {
-          width: 250px; background: #111; overflow-y: auto; border-right: 1px solid #333;
+          width: 250px; background: var(--bg-card); overflow-y: auto; border-right: 1px solid var(--border-color);
         }
         .pos-cat-item {
-          padding: 1.5rem; cursor: pointer; border-bottom: 1px solid #222;
+          padding: 1.5rem; cursor: pointer; border-bottom: 1px solid var(--border-color);
           font-size: 1.1rem; font-weight: bold; transition: 0.2s;
         }
         .pos-cat-item.active {
@@ -850,14 +860,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5rem; align-content: start;
         }
         .pos-product-card {
-          background: #1a1a1a; border-radius: 16px; overflow: hidden;
+          background: var(--bg-card); border-radius: 16px; overflow: hidden;
           cursor: pointer; border: 2px solid transparent; transition: 0.2s;
           display: flex; flex-direction: column;
         }
         .pos-product-card:active { transform: scale(0.95); }
         .pos-product-img { width: 100%; height: 160px; object-fit: cover; }
         .pos-cart-panel {
-          width: 350px; background: #111; border-left: 1px solid #333;
+          width: 350px; background: var(--bg-card); border-left: 1px solid var(--border-color);
           display: flex; flex-direction: column;
         }
 
@@ -992,7 +1002,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
       {/* <div className="pos-header">
         <h1 style={{ color: 'var(--gold-primary)', margin: 0 }}>MERIDIEN POS</h1>
-        <button onClick={handleClose} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}>
+        <button onClick={handleClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-white)', cursor: 'pointer' }}>
           <X size={32} />
         </button>
       </div> */}
@@ -1041,6 +1051,25 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               </button>
             )}
 
+            {/* تبديل الوضع الفاتح/الداكن */}
+            <button
+              onClick={togglePosTheme}
+              title={isLightTheme ? (language === 'ar' ? 'الوضع الداكن' : 'Dark Mode') : (language === 'ar' ? 'الوضع الفاتح' : 'Light Mode')}
+              style={{
+                background: 'rgba(0,0,0,0.5)',
+                border: '1px solid var(--gold-primary)',
+                color: 'var(--gold-primary)',
+                padding: '0.5rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isLightTheme ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
+
             {/* Website Orders Notification Bell */}
             {selectedWaiter && (
               <div 
@@ -1064,7 +1093,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               </div>
             )}
           </div>
-          <button onClick={handleClose} style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px' }}>
+          <button onClick={handleClose} style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', color: 'var(--text-white)', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px' }}>
             <X size={24} />
           </button>
         </div>
@@ -1188,9 +1217,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     key={w.id} 
                     onClick={() => setSelectedWaiter(w)}
                     style={{ 
-                      background: selectedWaiter?.id === w.id ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : '#1a1a1a',
+                      background: selectedWaiter?.id === w.id ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : 'var(--bg-card)',
                       color: selectedWaiter?.id === w.id ? '#000' : '#fff',
-                      border: selectedWaiter?.id === w.id ? '2px solid transparent' : '2px solid #333',
+                      border: selectedWaiter?.id === w.id ? '2px solid transparent' : '2px solid var(--border-color)',
                       borderRadius: '16px', padding: '1.5rem', cursor: 'pointer',
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.8rem',
                       transition: 'all 0.3s',
@@ -1216,11 +1245,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               <AnimatePresence>
                 {selectedWaiter && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', maxWidth: '400px' }}>
-                    <div style={{ background: '#222', padding: '2rem', borderRadius: '16px', border: '1px solid #333' }}>
+                    <div style={{ background: 'var(--border-color)', padding: '2rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
                       <h3 style={{ textAlign: 'center', marginBottom: '1.5rem', color: 'var(--gold-primary)' }}>
                         {language === 'ar' ? `مرحباً كابتن ${selectedWaiter.name}` : `Welcome Capt. ${selectedWaiter.name}`}
                       </h3>
-                      <input type="password" autoFocus placeholder={t.enterPasscode} className="pos-input" style={{ marginBottom: '1.5rem', background: '#111', fontSize: '1.5rem', letterSpacing: '0.5rem' }} value={waiterPasscode} onChange={e => setWaiterPasscode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleWaiterLogin(); } }} />
+                      <input type="password" autoFocus placeholder={t.enterPasscode} className="pos-input" style={{ marginBottom: '1.5rem', background: 'var(--bg-darker)', fontSize: '1.5rem', letterSpacing: '0.5rem' }} value={waiterPasscode} onChange={e => setWaiterPasscode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleWaiterLogin(); } }} />
                       <button className="pos-btn" style={{ width: '100%' }} onClick={handleWaiterLogin}>{t.login}</button>
                     </div>
                   </motion.div>
@@ -1308,8 +1337,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           <button key={i} type="button" onClick={() => setSelectedHall(h.name)}
                             style={{
                               padding: '0.8rem 1.4rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontFamily: 'inherit', fontSize: '1rem',
-                              border: selectedHall === h.name ? '2px solid var(--gold-primary)' : '2px solid #333',
-                              background: selectedHall === h.name ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : '#1a1a1a',
+                              border: selectedHall === h.name ? '2px solid var(--gold-primary)' : '2px solid var(--border-color)',
+                              background: selectedHall === h.name ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : 'var(--bg-card)',
                               color: selectedHall === h.name ? '#000' : '#fff'
                             }}>
                             {h.name}{h.tax_percent ? <span style={{ display: 'block', fontSize: '0.72rem', opacity: 0.85 }}>{language === 'ar' ? 'ضريبة' : 'Tax'} {h.tax_percent}%</span> : null}
@@ -1337,15 +1366,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           {view === 'menu' && (
             <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', display: 'flex', paddingTop: '3.75rem' }}>
               <div className="pos-menu-sidebar">
-                <div style={{ display: 'flex', padding: '10px', gap: '5px', borderBottom: '1px solid #333' }}>
+                <div style={{ display: 'flex', padding: '10px', gap: '5px', borderBottom: '1px solid var(--border-color)' }}>
                   <button 
                     onClick={() => setPosDepartment('restaurant')} 
-                    style={{ flex: 1, padding: '8px', background: posDepartment === 'restaurant' ? 'var(--gold-primary)' : '#222', color: posDepartment === 'restaurant' ? '#000' : '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    style={{ flex: 1, padding: '8px', background: posDepartment === 'restaurant' ? 'var(--gold-primary)' : 'var(--border-color)', color: posDepartment === 'restaurant' ? '#000' : '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                     {language === 'ar' ? 'المطعم' : 'Restaurant'}
                   </button>
                   <button 
                     onClick={() => setPosDepartment('bar')} 
-                    style={{ flex: 1, padding: '8px', background: posDepartment === 'bar' ? '#3b82f6' : '#222', color: posDepartment === 'bar' ? '#fff' : '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    style={{ flex: 1, padding: '8px', background: posDepartment === 'bar' ? '#3b82f6' : 'var(--border-color)', color: posDepartment === 'bar' ? '#fff' : '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                     {language === 'ar' ? 'البار' : 'Bar'}
                   </button>
                 </div>
@@ -1364,7 +1393,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <div style={{
                         position: 'absolute', top: 8, insetInlineStart: 8, zIndex: 3,
                         padding: '3px 10px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700,
-                        color: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,.45)',
+                        color: 'var(--text-white)', boxShadow: '0 2px 6px rgba(0,0,0,.45)',
                         background: stockStatus === 'out' ? '#c0392b' : '#e08e0b'
                       }}>
                         {stockStatus === 'out'
@@ -1375,7 +1404,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     {p.image_url ? (
                       <img src={p.image_url} alt={p.name_en} className="pos-product-img" />
                     ) : (
-                      <div className="pos-product-img" style={{ background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Utensils size={40} color="#666" /></div>
+                      <div className="pos-product-img" style={{ background: 'var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Utensils size={40} color="#666" /></div>
                     )}
                     <div style={{ padding: '1rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                       <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>{language === 'ar' ? p.name_ar : p.name_en}</h4>
@@ -1388,10 +1417,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 })}
               </div>
               <div className="pos-cart-panel">
-                <div style={{ padding: '1.5rem', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h2 style={{ margin: 0, color: 'var(--gold-primary)' }}>{t.cart}</h2>
-                    <p style={{ margin: '0.5rem 0 0 0', color: '#aaa', fontSize: '0.9rem' }}>
+                    <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       {orderType?.toUpperCase()} {tableNumber && `- Table ${tableNumber}`}
                     </p>
                   </div>
@@ -1404,7 +1433,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </button>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-                  {cart.length === 0 && <p style={{ textAlign: 'center', color: '#666', marginTop: '2rem' }}>Empty</p>}
+                  {cart.length === 0 && <p style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '2rem' }}>Empty</p>}
                   <AnimatePresence>
                     {cart.map(item => {
                       const originalItem = originalOrderItems.find(o => o.id === item.id);
@@ -1414,7 +1443,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                       return (
                         <motion.div key={item.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8 }}
-                          style={{ background: '#1a1a1a', padding: '1rem', borderRadius: '12px', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
+                          style={{ background: 'var(--bg-card)', padding: '1rem', borderRadius: '12px', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span style={{ fontWeight: 'bold' }}>{language === 'ar' ? item.name_ar : item.name_en}</span>
@@ -1426,7 +1455,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 disabled={cannotDecrease}
                                 onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, -1); }} 
                                 style={{ 
-                                  background: cannotDecrease ? '#222' : '#333', 
+                                  background: cannotDecrease ? 'var(--border-color)' : 'var(--border-color)', 
                                   border: 'none', 
                                   color: cannotDecrease ? '#555' : '#fff', 
                                   width: '32px', height: '32px', borderRadius: '6px', 
@@ -1444,7 +1473,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 <Trash2 size={18} />
                               </button>
                             ) : (
-                              <span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 'bold' }}>{language === 'ar' ? 'مؤكد' : 'Confirmed'}</span>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>{language === 'ar' ? 'مؤكد' : 'Confirmed'}</span>
                             )}
                           </div>
                         </motion.div>
@@ -1452,14 +1481,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     })}
                   </AnimatePresence>
                 </div>
-                <div style={{ padding: '1.5rem', background: '#1a1a1a', borderTop: '1px solid #333' }}>
+                <div style={{ padding: '1.5rem', background: 'var(--bg-card)', borderTop: '1px solid var(--border-color)' }}>
                   {hallTaxPercent > 0 && (
                     <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', color: '#aaa', marginBottom: '0.4rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
                         <span>{language === 'ar' ? 'المجموع الفرعي' : 'Subtotal'}</span>
                         <span>{cartSubtotal.toFixed(2)} EGP</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', color: '#aaa', marginBottom: '0.6rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>
                         <span>{language === 'ar' ? `ضريبة ${selectedHall} (${hallTaxPercent}%)` : `Tax ${selectedHall} (${hallTaxPercent}%)`}</span>
                         <span>{cartTaxAmount.toFixed(2)} EGP</span>
                       </div>
@@ -1498,12 +1527,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           {view === 'checkout' && (
             <motion.div key="checkout" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <h2 style={{ fontSize: '3rem', color: 'var(--gold-primary)' }}>{cartTotal.toFixed(2)} EGP</h2>
-              <p style={{ fontSize: '1.2rem', color: '#aaa', marginBottom: '1.5rem' }}>
+              <p style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
                 {orderType?.toUpperCase()} {tableNumber && `- Table ${tableNumber}`}
               </p>
               
-              <div style={{ background: '#111', padding: '1.5rem', borderRadius: '12px', width: '100%', maxWidth: '400px', marginBottom: '2rem', border: '1px solid #333' }}>
-                <h4 style={{ margin: '0 0 1rem 0', borderBottom: '1px solid #222', paddingBottom: '0.5rem', color: 'var(--gold-primary)' }}>
+              <div style={{ background: 'var(--bg-darker)', padding: '1.5rem', borderRadius: '12px', width: '100%', maxWidth: '400px', marginBottom: '2rem', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ margin: '0 0 1rem 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', color: 'var(--gold-primary)' }}>
                   {language === 'ar' ? 'ملخص الطلب' : 'Order Summary'}
                 </h4>
                 <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
@@ -1536,11 +1565,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <PrinterIcon size={20} style={{ marginRight: '8px' }} />
                       {language === 'ar' ? 'طباعة الفاتورة للعميل' : 'Print Customer Receipt'}
                     </button>
-                    <button className="pos-btn" style={{ background: '#3b82f6', color: '#fff' }} onClick={() => printOrderTickets(lastPlacedOrder, categories, products, printers, language, settings)}>
+                    <button className="pos-btn" style={{ background: '#3b82f6', color: 'var(--text-white)' }} onClick={() => printOrderTickets(lastPlacedOrder, categories, products, printers, language, settings)}>
                       <PrinterIcon size={20} style={{ marginRight: '8px' }} />
                       {language === 'ar' ? 'طباعة بونات الأقسام' : 'Print Section Tickets'}
                     </button>
-                    <button className="pos-btn" style={{ background: '#25D366', color: '#fff' }} onClick={() => {
+                    <button className="pos-btn" style={{ background: '#25D366', color: 'var(--text-white)' }} onClick={() => {
                       const msg = language === 'ar' 
                         ? `مرحباً بك في ${settings?.restaurant_name_ar || 'مطعمنا'}!\nتفاصيل طلبك #${lastPlacedOrder.id.slice(0,6)}\nالإجمالي: ${lastPlacedOrder.total_price} ج.م\nتاريخ: ${new Date().toLocaleDateString()}\nاللوكيشن: ${settings?.location_url || ''}`
                         : `Welcome to ${settings?.restaurant_name_en || 'our restaurant'}!\nOrder #${lastPlacedOrder.id.slice(0,6)}\nTotal: ${lastPlacedOrder.total_price} EGP\nDate: ${new Date().toLocaleDateString()}\nLocation: ${settings?.location_url || ''}`;
@@ -1574,7 +1603,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <h2>{language === 'ar' ? `الطلبات النشطة` : `Active Orders`}</h2>
-                  <div style={{ display: 'flex', background: '#111', borderRadius: '8px', padding: '4px' }}>
+                  <div style={{ display: 'flex', background: 'var(--bg-darker)', borderRadius: '8px', padding: '4px' }}>
                     <button onClick={() => setViewAllOrders(false)} style={{ padding: '0.5rem 1rem', background: !viewAllOrders ? 'var(--gold-primary)' : 'transparent', color: !viewAllOrders ? '#000' : '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
                       {language === 'ar' ? 'طلباتي' : 'My Orders'}
                     </button>
@@ -1641,13 +1670,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               })()}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '1.5rem', overflowY: 'auto', flex: 1, alignContent: 'start' }}>
                 {dashShownOrders.map(order => (
-                  <div key={order.id} style={{ background: '#1a1a1a', border: `1px solid #333`, borderTop: `5px solid ${orderAccent(order)}`, borderRadius: '16px', padding: '1.5rem', position: 'relative' }}>
+                  <div key={order.id} style={{ background: 'var(--bg-card)', border: `1px solid #333`, borderTop: `5px solid ${orderAccent(order)}`, borderRadius: '16px', padding: '1.5rem', position: 'relative' }}>
                     {viewAllOrders && order.waiter_id !== selectedWaiter?.id && (
-                      <div style={{ position: 'absolute', top: '-10px', right: '10px', background: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>
+                      <div style={{ position: 'absolute', top: '-10px', right: '10px', background: 'var(--border-color)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>
                         {order.waiter_name || 'Guest'}
                       </div>
                     )}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #333', paddingBottom: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
                       <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>#{order.id.slice(0, 6)}</span>
                       <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
                         <span style={{ background: orderAccent(order), color: '#000', padding: '2px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 'bold' }}>
@@ -1667,17 +1696,17 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
                       <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{order.customer_name}</div>
-                      {order.table_number && order.table_number !== '-' && <div style={{ color: '#aaa' }}>Table: {order.table_number}</div>}
+                      {order.table_number && order.table_number !== '-' && <div style={{ color: 'var(--text-muted)' }}>Table: {order.table_number}</div>}
                     </div>
                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>{order.total_price.toFixed(2)} EGP</div>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       {order.order_type === 'website' && !order.waiter_id ? (
-                        <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#10b981', color: '#fff' }} onClick={() => handleAcceptWebsiteOrder(order)}>
+                        <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#10b981', color: 'var(--text-white)' }} onClick={() => handleAcceptWebsiteOrder(order)}>
                           {language === 'ar' ? 'قبول الطلب' : 'Accept Order'}
                         </button>
                       ) : (
                         <>
-                          <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#3b82f6', color: '#fff' }} onClick={() => {
+                          <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#3b82f6', color: 'var(--text-white)' }} onClick={() => {
                             setEditingOrder(order);
                             setEditOrderId(order.id);
                             setOriginalOrderItems(order.items);
@@ -1687,7 +1716,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           {order.status === 'delivered' ? (
                             <>
                             {/* فاتورة مبدئية يشوفها العميل قبل ما نحصّل منه */}
-                            <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#a855f7', color: '#fff' }} onClick={() => {
+                            <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#a855f7', color: 'var(--text-white)' }} onClick={() => {
                               playClickSound();
                               printCustomerReceipt(order, language, settings, { preBill: true });
                             }}>{language === 'ar' ? 'طباعة الفاتورة' : 'Print Bill'}</button>
@@ -1712,7 +1741,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               db.updateOrderStatus(order.id, 'delivered', selectedWaiter?.name).catch(err => console.error('فشل تحديث الحالة', err));
                             }}>{language === 'ar' ? 'تم التسليم' : 'Mark Delivered'}</button>
                           ) : (
-                            <button className="pos-btn" disabled style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#4b5563', color: '#9ca3af', cursor: 'not-allowed' }} title={language === 'ar' ? 'بانتظار تجهيز المطبخ' : 'Waiting for kitchen'}>
+                            <button className="pos-btn" disabled style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#4b5563', color: 'var(--text-muted)', cursor: 'not-allowed' }} title={language === 'ar' ? 'بانتظار تجهيز المطبخ' : 'Waiting for kitchen'}>
                               {order.status === 'preparing' ? (language === 'ar' ? 'جاري التحضير بالمطبخ' : 'Preparing in kitchen') : (language === 'ar' ? 'بانتظار المطبخ' : 'Waiting for kitchen')}
                             </button>
                           )}
@@ -1741,7 +1770,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
                 ))}
                 {dashShownOrders.length === 0 && (
-                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem', color: '#666', fontSize: '1.2rem' }}>
+                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem', color: 'var(--text-muted)', fontSize: '1.2rem' }}>
                     {dashBaseOrders.length > 0 && dashFilter !== 'all'
                       ? (language === 'ar' ? 'لا توجد طلبات في هذا الفلتر — جرّبي «الكل»' : 'No orders in this filter — try "All"')
                       : (language === 'ar' ? 'لا توجد طلبات نشطة حالياً' : 'No active orders currently')}
@@ -1760,7 +1789,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 </button>
               </div>
 
-              <div style={{ background: '#1a1a1a', padding: '2rem', borderRadius: '16px', border: '1px solid #333' }}>
+              <div style={{ background: 'var(--bg-card)', padding: '2rem', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
                 
                 <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'حالة الطلب' : 'Order Status'}</label>
@@ -1805,7 +1834,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
                 </div>
 
-                <div style={{ borderTop: '1px solid #333', paddingTop: '1.5rem', marginBottom: '2rem' }}>
+                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginBottom: '2rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                     <h3 style={{ margin: 0 }}>{language === 'ar' ? 'الأصناف' : 'Items'}</h3>
                     <button className="pos-btn-outline" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }} onClick={() => {
@@ -1820,9 +1849,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       {language === 'ar' ? 'إضافة/تعديل أصناف' : 'Add/Edit Items'}
                     </button>
                   </div>
-                  <div style={{ background: '#111', padding: '1rem', borderRadius: '8px' }}>
+                  <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '8px' }}>
                     {editingOrder.items.map((item, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: idx === editingOrder.items.length - 1 ? 'none' : '1px solid #222' }}>
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: idx === editingOrder.items.length - 1 ? 'none' : '1px solid var(--border-color)' }}>
                         <span>{item.quantity}x {language === 'ar' ? item.name_ar : item.name_en}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                           <span>{(item.price * item.quantity).toFixed(2)}</span>
@@ -1841,7 +1870,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                         </div>
                       </div>
                     ))}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed #444', fontWeight: 'bold', color: 'var(--gold-primary)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--border-color)', fontWeight: 'bold', color: 'var(--gold-primary)' }}>
                       <span>{t.total}</span>
                       <span>{editingOrder.total_price.toFixed(2)} EGP</span>
                     </div>
@@ -1909,7 +1938,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.95, y: 20 }}
                 style={{
-                  background: '#18181b',
+                  background: 'var(--bg-card)',
                   border: '2px solid var(--gold-primary)',
                   borderRadius: '20px',
                   width: '100%',
@@ -1920,13 +1949,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   overflowY: 'auto'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
                   <h3 style={{ margin: 0, color: 'var(--gold-primary)', fontSize: '1.4rem', fontWeight: 'bold' }}>
                     {language === 'ar' ? 'تحصيل دفع الفاتورة' : 'Collect Bill Payment'} #{collectPaymentOrder.id.slice(0, 6)}
                   </h3>
                   <button 
                     onClick={() => setCollectPaymentOrder(null)} 
-                    style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer' }}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
                   >
                     <X size={24} />
                   </button>
@@ -1934,11 +1963,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                 <div style={{ background: 'rgba(212,175,55,0.05)', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px dashed rgba(212,175,55,0.2)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span style={{ color: '#a1a1aa' }}>{language === 'ar' ? 'اسم العميل:' : 'Customer:'}</span>
-                    <span style={{ fontWeight: 'bold', color: '#fff' }}>{collectPaymentOrder.customer_name}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'اسم العميل:' : 'Customer:'}</span>
+                    <span style={{ fontWeight: 'bold', color: 'var(--text-white)' }}>{collectPaymentOrder.customer_name}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#a1a1aa' }}>{language === 'ar' ? 'إجمالي الفاتورة:' : 'Total Price:'}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'إجمالي الفاتورة:' : 'Total Price:'}</span>
                     <span style={{ fontWeight: 'bold', color: 'var(--gold-primary)', fontSize: '1.2rem' }}>
                       {collectPaymentOrder.total_price.toFixed(2)} EGP
                     </span>
@@ -1959,10 +1988,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                 {/* ===== الخزنة اللي هيتحصّل فيها ===== */}
                 <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.6rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                     {language === 'ar' ? 'التحصيل في أنهي خزنة؟' : 'Collect into which drawer?'}
                     {collectPaymentOrder.hall && (
-                      <span style={{ color: '#71717a', fontSize: '0.8rem', marginInlineStart: '0.5rem' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginInlineStart: '0.5rem' }}>
                         ({language === 'ar' ? `متحددة تلقائيًا من ${collectPaymentOrder.hall}` : `auto from ${collectPaymentOrder.hall}`})
                       </span>
                     )}
@@ -1977,8 +2006,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           flex: 1, padding: '0.9rem', borderRadius: '12px', cursor: 'pointer',
                           fontWeight: 'bold', fontSize: '1rem', transition: 'all 0.2s',
                           border: payDrawer === d ? '2px solid var(--gold-primary)' : '2px solid #3f3f46',
-                          background: payDrawer === d ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : '#18181b',
-                          color: payDrawer === d ? '#000' : '#a1a1aa',
+                          background: payDrawer === d ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : 'var(--bg-card)',
+                          color: payDrawer === d ? '#000' : 'var(--text-muted)',
                         }}
                       >
                         {drawerName(d, settings, language === 'ar')}
@@ -1990,7 +2019,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 {/* Input Breakdown Fields */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       💵 {language === 'ar' ? 'نقدي (كاش):' : 'Cash:'}
                     </label>
                     <input 
@@ -2004,7 +2033,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       💳 {language === 'ar' ? 'فيزا / كارت:' : 'Visa / Card:'}
                     </label>
                     <input 
@@ -2018,7 +2047,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       📱 {language === 'ar' ? 'محفظة المطعم:' : 'Restaurant Wallet:'}
 
                     </label>
@@ -2032,7 +2061,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       📱 {language === 'ar' ? 'محفظة البار:' : 'Bar Wallet:'}
                     </label>
                     <input 
@@ -2046,7 +2075,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       🍸 {language === 'ar' ? 'محفظة البار:' : 'Bar Wallet:'}
                     </label>
                     <input
@@ -2060,7 +2089,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       ⚡ {language === 'ar' ? 'إنستا باي:' : 'InstaPay:'}
                     </label>
                     <input 
@@ -2074,8 +2103,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
 
                   {/* Deferred Toggle */}
-                  <div style={{ borderTop: '1px solid #27272a', paddingTop: '1rem', marginTop: '0.5rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#fff', userSelect: 'none' }}>
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-white)', userSelect: 'none' }}>
                       <input 
                         type="checkbox"
                         checked={payIsDeferred}
@@ -2092,7 +2121,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                     {payIsDeferred && (
                       <div style={{ marginTop: '0.8rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.4rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                           👤 {language === 'ar' ? 'اختر العميل لتسجيل المديونية:' : 'Select Customer:'}
                         </label>
                         {!isCreatingCustomer ? (
@@ -2114,7 +2143,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 {language === 'ar' ? '+ جديد' : '+ New'}
                               </button>
                             </div>
-                            <div style={{ maxHeight: '150px', overflowY: 'auto', background: '#111', border: '1px solid #333', borderRadius: '8px' }}>
+                            <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'var(--bg-darker)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
                               {customers.filter(c => 
                                 c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) || 
                                 c.phone.includes(customerSearchQuery)
@@ -2125,7 +2154,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                   style={{
                                     padding: '0.8rem',
                                     cursor: 'pointer',
-                                    borderBottom: '1px solid #222',
+                                    borderBottom: '1px solid var(--border-color)',
                                     background: payCustomerId === c.id ? 'var(--gold-primary)' : 'transparent',
                                     color: payCustomerId === c.id ? '#000' : '#fff',
                                     fontWeight: payCustomerId === c.id ? 'bold' : 'normal'
@@ -2138,14 +2167,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) || 
                                 c.phone.includes(customerSearchQuery)
                               ).length === 0 && (
-                                <div style={{ padding: '0.8rem', textAlign: 'center', color: '#888' }}>
+                                <div style={{ padding: '0.8rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                                   {language === 'ar' ? 'لا يوجد عملاء مطابقين' : 'No customers found'}
                                 </div>
                               )}
                             </div>
                           </div>
                         ) : (
-                          <div style={{ background: '#111', padding: '1rem', borderRadius: '8px', border: '1px solid #333' }}>
+                          <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                             <h4 style={{ margin: '0 0 1rem 0', color: 'var(--gold-primary)' }}>{language === 'ar' ? 'عميل جديد' : 'New Customer'}</h4>
                             <input
                               type="text"
@@ -2392,7 +2421,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.95, y: 20 }}
                 style={{
-                  background: '#18181b',
+                  background: 'var(--bg-card)',
                   border: '2px solid var(--gold-primary)',
                   borderRadius: '20px',
                   width: '100%',
@@ -2401,37 +2430,37 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
                   <h3 style={{ margin: 0, color: 'var(--gold-primary)', fontSize: '1.3rem', fontWeight: 'bold' }}>
                     {language === 'ar' ? 'نقل الصنف بين الطاولات' : 'Transfer Item Between Tables'}
                   </h3>
                   <button 
                     onClick={() => setTransferItem(null)} 
-                    style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer' }}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
                   >
                     <X size={24} />
                   </button>
                 </div>
 
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid #27272a' }}>
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid var(--border-color)' }}>
                   <div style={{ color: 'var(--gold-primary)', fontWeight: 'bold', marginBottom: '0.4rem' }}>
                     {language === 'ar' ? transferItem.name_ar : transferItem.name_en}
                   </div>
-                  <div style={{ fontSize: '0.9rem', color: '#a1a1aa' }}>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
                     {language === 'ar' ? `الكمية المتوفرة بالطلب الحالي: ${transferItem.quantity}` : `Available quantity in current order: ${transferItem.quantity}`}
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginBottom: '1.5rem' }}>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       {language === 'ar' ? 'الكمية المراد نقلها:' : 'Quantity to Transfer:'}
                     </label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#000', padding: '6px 12px', borderRadius: '8px', width: 'fit-content' }}>
                       <button 
                         disabled={transferQty <= 1}
                         onClick={() => setTransferQty(prev => Math.max(1, prev - 1))} 
-                        style={{ background: '#333', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}
+                        style={{ background: 'var(--border-color)', border: 'none', color: 'var(--text-white)', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}
                       >
                         <Minus size={16} />
                       </button>
@@ -2447,7 +2476,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       {language === 'ar' ? 'الطلب المستهدف (رقم الطاولة / اسم العميل):' : 'Target Order (Table / Customer):'}
                     </label>
                     {activeOrders.filter(o => o.id !== editingOrder.id).length === 0 ? (
@@ -2520,7 +2549,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.95, y: 20 }}
                 style={{
-                  background: '#18181b',
+                  background: 'var(--bg-card)',
                   border: '2px solid var(--gold-primary)',
                   borderRadius: '24px',
                   width: '100%',
@@ -2533,7 +2562,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 }}
               >
                 {/* Modal Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', borderBottom: '1px solid #27272a' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', borderBottom: '1px solid var(--border-color)' }}>
                   <h3 style={{ color: 'var(--gold-primary)', fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
                     {language === 'ar' ? 'سجل حضور وانصراف الموظفين' : 'Employee Attendance & Shift End'}
                   </h3>
@@ -2542,7 +2571,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       playClickSound();
                       setAttendanceModalOpen(false);
                     }}
-                    style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', padding: '4px' }}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
                   >
                     <X size={28} />
                   </button>
@@ -2552,7 +2581,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 <div style={{ display: 'flex', flex: 1, minHeight: 0, overflowY: 'auto', padding: '2rem', gap: '2rem', flexWrap: 'wrap' }}>
                   {/* Left Column: Camera View */}
                   <div style={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
-                    <div style={{ position: 'relative', width: '100%', maxWidth: '320px', height: '240px', background: '#09090b', borderRadius: '16px', overflow: 'hidden', border: '2px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ position: 'relative', width: '100%', maxWidth: '320px', height: '240px', background: 'var(--bg-dark)', borderRadius: '16px', overflow: 'hidden', border: '2px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {cameraError ? (
                         <div style={{ padding: '1rem', textAlign: 'center', color: '#ef4444' }}>{cameraError}</div>
                       ) : (
@@ -2572,7 +2601,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       {/* Hidden Canvas for Frame Capture */}
                       <canvas ref={canvasRef} style={{ display: 'none' }} />
                     </div>
-                    <p style={{ color: '#71717a', fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
                       {language === 'ar' 
                         ? 'يرجى الوقوف أمام الكاميرا بوضوح قبل تسجيل الحضور أو الانصراف.' 
                         : 'Please stand clearly in front of the camera before checking in or out.'}
@@ -2591,7 +2620,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                         value={searchEmployeeQuery}
                         onChange={(e) => setSearchEmployeeQuery(e.target.value)}
                       />
-                      <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#71717a' }} />
+                      <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     </div>
 
                     {/* Scrollable list */}
@@ -2611,17 +2640,17 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           const completedLog = attendanceLogsList.find(l => l.employee_id === emp.id && l.date === todayStr && l.check_out_time);
 
                           return (
-                            <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#202023', border: '1px solid #27272a', padding: '1rem', borderRadius: '12px', transition: 'all 0.2s' }}>
+                            <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#202023', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '12px', transition: 'all 0.2s' }}>
                               <div>
-                                <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#fff', fontWeight: 'bold' }}>{emp.name}</h4>
-                                <span style={{ color: '#71717a', fontSize: '0.85rem' }}>{emp.phone || '-'}</span>
+                                <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-white)', fontWeight: 'bold' }}>{emp.name}</h4>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{emp.phone || '-'}</span>
                               </div>
 
                               <div>
                                 {activeLog ? (
                                   <button 
                                     className="pos-btn"
-                                    style={{ background: '#ef4444', borderColor: '#ef4444', color: '#fff', padding: '0.5rem 1rem', fontSize: '0.9rem', borderRadius: '8px' }}
+                                    style={{ background: '#ef4444', borderColor: '#ef4444', color: 'var(--text-white)', padding: '0.5rem 1rem', fontSize: '0.9rem', borderRadius: '8px' }}
                                     onClick={() => handleAttendanceAction(emp, false)}
                                   >
                                     {language === 'ar' ? 'تسجيل انصراف 🔴' : 'Check Out 🔴'}
@@ -2645,7 +2674,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                         })}
 
                       {employeesList.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '2rem', color: '#71717a' }}>
+                        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                           {language === 'ar' ? 'لا يوجد موظفون مسجلون في النظام حالياً.' : 'No employees registered in the system yet.'}
                         </div>
                       )}
@@ -2684,7 +2713,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.95, y: 20 }}
                 style={{
-                  background: '#18181b',
+                  background: 'var(--bg-card)',
                   border: '2px solid var(--gold-primary)',
                   borderRadius: '20px',
                   width: '100%',
@@ -2697,7 +2726,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 <h3 style={{ color: 'var(--gold-primary)', fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '1rem' }}>
                   {language === 'ar' ? 'تأكيد رمز الأمان (OTP)' : 'OTP Security Verification'}
                 </h3>
-                <p style={{ color: '#a1a1aa', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
                   {language === 'ar' 
                     ? `يرجى إدخال رمز التحقق المرسل إلى تليجرام لإتمام إجراء: ${otpActionName}` 
                     : `Please enter the verification code sent to Telegram to complete: ${otpActionName}`}
@@ -2758,7 +2787,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: -50, scale: 0.9 }}
               style={{
-                background: '#9b59b6', color: '#fff', padding: '15px 20px', borderRadius: '12px',
+                background: '#9b59b6', color: 'var(--text-white)', padding: '15px 20px', borderRadius: '12px',
                 boxShadow: '0 8px 30px rgba(155,89,182,0.4)', display: 'flex', alignItems: 'center', gap: '15px', minWidth: '300px'
               }}
             >
@@ -2774,7 +2803,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               </div>
               <button 
                 onClick={() => setPreparedNotifications(prev => prev.filter((_, i) => i !== idx))}
-                style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '5px' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-white)', cursor: 'pointer', padding: '5px' }}
               >
                 X
               </button>
