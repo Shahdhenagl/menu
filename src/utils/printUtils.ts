@@ -208,12 +208,16 @@ export const printCustomerReceipt = async (
   const locationHtml = settings?.location_url ? `<div class="info-line">📍 ${settings.location_url}</div>` : '';
   const phoneHtml = settings?.whatsapp_number ? `<div class="info-line">📞 ${settings.whatsapp_number}</div>` : '';
 
-  const rows = order.items.map(i => `
+  const rows = order.items.map(i => {
+    const qty = Number(i.quantity) || 1;
+    const lineTotal = (Number(i.price) || 0) * qty;
+    return `
     <tr>
-      <td class="q">${i.quantity}×</td>
+      <td class="q"><span class="qbox">${qty}×</span></td>
       <td class="n">${isAr ? i.name_ar : i.name_en}</td>
-      <td class="p">${(i.price * i.quantity).toFixed(2)}</td>
-    </tr>`).join('');
+      <td class="p">${lineTotal.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
 
   // حساب الإجمالي الفرعي والضريبة/الخصم بحيث تتطابق دايمًا مع الإجمالي المخزّن
   const n = (v: any) => Number(v) || 0;
@@ -253,13 +257,18 @@ export const printCustomerReceipt = async (
       .meta { font-size:12px; }
       .meta div { display:flex; justify-content:space-between; margin:3px 0; }
       .meta b { font-weight:700; }
-      table { width:100%; border-collapse:collapse; margin:6px 0; }
+      table { width:100%; border-collapse:collapse; margin:6px 0; table-layout:fixed; }
       thead th { font-size:12px; border-bottom:2px solid #000; padding:5px 0; text-align:${isAr ? 'right' : 'left'}; }
+      thead th.q { text-align:center; }
       thead th.p { text-align:${isAr ? 'left' : 'right'}; }
-      tbody td { padding:6px 0; border-bottom:1px dashed #ccc; font-size:13px; vertical-align:top; }
-      td.q { width:34px; font-weight:800; }
-      td.n { font-weight:600; line-height:1.35; }
-      td.p { width:66px; text-align:${isAr ? 'left' : 'right'}; font-weight:700; }
+      tbody td { padding:6px 0; border-bottom:1px dashed #ccc; font-size:13px; vertical-align:middle; }
+      th.q, td.q { width:46px; }
+      th.p, td.p { width:64px; }
+      td.q { text-align:center; }
+      .qbox { display:inline-block; min-width:34px; padding:2px 4px; border:2px solid #000; border-radius:5px;
+              font-size:14px; font-weight:900; text-align:center; direction:ltr; unicode-bidi:isolate; }
+      td.n { font-weight:600; line-height:1.35; word-wrap:break-word; overflow-wrap:break-word; }
+      td.p { text-align:${isAr ? 'left' : 'right'}; font-weight:700; }
       .sums { font-size:13px; margin-top:6px; padding-top:6px; border-top:1px dashed #000; }
       .sums div { display:flex; justify-content:space-between; margin:4px 0; }
       .sums .disc { font-weight:700; }
