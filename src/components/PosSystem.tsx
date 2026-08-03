@@ -583,6 +583,19 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         table_number: tableNumber,
         order_type: orderType || editingOrder.order_type
       }, selectedWaiter?.name);
+
+      // احسب الأصناف الجديدة فقط (صنف جديد أو زيادة كمية) واطبعها للمطبخ/البار — من غير إعادة طباعة الأوردر كله
+      const addedItems = cart.map(ci => {
+        const orig = originalOrderItems.find(o => o.id === ci.id);
+        const addedQty = orig ? ci.quantity - orig.quantity : ci.quantity;
+        return addedQty > 0 ? { ...ci, quantity: addedQty } : null;
+      }).filter((i): i is OrderItem => i !== null);
+
+      if (addedItems.length > 0) {
+        const additionOrder = { ...(updatedOrder || editingOrder), id: editOrderId, items: addedItems } as Order;
+        printOrderTickets(additionOrder, categories, products, printers, language, settings, { isAddition: true });
+      }
+
       setLastPlacedOrder(updatedOrder);
       setCart([]);
       setEditOrderId(null);

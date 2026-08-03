@@ -79,9 +79,11 @@ export const printOrderTickets = async (
   products: Product[],
   _printers: Printer[],
   language: 'ar' | 'en',
-  settings?: RestaurantSettings | null
+  settings?: RestaurantSettings | null,
+  opts?: { isAddition?: boolean }
 ) => {
   const isAr = language === 'ar';
+  const isAddition = !!opts?.isAddition;
 
   // 1) تقسيم الأصناف حسب القسم (مطبخ/بار) من department بتاع التصنيف
   const kitchen: typeof order.items = [];
@@ -124,6 +126,7 @@ export const printOrderTickets = async (
       <html dir="${isAr ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>KOT ${st.label}</title>
       <style>${THERMAL_BASE}
         .station { background:#000; color:#fff; text-align:center; font-size:22px; font-weight:800; letter-spacing:3px; padding:9px 4px; border-radius:5px; }
+        .addition { text-align:center; font-size:18px; font-weight:900; letter-spacing:1px; padding:6px 4px; margin-top:6px; border:3px double #000; border-radius:5px; }
         .ordno { text-align:center; font-size:30px; font-weight:900; margin:9px 0 2px; }
         .sub { text-align:center; font-size:13px; margin-bottom:6px; }
         .meta { font-size:12px; padding:6px 0; }
@@ -134,6 +137,7 @@ export const printOrderTickets = async (
         .foot { text-align:center; font-size:10px; margin-top:10px; color:#333; }
       </style></head><body>
         <div class="station">🔔 ${st.label}</div>
+        ${isAddition ? `<div class="addition">➕ ${isAr ? 'أصناف إضافية على الأوردر' : 'ADDED ITEMS'}</div>` : ''}
         <div class="ordno">#${order.id.slice(-4).toUpperCase()}</div>
         <div class="sub">${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'ترابيزة' : 'Table'} ${order.table_number}` : ''}</div>
         <hr class="divider"/>
