@@ -584,6 +584,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     if (dashFilter.startsWith('type:')) return (o.order_type || '') === dashFilter.slice(5);
     return true;
   };
+  // الطلبات النشطة قبل فلتر الصالة/النوع (حسب طلباتي/الكل) + بعده
+  const dashBaseOrders = activeOrders.filter(o =>
+    viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending')
+  );
+  const dashShownOrders = dashBaseOrders.filter(matchesDashFilter);
+  const chipCount = (key: string): number =>
+    key === 'all' ? dashBaseOrders.length
+      : dashBaseOrders.filter(o => key.startsWith('hall:') ? o.hall === key.slice(5) : (o.order_type || '') === key.slice(5)).length;
 
   const placeOrder = async () => {
     if (cart.length === 0) return;
@@ -1609,6 +1617,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
                     {chips.map(ch => {
                       const active = dashFilter === ch.key;
+                      const count = chipCount(ch.key);
                       return (
                         <button key={ch.key} onClick={() => setDashFilter(ch.key)}
                           style={{
@@ -1618,9 +1627,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                             background: active ? ch.c : 'transparent',
                             color: active ? '#000' : ch.c,
                             border: `2px solid ${ch.c}`,
+                            opacity: count === 0 && !active ? 0.45 : 1,
                           }}>
                           <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: active ? '#000' : ch.c, display: 'inline-block' }} />
                           {ch.label}
+                          <span style={{ background: active ? '#00000022' : `${ch.c}33`, borderRadius: '999px', padding: '0 0.5rem', fontSize: '0.8rem', minWidth: '1.4rem', textAlign: 'center' }}>{count}</span>
                         </button>
                       );
                     })}
@@ -1628,7 +1639,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 );
               })()}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '1.5rem', overflowY: 'auto', flex: 1, alignContent: 'start' }}>
-                {activeOrders.filter(o => (viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending')) && matchesDashFilter(o)).map(order => (
+                {dashShownOrders.map(order => (
                   <div key={order.id} style={{ background: '#1a1a1a', border: `1px solid #333`, borderTop: `5px solid ${orderAccent(order)}`, borderRadius: '16px', padding: '1.5rem', position: 'relative' }}>
                     {viewAllOrders && order.waiter_id !== selectedWaiter?.id && (
                       <div style={{ position: 'absolute', top: '-10px', right: '10px', background: '#333', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>
@@ -1724,9 +1735,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     </div>
                   </div>
                 ))}
-                {activeOrders.filter(o => (viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending')) && matchesDashFilter(o)).length === 0 && (
+                {dashShownOrders.length === 0 && (
                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem', color: '#666', fontSize: '1.2rem' }}>
-                    {language === 'ar' ? 'لا توجد طلبات نشطة حالياً' : 'No active orders currently'}
+                    {dashBaseOrders.length > 0 && dashFilter !== 'all'
+                      ? (language === 'ar' ? 'لا توجد طلبات في هذا الفلتر — جرّبي «الكل»' : 'No orders in this filter — try "All"')
+                      : (language === 'ar' ? 'لا توجد طلبات نشطة حالياً' : 'No active orders currently')}
                   </div>
                 )}
               </div>
