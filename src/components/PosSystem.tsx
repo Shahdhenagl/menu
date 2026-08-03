@@ -24,6 +24,9 @@ import { drawerOfHall, drawerName } from '../utils/shiftClosing';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
 
 // ألوان الصالات وأنواع الطلبات (نفس ألوان شاشة المطبخ للتناسق)
+// كلمة سر تسجيل فواتير الاستاف
+const STAFF_ORDER_PASSCODE = '2026';
+
 const HALL_COLORS = ['#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#3b82f6', '#14b8a6'];
 const TYPE_COLORS: Record<string, string> = {
   dine_in: '#eab308',
@@ -114,6 +117,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [payCustomerId, setPayCustomerId] = useState('');
   // الخزنة اللي هيتحصّل فيها الأوردر (1 أو 2)
   const [payDrawer, setPayDrawer] = useState<1 | 2>(1);
+  // فاتورة استاف: مودال اختيار الموظف + كلمة السر
+  const [staffModalOpen, setStaffModalOpen] = useState(false);
+  const [staffEmployeeId, setStaffEmployeeId] = useState('');
+  const [staffPasscode, setStaffPasscode] = useState('');
+  const [staffSaving, setStaffSaving] = useState(false);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -146,6 +154,71 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
       sendTelegramMessage(token, chatId, text);
     });
+  };
+
+  // ===== فاتورة استاف =====
+  // طلب مجاني لموظف: مبيتحسبش مبيعات، بس بيتسجل باسم الموظف وبيخصم من المخزون عادي.
+  const handleStaffOrder = async () => {
+    if (!collectPaymentOrder) return;
+    if (staffPasscode !== STAFF_ORDER_PASSCODE) {
+      alert(language === 'ar' ? 'كلمة السر غير صحيحة' : 'Incorrect password');
+      return;
+    }
+    const employee = employeesList.find(e => e.id === staffEmployeeId);
+    if (!employee) {
+      alert(language === 'ar' ? 'اختر الموظف المستفيد الأول' : 'Select the employee first');
+      return;
+    }
+    setStaffSaving(true);
+    try {
+      const originalPrice = collectPaymentOrder.total_price;
+      const staffOrder = await db.updateOrder(collectPaymentOrder.id, {
+        status: 'completed',
+        payment_method: 'staff',
+        total_price: 0,
+        drawer: payDrawer,
+        payment_details: {
+          type: 'staff',
+          original_price: originalPrice,
+          employee_id: employee.id,
+          employee_name: employee.name,
+        },
+      }, selectedWaiter?.name);
+
+      printCustomerReceipt(
+        staffOrder || ({
+          ...collectPaymentOrder,
+          status: 'completed',
+          payment_method: 'staff',
+          total_price: 0,
+          payment_details: { type: 'staff', original_price: originalPrice, employee_id: employee.id, employee_name: employee.name },
+        } as any),
+        language, settings
+      );
+
+      // تنبيه على تليجرام — طلب مجاني لازم يتسجل
+      if (settings?.telegram_chat_id) {
+        const text = `👨‍🍳 <b>فاتورة استاف (مجانية)</b>\n\n` +
+          `• <b>الموظف:</b> ${employee.name}\n` +
+          `• <b>رقم الطلب:</b> <code>#${collectPaymentOrder.id.slice(0, 6)}</code>\n` +
+          `• <b>قيمة الطلب:</b> ${originalPrice.toFixed(2)} EGP\n` +
+          `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}`;
+        import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+          sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
+        });
+      }
+
+      setStaffModalOpen(false);
+      setStaffPasscode('');
+      setStaffEmployeeId('');
+      setCollectPaymentOrder(null);
+      loadData();
+    } catch (e) {
+      console.error(e);
+      alert(language === 'ar' ? 'فشل تسجيل فاتورة الاستاف' : 'Failed to record the staff order');
+    } finally {
+      setStaffSaving(false);
+    }
   };
 
   const handleAcceptWebsiteOrder = (order: Order) => {
@@ -2386,6 +2459,22 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           🎁 {language === 'ar' ? 'تسجيل كضيافة (طلب OTP)' : 'Record as Hospitality (OTP)'}
                         </button>
                       </div>
+
+                      {/* فاتورة استاف — مجانية وبتتسجل باسم الموظف */}
+                      <div style={{ marginTop: '0.75rem' }}>
+                        <button
+                          className="pos-btn-outline"
+                          style={{ width: '100%', padding: '1rem', borderColor: '#38bdf8', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)' }}
+                          onClick={() => {
+                            playClickSound();
+                            setStaffEmployeeId('');
+                            setStaffPasscode('');
+                            setStaffModalOpen(true);
+                          }}
+                        >
+                          👨‍🍳 {language === 'ar' ? 'فاتورة استاف (مجانية)' : 'Staff Order (Free)'}
+                        </button>
+                      </div>
                     </>
                   );
                 })()}
@@ -2640,7 +2729,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           const completedLog = attendanceLogsList.find(l => l.employee_id === emp.id && l.date === todayStr && l.check_out_time);
 
                           return (
-                            <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#202023', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '12px', transition: 'all 0.2s' }}>
+                            <div key={emp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', padding: '1rem', borderRadius: '12px', transition: 'all 0.2s' }}>
                               <div>
                                 <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-white)', fontWeight: 'bold' }}>{emp.name}</h4>
                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{emp.phone || '-'}</span>
