@@ -125,7 +125,7 @@ export const printOrderTickets = async (
       </style></head><body>
         <div class="station">🔔 ${st.label}</div>
         <div class="ordno">#${order.id.slice(-4).toUpperCase()}</div>
-        <div class="sub">${orderTypeStr}${order.table_number ? ` · ${isAr ? 'ترابيزة' : 'Table'} ${order.table_number}` : ''}</div>
+        <div class="sub">${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'ترابيزة' : 'Table'} ${order.table_number}` : ''}</div>
         <hr class="divider"/>
         <div class="meta">
           <div>🕐 ${new Date(order.created_at).toLocaleString(isAr ? 'ar-EG' : 'en-US')}</div>
@@ -225,7 +225,7 @@ export const printCustomerReceipt = async (
       <div class="rname">${restaurantName}</div>
       ${phoneHtml}
       ${locationHtml}
-      <div class="ticket-type"><span>${orderTypeStr}${order.table_number ? ` · ${order.table_number}` : ''}</span></div>
+      <div class="ticket-type"><span>${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'ترابيزة' : 'Table'} ${order.table_number}` : ''}</span></div>
       <hr class="divider"/>
       <div class="meta">
         <div><span>${isAr ? 'فاتورة' : 'Invoice'}</span><b>#${order.id.slice(-6).toUpperCase()}</b></div>
