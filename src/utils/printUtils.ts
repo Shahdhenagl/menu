@@ -295,6 +295,9 @@ export const printOrderTickets = async (
         <div class="rname">${restaurantName}</div>
         <div class="station">${st.label}</div>
         ${isAddition ? `<div class="addition">${isAr ? 'أصناف إضافية على الأوردر' : 'ADDED ITEMS'}</div>` : ''}
+        ${order.payment_method === 'staff' ? `<div class="addition">${isAr
+          ? `طلب استاف — ${order.payment_details?.employee_name || ''}`
+          : `STAFF ORDER — ${order.payment_details?.employee_name || ''}`}</div>` : ''}
         <div class="ordno">#${order.id.slice(-4).toUpperCase()}</div>
         <div class="sub">${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'طاولة' : 'Table'} ${order.table_number}` : ''}</div>
         <hr class="divider"/>

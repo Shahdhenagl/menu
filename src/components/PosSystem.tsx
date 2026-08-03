@@ -119,9 +119,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [payDrawer, setPayDrawer] = useState<1 | 2>(1);
   // فاتورة استاف: مودال اختيار الموظف + كلمة السر
   const [staffModalOpen, setStaffModalOpen] = useState(false);
+  // 'new' = طلب استاف جديد من شاشة نوع الطلب | 'collect' = تحويل أوردر قائم لفاتورة استاف
+  const [staffModalMode, setStaffModalMode] = useState<'new' | 'collect'>('collect');
   const [staffEmployeeId, setStaffEmployeeId] = useState('');
   const [staffPasscode, setStaffPasscode] = useState('');
   const [staffSaving, setStaffSaving] = useState(false);
+  // الموظف اللي الطلب الجديد اتسجل باسمه (لو طلب استاف)
+  const [staffOrderFor, setStaffOrderFor] = useState<{ id: string; name: string } | null>(null);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -159,7 +163,6 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   // ===== فاتورة استاف =====
   // طلب مجاني لموظف: مبيتحسبش مبيعات، بس بيتسجل باسم الموظف وبيخصم من المخزون عادي.
   const handleStaffOrder = async () => {
-    if (!collectPaymentOrder) return;
     if (staffPasscode !== STAFF_ORDER_PASSCODE) {
       alert(language === 'ar' ? 'كلمة السر غير صحيحة' : 'Incorrect password');
       return;
@@ -169,6 +172,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       alert(language === 'ar' ? 'اختر الموظف المستفيد الأول' : 'Select the employee first');
       return;
     }
+
+    // طلب جديد: بنعلّم إن الطلب ده للاستاف ونكمّل عادي لاختيار الأصناف
+    if (staffModalMode === 'new') {
+      setStaffOrderFor({ id: employee.id, name: employee.name });
+      setOrderType('takeaway');
+      setSelectedHall('');
+      setStaffModalOpen(false);
+      setStaffPasscode('');
+      return;
+    }
+
+    if (!collectPaymentOrder) return;
     setStaffSaving(true);
     try {
       const originalPrice = collectPaymentOrder.total_price;
@@ -750,17 +765,28 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       // طلبات الصالة بتاخد خزنة الصالة أوتوماتيك — غير كده الكاشير بيختار وقت التحصيل
       drawer: orderType === 'dine_in' && selectedHall ? drawerOfHall(selectedHall, settings) : undefined,
       items: cart,
-      total_price: cartTotal,
+      // طلب الاستاف مجاني: الإجمالي صفر، والقيمة الحقيقية بتتحفظ في payment_details للتقارير
+      total_price: staffOrderFor ? 0 : cartTotal,
       status: 'pending',
       order_type: orderType || 'takeaway',
       waiter_id: assignedWaiterId,
       waiter_name: assignedWaiterName,
+      ...(staffOrderFor ? {
+        payment_method: 'staff' as const,
+        payment_details: {
+          type: 'staff',
+          original_price: cartTotal,
+          employee_id: staffOrderFor.id,
+          employee_name: staffOrderFor.name,
+        },
+      } : {}),
       created_at: new Date().toISOString()
     };
-    
+
     const placedOrder = await db.addOrder(newOrder);
     setLastPlacedOrder(placedOrder);
     setCart([]);
+    setStaffOrderFor(null); // الطلب اتسجل — نرجّع الوضع الطبيعي للطلب اللي بعده
     setView('success');
     playSuccessSound();
     loadData();
@@ -768,7 +794,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     // Send Telegram Notification immediately for any placed order
     if (settings?.telegram_chat_id) {
       const itemsText = placedOrder.items.map(item => `- ${item.quantity}x ${language === 'ar' ? item.name_ar : item.name_en}`).join('\n');
-      const text = `📥 <b>طلب جديد!</b>\n\n` +
+      const text = (staffOrderFor ? `👨‍🍳 <b>طلب استاف (مجاني)</b>\n• <b>الموظف:</b> ${staffOrderFor.name}\n• <b>قيمة الطلب:</b> ${cartTotal.toFixed(2)} EGP\n\n` : `📥 <b>طلب جديد!</b>\n\n`) +
         `• <b>رقم الطلب:</b> <code>#${placedOrder.id.slice(0, 6)}</code>\n` +
         `• <b>العميل:</b> ${placedOrder.customer_name || 'غير معروف'}\n` +
         `• <b>النوع:</b> ${placedOrder.order_type || 'takeaway'}\n` +
@@ -1398,6 +1424,31 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 <div className={`option-card ${orderType === 'talabat' ? 'active' : ''}`} onClick={() => setOrderType('talabat')}>
                   <ShoppingBag size={48} color="#FF5A00" /><h3>{t.talabat}</h3>
                 </div>
+                {/* طلب استاف — مجاني، بيتسجل باسم الموظف وبيخصم من المخزون */}
+                <div
+                  className={`option-card ${staffOrderFor ? 'active' : ''}`}
+                  style={{ gridColumn: '1 / -1', borderColor: staffOrderFor ? '#38bdf8' : undefined }}
+                  onClick={() => {
+                    playClickSound();
+                    if (staffOrderFor) { setStaffOrderFor(null); return; }
+                    setStaffEmployeeId('');
+                    setStaffPasscode('');
+                    setStaffModalMode('new');
+                    setStaffModalOpen(true);
+                  }}
+                >
+                  <ChefHat size={48} color="#38bdf8" />
+                  <h3 style={{ color: staffOrderFor ? '#38bdf8' : undefined }}>
+                    {staffOrderFor
+                      ? `${language === 'ar' ? 'طلب استاف' : 'Staff order'} — ${staffOrderFor.name}`
+                      : (language === 'ar' ? 'طلب استاف (مجاني)' : 'Staff Order (Free)')}
+                  </h3>
+                  <p style={{ color: 'var(--text-gray)', fontSize: '0.85rem', margin: 0 }}>
+                    {staffOrderFor
+                      ? (language === 'ar' ? 'اضغط للإلغاء' : 'Tap to cancel')
+                      : (language === 'ar' ? 'بكلمة سر — بيتخصم من المخزون ومش بيتحسب مبيعات' : 'Password protected — deducts stock, not counted as sales')}
+                  </p>
+                </div>
               </div>
 
               {orderType === 'dine_in' && (
@@ -1768,10 +1819,25 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       </div>
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{order.customer_name}</div>
+                      {order.payment_method === 'staff' ? (
+                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#38bdf8' }}>
+                          👨‍🍳 {order.payment_details?.employee_name || (language === 'ar' ? 'استاف' : 'Staff')}
+                        </div>
+                      ) : (
+                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{order.customer_name}</div>
+                      )}
                       {order.table_number && order.table_number !== '-' && <div style={{ color: 'var(--text-muted)' }}>Table: {order.table_number}</div>}
                     </div>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>{order.total_price.toFixed(2)} EGP</div>
+                    {order.payment_method === 'staff' ? (
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#38bdf8' }}>{language === 'ar' ? 'مجاني' : 'Free'}</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginInlineStart: '0.5rem' }}>
+                          ({Number(order.payment_details?.original_price || 0).toFixed(2)} EGP)
+                        </span>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>{order.total_price.toFixed(2)} EGP</div>
+                    )}
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       {order.order_type === 'website' && !order.waiter_id ? (
                         <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#10b981', color: 'var(--text-white)' }} onClick={() => handleAcceptWebsiteOrder(order)}>
@@ -1786,7 +1852,22 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                             setView('waiter_order_edit');
                           }}>{language === 'ar' ? 'تعديل' : 'Edit'}</button>
                           
-                          {order.status === 'delivered' ? (
+                          {order.status === 'delivered' && order.payment_method === 'staff' ? (
+                            /* طلب استاف: مفيش تحصيل — إنهاء مباشر (بيخصم المخزون) */
+                            <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#38bdf8', color: '#000' }} onClick={async () => {
+                              playClickSound();
+                              try {
+                                await db.updateOrderStatus(order.id, 'completed', selectedWaiter?.name);
+                                printCustomerReceipt(order, language, settings);
+                                loadData();
+                              } catch (err) {
+                                console.error(err);
+                                alert(language === 'ar' ? 'فشل إنهاء الطلب' : 'Failed to close the order');
+                              }
+                            }}>
+                              {language === 'ar' ? 'إنهاء طلب الاستاف' : 'Close staff order'}
+                            </button>
+                          ) : order.status === 'delivered' ? (
                             <>
                             {/* فاتورة مبدئية يشوفها العميل قبل ما نحصّل منه */}
                             <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#a855f7', color: 'var(--text-white)' }} onClick={() => {
@@ -2469,6 +2550,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                             playClickSound();
                             setStaffEmployeeId('');
                             setStaffPasscode('');
+                            setStaffModalMode('collect');
                             setStaffModalOpen(true);
                           }}
                         >
@@ -2483,7 +2565,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           )}
 
           {/* ===== مودال فاتورة الاستاف ===== */}
-          {staffModalOpen && collectPaymentOrder && (
+          {staffModalOpen && (staffModalMode === 'new' || collectPaymentOrder) && (
             <motion.div
               key="staff_order_modal"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -2504,16 +2586,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     : 'The order is recorded free under the employee name. It is excluded from sales but still deducts inventory and appears in reports.'}
                 </p>
 
-                <div style={{ background: 'rgba(56,189,248,0.06)', border: '1px dashed rgba(56,189,248,0.3)', borderRadius: '10px', padding: '0.9rem', marginBottom: '1.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem' }}>
-                    <span>{language === 'ar' ? 'قيمة الطلب:' : 'Order value:'}</span>
-                    <b style={{ color: '#fff' }}>{collectPaymentOrder.total_price.toFixed(2)} EGP</b>
+                {collectPaymentOrder && staffModalMode === 'collect' && (
+                  <div style={{ background: 'rgba(56,189,248,0.06)', border: '1px dashed rgba(56,189,248,0.3)', borderRadius: '10px', padding: '0.9rem', marginBottom: '1.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                      <span>{language === 'ar' ? 'قيمة الطلب:' : 'Order value:'}</span>
+                      <b style={{ color: '#fff' }}>{collectPaymentOrder.total_price.toFixed(2)} EGP</b>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem', marginTop: '0.4rem' }}>
+                      <span>{language === 'ar' ? 'المطلوب تحصيله:' : 'To collect:'}</span>
+                      <b style={{ color: '#38bdf8' }}>{language === 'ar' ? 'مجاني' : 'Free'}</b>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem', marginTop: '0.4rem' }}>
-                    <span>{language === 'ar' ? 'المطلوب تحصيله:' : 'To collect:'}</span>
-                    <b style={{ color: '#38bdf8' }}>{language === 'ar' ? 'مجاني' : 'Free'}</b>
-                  </div>
-                </div>
+                )}
 
                 <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
                   {language === 'ar' ? 'الموظف المستفيد *' : 'Employee *'}
@@ -2552,7 +2636,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   >
                     {staffSaving
                       ? (language === 'ar' ? 'جاري التسجيل…' : 'Saving…')
-                      : (language === 'ar' ? 'تسجيل الفاتورة' : 'Record order')}
+                      : staffModalMode === 'new'
+                        ? (language === 'ar' ? 'تأكيد ومتابعة' : 'Confirm & continue')
+                        : (language === 'ar' ? 'تسجيل الفاتورة' : 'Record order')}
                   </button>
                   <button className="pos-btn-outline" style={{ flex: 1 }} disabled={staffSaving} onClick={() => setStaffModalOpen(false)}>
                     {language === 'ar' ? 'إلغاء' : 'Cancel'}
