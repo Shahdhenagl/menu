@@ -797,12 +797,28 @@ export const db = {
     };
     if (supabase) {
       try {
-        const { data, error } = await supabase
-          .from('system_users')
-          .insert([newUser])
-          .select()
-          .single();
-        if (!error && data) return data;
+        const payload: any = { ...newUser };
+        let data: any = null, error: any = null;
+        // نحاول الإضافة، ولو رفض بسبب عمود مش موجود في الداتا بيز نشيله ونعيد المحاولة
+        for (let i = 0; i < 12; i++) {
+          const res = await supabase
+            .from('system_users')
+            .insert([payload])
+            .select()
+            .single();
+          data = res.data; error = res.error;
+          if (!error && data) return data;
+          const msg = (error?.message || '') + ' ' + ((error as any)?.details || '');
+          const m = msg.match(/'([^']+)' column|column ["']?([\w]+)["']?/i);
+          const badCol = m ? (m[1] || m[2]) : null;
+          if (badCol && Object.prototype.hasOwnProperty.call(payload, badCol) && badCol !== 'id') {
+            console.warn(`System user: العمود "${badCol}" مش موجود في الداتا بيز — بيتشال ويُعاد الحفظ (شغّل الـ migration عشان يتحفظ فعلاً).`);
+            delete payload[badCol];
+            continue;
+          }
+          console.warn("Supabase insert user failed", error);
+          break;
+        }
       } catch (err) {
         console.warn("Supabase insert user failed", err);
       }
