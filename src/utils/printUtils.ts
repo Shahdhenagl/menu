@@ -32,10 +32,19 @@ const printWithQZ = async (htmlContent: string, targetPrinters: (string | undefi
     if (!qz.websocket.isActive()) {
       await qz.websocket.connect();
     }
-    const data = [{ type: 'pixel', format: 'html', flavor: 'plain', data: htmlContent, options: { pageWidth: 80, margins: 0 } }];
+    // مهم: نحدّد مقاس الطابعة الحرارية (عرض 80مم وارتفاع تلقائي حسب المحتوى)
+    // من غير كده QZ بيطبع بمقاس افتراضي غلط → ورقة صغيرة فاضية
+    const data = [{ type: 'pixel', format: 'html', flavor: 'plain', data: htmlContent }];
     for (const printerName of printers) {
       try {
-        const config = qz.configs.create(printerName);
+        const config = qz.configs.create(printerName, {
+          units: 'mm',
+          size: { width: 80, height: null },
+          margins: { top: 0, right: 0, bottom: 0, left: 0 },
+          colorType: 'grayscale',
+          rasterize: true,
+          scaleContent: true,
+        } as any);
         await qz.print(config, data);
       } catch (printErr) {
         console.error(`فشل الطباعة على: ${printerName}`, printErr);
