@@ -1608,11 +1608,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               {(() => {
                 const chips: { key: string; label: string; c: string }[] = [
                   { key: 'all', label: language === 'ar' ? 'الكل' : 'All', c: 'var(--gold-primary)' },
-                  ...(settings?.halls || []).map(h => ({ key: `hall:${h.name}`, label: h.name, c: hallColor(h.name) })),
+                  { key: 'type:dine_in', label: language === 'ar' ? 'صالة' : 'Dine-in', c: TYPE_COLORS.dine_in },
+                  ...(settings?.halls || []).map(h => ({ key: `hall:${h.name}`, label: (language === 'ar' ? 'صالة ' : 'Hall ') + h.name, c: hallColor(h.name) })),
                   { key: 'type:takeaway', label: language === 'ar' ? 'تيك أواي' : 'Takeaway', c: TYPE_COLORS.takeaway },
                   { key: 'type:delivery', label: language === 'ar' ? 'دليفري' : 'Delivery', c: TYPE_COLORS.delivery },
                   { key: 'type:talabat', label: language === 'ar' ? 'طلبات' : 'Talabat', c: TYPE_COLORS.talabat },
-                ];
+                  { key: 'type:website', label: language === 'ar' ? 'موقع' : 'Website', c: TYPE_COLORS.website },
+                ].filter(ch => ch.key === 'all' || ch.key === 'type:dine_in' || chipCount(ch.key) > 0 || dashFilter === ch.key);
                 return (
                   <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
                     {chips.map(ch => {

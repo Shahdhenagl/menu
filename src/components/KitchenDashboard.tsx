@@ -297,19 +297,26 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
         </div>
       </div>
 
-      {/* فلاتر: بالصالة + نوع الطلب — بألوان مختلفة */}
+      {/* فلاتر: بالصالة + نوع الطلب — بألوان مختلفة + عدّاد */}
       {(activeTab === 'kitchen' || activeTab === 'bar') && (() => {
+        const stationBase = orders.filter(o => itemsForStation(o, activeTab).length > 0);
+        const cnt = (key: string): number =>
+          key === 'all' ? stationBase.length
+            : stationBase.filter(o => key.startsWith('hall:') ? o.hall === key.slice(5) : (o.order_type || '') === key.slice(5)).length;
         const chips: { key: string; label: string; c: string }[] = [
           { key: 'all', label: language === 'ar' ? 'الكل' : 'All', c: 'var(--gold-primary)' },
-          ...(settings?.halls || []).map(h => ({ key: `hall:${h.name}`, label: h.name, c: hallColor(h.name) })),
+          { key: 'type:dine_in', label: language === 'ar' ? 'صالة' : 'Dine-in', c: TYPE_COLORS.dine_in },
+          ...(settings?.halls || []).map(h => ({ key: `hall:${h.name}`, label: (language === 'ar' ? 'صالة ' : 'Hall ') + h.name, c: hallColor(h.name) })),
           { key: 'type:takeaway', label: language === 'ar' ? 'تيك أواي' : 'Takeaway', c: TYPE_COLORS.takeaway },
           { key: 'type:delivery', label: language === 'ar' ? 'دليفري' : 'Delivery', c: TYPE_COLORS.delivery },
           { key: 'type:talabat', label: language === 'ar' ? 'طلبات' : 'Talabat', c: TYPE_COLORS.talabat },
-        ];
+          { key: 'type:website', label: language === 'ar' ? 'موقع' : 'Website', c: TYPE_COLORS.website },
+        ].filter(ch => ch.key === 'all' || ch.key === 'type:dine_in' || cnt(ch.key) > 0 || dashFilter === ch.key);
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
             {chips.map(ch => {
               const active = dashFilter === ch.key;
+              const count = cnt(ch.key);
               return (
                 <button key={ch.key} onClick={() => setDashFilter(ch.key)}
                   style={{
@@ -319,9 +326,11 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                     background: active ? ch.c : 'transparent',
                     color: active ? '#000' : ch.c,
                     border: `2px solid ${ch.c}`,
+                    opacity: count === 0 && !active ? 0.45 : 1,
                   }}>
                   <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: active ? '#000' : ch.c, display: 'inline-block' }} />
                   {ch.label}
+                  <span style={{ background: active ? '#00000022' : `${ch.c}33`, borderRadius: '999px', padding: '0 0.5rem', fontSize: '0.8rem', minWidth: '1.4rem', textAlign: 'center' }}>{count}</span>
                 </button>
               );
             })}
