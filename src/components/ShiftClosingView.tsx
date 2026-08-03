@@ -146,6 +146,11 @@ export default function ShiftClosingView({
       });
       setLastByBucket(prev => ({ ...prev, [bucket]: saved }));
       await printShiftClosing(report, language, settings);
+      if (saved.__localOnly) {
+        alert(ar
+          ? 'تحذير: التقفيل اتحفظ على الجهاز ده بس ومش هيظهر على الأجهزة التانية.\n\nالسبب إن جدول سجلات التقفيل مش موجود أو ناقص أعمدة في الداتا بيز.\nشغّل الملفات دي على Supabase:\n• supabase_patch_v26_shift_closings.sql\n• supabase_patch_v28_shift_closing_details.sql'
+          : 'Warning: this closing was saved on this device only and will not appear on other devices.\n\nRun supabase_patch_v26_shift_closings.sql and supabase_patch_v28_shift_closing_details.sql on Supabase.');
+      }
     } catch (err) {
       console.error(err);
       alert(ar ? 'حصل خطأ أثناء التقفيل.' : 'Failed to close the shift.');

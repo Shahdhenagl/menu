@@ -129,7 +129,16 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '4rem 1rem', color: 'var(--text-gray)' }}>
           <FileText size={56} style={{ opacity: 0.2, marginBottom: '1rem' }} />
-          <p>{ar ? 'مفيش سجلات تقفيل لسه' : 'No closing records yet'}</p>
+          <p>{records.length === 0
+            ? (ar ? 'مفيش سجلات تقفيل لسه' : 'No closing records yet')
+            : (ar ? 'مفيش سجلات مطابقة للفلاتر' : 'No records match the filters')}</p>
+          {records.length === 0 && (
+            <p style={{ fontSize: '0.85rem', maxWidth: '520px', margin: '1rem auto 0', lineHeight: 1.7 }}>
+              {ar
+                ? 'لو عملت تقفيل ومظهرش هنا، غالبًا جدول السجلات مش متظبط في الداتا بيز. شغّل على Supabase: supabase_patch_v26_shift_closings.sql ثم supabase_patch_v28_shift_closing_details.sql'
+                : 'If you closed a shift and nothing appears here, the records table is likely missing. Run supabase_patch_v26_shift_closings.sql then supabase_patch_v28_shift_closing_details.sql on Supabase.'}
+            </p>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

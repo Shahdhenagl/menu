@@ -2493,21 +2493,29 @@ export const db = {
     };
     if (supabase) {
       try {
-        const { data, error } = await (supabase as any)
-          .from('shift_closings')
-          .insert([record])
-          .select()
-          .single();
-        if (!error && data) {
+        const payload: any = { ...record };
+        let res = await (supabase as any).from('shift_closings').insert([payload]).select().single();
+        // لو الداتا بيز ناقصها عمود جديد (زي order_types/tax_groups قبل patch v28)
+        // نشيله ونعيد المحاولة بدل ما السجل يروح محلي ويختفي عن باقي الأجهزة
+        for (let i = 0; i < 6 && res.error; i++) {
+          const msg = (res.error.message || '') + ' ' + ((res.error as any).details || '');
+          const m = msg.match(/'([^']+)' column|column ["']?([\w]+)["']?/i);
+          const badCol = m ? (m[1] || m[2]) : null;
+          if (!badCol || !Object.prototype.hasOwnProperty.call(payload, badCol)) break;
+          console.warn(`ShiftClosings: العمود "${badCol}" مش موجود في الداتا بيز — بيتشال (شغّل الـ migration).`);
+          delete payload[badCol];
+          res = await (supabase as any).from('shift_closings').insert([payload]).select().single();
+        }
+        if (!res.error && res.data) {
           triggerTelegramLog(
             'تقفيل شفت',
             'Shift Closing',
             `${record.bucket_label} — المحصل: ${record.collected.toFixed(2)} ج.م | ${record.orders_count} أوردر`,
             record.closed_by
           );
-          return data as ShiftClosing;
+          return res.data as ShiftClosing;
         }
-        console.warn("Supabase insert shift closing error, falling back to local storage:", error?.message);
+        console.warn("Supabase insert shift closing error, falling back to local storage:", res.error?.message);
       } catch (err) {
         console.warn("Supabase insert shift closing failed", err);
       }
@@ -2515,7 +2523,8 @@ export const db = {
     const all = getLocalData('meridien_shift_closings', [] as ShiftClosing[]);
     all.unshift(record);
     saveLocalData('meridien_shift_closings', all);
-    return record;
+    // علامة إن السجل اتحفظ على الجهاز ده بس — الواجهة بتحذّر المستخدم
+    return { ...record, __localOnly: true } as ShiftClosing;
   },
 
   // --- DAILY CLOSINGS (التقفيل اليومي) ---

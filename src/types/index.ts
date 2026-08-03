@@ -379,6 +379,8 @@ export interface ShiftClosing {
   order_ids: string[];
   closed_by?: string;
   created_at?: string;
+  /** اتحفظ على الجهاز ده بس (الداتا بيز رفضت) — الواجهة بتحذّر */
+  __localOnly?: boolean;
 }
 
 export interface Partner {
