@@ -340,6 +340,30 @@ export interface DailyClosing {
   created_at?: string;
 }
 
+// ===== تقفيل الشفت (لكل صالة) =====
+export interface ShiftClosingLine { name: string; qty: number; total: number }
+export interface ShiftClosingCategory { name: string; qty: number; total: number; lines: ShiftClosingLine[] }
+export interface ShiftClosingMethod { method: string; label: string; amount: number }
+
+export interface ShiftClosing {
+  id: string;
+  bucket: string;           // اسم الصالة أو __type__takeaway
+  bucket_label: string;
+  from_at: string;          // بداية الفترة = آخر تقفيل
+  to_at: string;            // لحظة التقفيل
+  orders_count: number;
+  items_count: number;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  collected: number;
+  methods: ShiftClosingMethod[];
+  categories: ShiftClosingCategory[];
+  order_ids: string[];
+  closed_by?: string;
+  created_at?: string;
+}
+
 export interface Partner {
   id: string;
   name: string;

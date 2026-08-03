@@ -520,14 +520,14 @@ export default function DailyClosingView({
           </div>
         </div>
 
-        {/* ===== تقفيل شفت لكل صالة ===== */}
+        {/* ===== تقفيل شفت لكل صالة (من آخر تقفيل لحد دلوقتي) ===== */}
         <ShiftClosingView
-          dayOrders={dayOrders}
+          orders={orders}
           categories={categories}
           products={products}
           settings={settings}
           language={language}
-          dayLabel={dayLabel}
+          userName={userName}
         />
 
         {/* ===== تقفيل كل وسيلة ===== */}

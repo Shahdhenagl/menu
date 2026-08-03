@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, BarProduct, DailyClosing } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, BarProduct, DailyClosing, ShiftClosing } from '../types';
 import { initialCategories, initialProducts, initialInventoryItems, initialProductRecipes } from './seedData';
 
 // Load credentials from environment
@@ -2437,6 +2437,65 @@ export const db = {
     const updated = txs.filter(t => t.id !== id);
     saveLocalData('meridien_employee_transactions', updated);
     return true;
+  },
+
+  // --- SHIFT CLOSINGS (تقفيل شفت الصالات) ---
+  async getShiftClosings(): Promise<ShiftClosing[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('shift_closings')
+          .select('*')
+          .order('to_at', { ascending: false });
+        if (!error) return (data || []) as ShiftClosing[];
+        console.warn("Supabase fetch shift closings error, falling back to local storage:", error.message);
+      } catch (err) {
+        console.warn("Supabase fetch shift closings failed", err);
+      }
+    }
+    return getLocalData('meridien_shift_closings', [] as ShiftClosing[]);
+  },
+
+  /** آخر تقفيل لصالة معيّنة — منه بتبدأ الفترة الجديدة. */
+  async getLastShiftClosing(bucket: string): Promise<ShiftClosing | null> {
+    const all = await this.getShiftClosings();
+    const forBucket = all
+      .filter(c => c.bucket === bucket)
+      .sort((a, b) => new Date(b.to_at).getTime() - new Date(a.to_at).getTime());
+    return forBucket[0] || null;
+  },
+
+  async addShiftClosing(closing: Omit<ShiftClosing, 'id' | 'created_at'>): Promise<ShiftClosing> {
+    const record: ShiftClosing = {
+      ...closing,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+    };
+    if (supabase) {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('shift_closings')
+          .insert([record])
+          .select()
+          .single();
+        if (!error && data) {
+          triggerTelegramLog(
+            'تقفيل شفت',
+            'Shift Closing',
+            `${record.bucket_label} — المحصل: ${record.collected.toFixed(2)} ج.م | ${record.orders_count} أوردر`,
+            record.closed_by
+          );
+          return data as ShiftClosing;
+        }
+        console.warn("Supabase insert shift closing error, falling back to local storage:", error?.message);
+      } catch (err) {
+        console.warn("Supabase insert shift closing failed", err);
+      }
+    }
+    const all = getLocalData('meridien_shift_closings', [] as ShiftClosing[]);
+    all.unshift(record);
+    saveLocalData('meridien_shift_closings', all);
+    return record;
   },
 
   // --- DAILY CLOSINGS (التقفيل اليومي) ---

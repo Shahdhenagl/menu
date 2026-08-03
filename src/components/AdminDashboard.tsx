@@ -35,6 +35,7 @@ import {
 import { playClickSound, playNewOrderSound } from '../utils/audioUtils';
 import FinancialsView from './FinancialsView';
 import DailyClosingView from './DailyClosingView';
+import ShiftRecordsView from './ShiftRecordsView';
 import PartnersView from './PartnersView';
 import InventoryReportView from './InventoryReportView';
 import InventoryCountView from './InventoryCountView';
@@ -51,7 +52,7 @@ interface AdminDashboardProps {
   toggleTheme: () => void;
   setLanguage: (lang: 'ar' | 'en') => void;
 }
-type TabType = 'analytics' | 'financials' | 'daily_closing' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'inventory_report' | 'inventory_count' | 'factory' | 'employees' | 'attendance' | 'partners';
+type TabType = 'analytics' | 'financials' | 'daily_closing' | 'shift_records' | 'categories' | 'products' | 'orders' | 'customers' | 'debts' | 'invoices' | 'expenses' | 'settings' | 'recipes' | 'system_users' | 'waiters' | 'printers' | 'inventory' | 'inventory_report' | 'inventory_count' | 'factory' | 'employees' | 'attendance' | 'partners';
 
 export default function AdminDashboard({
   onClose,
@@ -394,6 +395,7 @@ export default function AdminDashboard({
     { id: 'analytics', ar: 'نظرة عامة والتحليلات', en: 'Overview & Analytics' },
     { id: 'financials', ar: 'المعاملات المالية', en: 'Financial Transactions' },
     { id: 'daily_closing', ar: 'التقفيل اليومي', en: 'Daily Closing' },
+    { id: 'shift_records', ar: 'سجلات تقفيل الشفتات', en: 'Shift Closing Records' },
     { id: 'partners', ar: 'العهد والشركاء', en: 'Partners & Custody' },
     { id: 'categories', ar: 'إدارة التصنيفات', en: 'Categories' },
     { id: 'products', ar: 'إدارة المنتجات', en: 'Products' },
@@ -3296,6 +3298,7 @@ export default function AdminDashboard({
                 items: [
                   { id: 'financials', show: hasPermission('financials'), icon: <WalletCards size={18} />, label: language === 'ar' ? 'المعاملات المالية' : 'Financials' },
                   { id: 'daily_closing', show: hasPermission('daily_closing') || hasPermission('financials'), icon: <Receipt size={18} />, label: language === 'ar' ? 'التقفيل اليومي' : 'Daily Closing' },
+                  { id: 'shift_records', show: hasPermission('shift_records') || hasPermission('daily_closing') || hasPermission('financials'), icon: emoji('🗂️'), label: language === 'ar' ? 'سجلات التقفيل' : 'Closing Records' },
                   { id: 'partners', show: hasPermission('partners'), icon: <Users size={18} />, label: language === 'ar' ? 'العهد والشركاء' : 'Partners' },
                   { id: 'debts', show: hasPermission('customers'), icon: emoji('💳'), label: language === 'ar' ? 'الحسابات الآجلة' : 'Debts' },
                   { id: 'invoices', show: hasPermission('orders'), icon: emoji('🧾'), label: language === 'ar' ? 'الفواتير والأرباح' : 'Invoices & Profit' },
@@ -3846,6 +3849,10 @@ export default function AdminDashboard({
             userName={loggedInUser?.name}
             userRole={loggedInUser?.role}
           />
+        )}
+
+        {activeTab === 'shift_records' && (
+          <ShiftRecordsView settings={settings} language={language} />
         )}
 
         {activeTab === 'partners' && (

@@ -450,3 +450,118 @@ export const printCustomerReceipt = async (
   }
   if (!printed) printViaIframe(html);
 };
+
+// ===== تقفيل شفت الصالة (طباعة حرارية 80مم) =====
+export type ShiftClosingReport = {
+  title: string;        // اسم الصالة / نوع الطلب
+  dayLabel: string;
+  fromTime: string;
+  toTime: string;
+  ordersCount: number;
+  subtotal: number;     // المبيعات قبل الضريبة
+  tax: number;
+  discount: number;
+  collected: number;    // إجمالي المحصل بالضريبة
+  itemsCount: number;
+  methods: { label: string; amount: number }[];
+  categories: {
+    name: string; qty: number; total: number;
+    lines: { name: string; qty: number; total: number }[];
+  }[];
+};
+
+export const printShiftClosing = async (
+  report: ShiftClosingReport,
+  language: 'ar' | 'en',
+  settingsArg?: RestaurantSettings | null
+) => {
+  const isAr = language === 'ar';
+  const settings = await freshSettings(settingsArg);
+  const restaurantName = settings?.restaurant_name_en || 'MERIDIEN';
+  const money = (v: number) => (Number(v) || 0).toFixed(2);
+
+  const methodRows = report.methods.filter(m => Math.abs(m.amount) > 0.001).map(m => `
+    <div class="row"><span>${m.label}</span><span class="v">${money(m.amount)}</span></div>`).join('')
+    || `<div class="row empty">${isAr ? 'لا يوجد تحصيل' : 'Nothing collected'}</div>`;
+
+  const categoryBlocks = report.categories.map(c => `
+    <div class="cat">${c.name}</div>
+    ${c.lines.map(l => `
+      <div class="item">
+        <span class="q">${l.qty}×</span>
+        <span class="n">${l.name}</span>
+        <span class="v">${money(l.total)}</span>
+      </div>`).join('')}
+    <div class="catsum"><span>${isAr ? 'إجمالي' : 'Total'} ${c.name}</span><span class="v">${money(c.total)}</span></div>
+  `).join('') || `<div class="row empty">${isAr ? 'مفيش أصناف مباعة' : 'No items sold'}</div>`;
+
+  const html = `
+    <html dir="${isAr ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>Shift ${report.title}</title>
+    <style>${THERMAL_BASE}
+      .rname { text-align:center; font-size:20px; font-weight:900; letter-spacing:2px; direction:ltr; }
+      .doctype { text-align:center; font-size:15px; font-weight:900; padding:5px 0; margin:6px 0 3px;
+                 border-top:2px solid #000; border-bottom:2px solid #000; }
+      .hall { text-align:center; font-size:17px; font-weight:900; margin:5px 0; }
+      .when { text-align:center; font-size:11px; color:#222; margin-bottom:4px; }
+      .row { display:flex; justify-content:space-between; font-size:13px; padding:4px 0; }
+      .row .v, .item .v, .catsum .v { font-variant-numeric:tabular-nums; font-weight:700; }
+      .row.empty { justify-content:center; color:#666; font-size:12px; }
+      .sec { text-align:center; font-size:13px; font-weight:900; margin:9px 0 3px;
+             border-top:1px dashed #000; border-bottom:1px dashed #000; padding:4px 0; }
+      .cat { background:#000; color:#fff; font-size:13px; font-weight:900; padding:4px 6px; margin:7px 0 3px; border-radius:3px; }
+      .item { display:flex; align-items:flex-start; gap:6px; font-size:12.5px; padding:3px 0; border-bottom:1px dotted #bbb; }
+      .item .q { min-width:30px; font-weight:900; direction:ltr; unicode-bidi:isolate; }
+      .item .n { flex:1; line-height:1.3; }
+      .item .v { min-width:58px; text-align:${isAr ? 'left' : 'right'}; }
+      .catsum { display:flex; justify-content:space-between; font-size:12.5px; font-weight:800; padding:4px 6px; background:#eee; }
+      .total { display:flex; justify-content:space-between; align-items:center; background:#000; color:#fff;
+               border-radius:6px; padding:9px 12px; margin-top:8px; }
+      .total .lbl { font-size:13px; font-weight:700; }
+      .total .val { font-size:18px; font-weight:900; }
+      .sign { margin-top:16px; font-size:12px; }
+      .sign div { margin-top:14px; border-top:1px solid #000; padding-top:4px; text-align:center; }
+      .foot { text-align:center; margin-top:10px; font-size:10px; color:#444; }
+    </style></head><body>
+      <div class="rname">${restaurantName}</div>
+      <div class="doctype">${isAr ? 'تقفيل شفت' : 'SHIFT CLOSING'}</div>
+      <div class="hall">${report.title}</div>
+      <div class="when">${report.dayLabel}</div>
+      <div class="when">${isAr ? 'من' : 'From'} ${report.fromTime} ${isAr ? 'إلى' : 'to'} ${report.toTime}</div>
+      <hr class="divider"/>
+
+      <div class="row"><span>${isAr ? 'عدد الأوردرات' : 'Orders'}</span><span class="v">${report.ordersCount}</span></div>
+      <div class="row"><span>${isAr ? 'عدد الأصناف' : 'Items'}</span><span class="v">${report.itemsCount}</span></div>
+      <div class="row"><span>${isAr ? 'المبيعات قبل الضريبة' : 'Sales before tax'}</span><span class="v">${money(report.subtotal)}</span></div>
+      ${report.discount > 0.001 ? `<div class="row"><span>${isAr ? 'الخصم' : 'Discount'}</span><span class="v">- ${money(report.discount)}</span></div>` : ''}
+      <div class="row"><span>${isAr ? 'الضريبة' : 'Tax'}</span><span class="v">${money(report.tax)}</span></div>
+      <div class="total">
+        <span class="lbl">${isAr ? 'إجمالي المحصل بالضريبة' : 'Collected incl. tax'}</span>
+        <span class="val">${money(report.collected)} ${isAr ? 'ج.م' : 'EGP'}</span>
+      </div>
+
+      <div class="sec">${isAr ? 'التقسيم في الخزنة' : 'DRAWER SPLIT'}</div>
+      ${methodRows}
+      <div class="row" style="border-top:1px solid #000; font-weight:900;">
+        <span>${isAr ? 'إجمالي المحصل' : 'Total collected'}</span><span class="v">${money(report.collected)}</span>
+      </div>
+
+      <div class="sec">${isAr ? 'الأصناف المباعة حسب التصنيف' : 'ITEMS BY CATEGORY'}</div>
+      ${categoryBlocks}
+      <div class="row" style="border-top:2px solid #000; font-weight:900; font-size:13.5px;">
+        <span>${isAr ? 'الإجمالي العام' : 'Grand total'} (${report.itemsCount})</span>
+        <span class="v">${money(report.subtotal)}</span>
+      </div>
+
+      <div class="sign">
+        <div>${isAr ? 'توقيع الكاشير' : 'Cashier signature'}</div>
+        <div>${isAr ? 'توقيع المسؤول' : 'Manager signature'}</div>
+      </div>
+      <div class="foot">${isAr ? 'اتطبع في' : 'Printed on'} ${new Date().toLocaleString(isAr ? 'ar-EG' : 'en-GB')}</div>
+    </body></html>`;
+
+  let printed = false;
+  if (settings?.enable_qz_printing) {
+    printed = await printWithQZ(html, [settings?.qz_printer_cashier]);
+  }
+  if (!printed) printViaIframe(html);
+};
