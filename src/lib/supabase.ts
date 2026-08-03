@@ -659,6 +659,7 @@ export const db = {
       try {
         const currentSettings = await this.getSettings();
         const payload: any = { ...settings };
+        const missingColumns: string[] = [];
         let data: any = null, error: any = null;
         // نحاول الحفظ، ولو رفض بسبب عمود مش موجود في الداتا بيز نشيله ونعيد المحاولة
         for (let i = 0; i < 12; i++) {
@@ -675,12 +676,15 @@ export const db = {
           const badCol = m ? (m[1] || m[2]) : null;
           if (badCol && Object.prototype.hasOwnProperty.call(payload, badCol)) {
             console.warn(`Settings: العمود "${badCol}" مش موجود في الداتا بيز — بيتشال ويُعاد الحفظ (شغّل الـ migration عشان يتحفظ فعلاً).`);
+            missingColumns.push(badCol);
             delete payload[badCol];
             continue;
           }
           break; // خطأ مش سببه عمود ناقص → نوقف
         }
         if (error) throw error;
+        // بنرجّع أسماء الأعمدة اللي اتشالت عشان الواجهة تحذّر بدل ما التعديل يضيع في صمت
+        if (missingColumns.length) (data as any).__missingColumns = missingColumns;
         return data;
       } catch (err) {
         console.warn("Supabase settings update failed, falling back to mock database.", err);

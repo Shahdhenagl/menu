@@ -2378,7 +2378,7 @@ export default function AdminDashboard({
   const handleSaveSettings = async () => {
     setLoading(true);
     try {
-      await db.updateSettings({
+      const saved = await db.updateSettings({
         restaurant_name_ar: setNameAr,
         restaurant_name_en: setNameEn,
         logo_url: setLogoUrl,
@@ -2404,7 +2404,15 @@ export default function AdminDashboard({
         qz_printer_bar_2: qzPrinterBar2
       });
       await refreshData();
-      alert(language === 'ar' ? 'تم حفظ إعدادات النظام بنجاح!' : 'System settings saved successfully!');
+      // لو الداتا بيز ناقصها أعمدة، التعديل بتاعها مبيتحفظش — لازم المستخدم يعرف بدل ما يضيع في صمت
+      const missing: string[] = (saved as any)?.__missingColumns || [];
+      if (missing.length) {
+        alert(language === 'ar'
+          ? `اتحفظ، بس الحقول دي متحفظتش لأن أعمدتها مش موجودة في الداتا بيز:\n${missing.join(', ')}\n\nشغّل ملفات الـ SQL (supabase_ALL_new_columns.sql) على Supabase وحاول تاني.`
+          : `Saved, but these fields were skipped because their columns are missing in the database:\n${missing.join(', ')}\n\nRun the SQL migrations (supabase_ALL_new_columns.sql) on Supabase and try again.`);
+      } else {
+        alert(language === 'ar' ? 'تم حفظ إعدادات النظام بنجاح!' : 'System settings saved successfully!');
+      }
     } catch (err) {
       console.error(err);
       alert("حدث خطأ أثناء حفظ الإعدادات.");

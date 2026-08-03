@@ -1,6 +1,50 @@
 import type { Order, Category, Product, Printer, RestaurantSettings } from '../types';
+import { db } from '../lib/supabase';
 import qz from 'qz-tray';
 import QRCode from 'qrcode';
+
+// بيجيب أحدث إعدادات من الداتا بيز وقت الطباعة نفسها.
+// من غير كده الشاشة بتفضل شغّالة بالإعدادات اللي اتحمّلت أول ما فتحت (لوجو/أسماء قديمة).
+const freshSettings = async (fallback?: RestaurantSettings | null): Promise<RestaurantSettings | null> => {
+  try {
+    const s = await db.getSettings();
+    return s || fallback || null;
+  } catch {
+    return fallback || null;
+  }
+};
+
+// الطابعة الحرارية (عبر QZ) بترسم الـ HTML بمحرك جافا مش بيفهم WebP.
+// فبنعيد ترميز اللوجو PNG على خلفية بيضا عشان يطلع مطبوع فعلاً.
+const toPrintableLogo = (src: string): Promise<string> =>
+  new Promise(resolve => {
+    if (!src) return resolve('');
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onerror = () => resolve(src);
+      img.onload = () => {
+        try {
+          const max = 160;
+          const scale = Math.min(max / img.width, max / img.height, 1);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(src);
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/png'));
+        } catch {
+          resolve(src); // صورة من دومين تاني (canvas متلوّث) → نسيبها زي ما هي
+        }
+      };
+      img.src = src;
+    } catch {
+      resolve(src);
+    }
+  });
 
 // يولّد رمز QR كصورة data-URI مدمجة (يشتغل offline)
 const buildQrDataUrl = async (data: string): Promise<string> => {
@@ -88,11 +132,14 @@ export const printOrderTickets = async (
   products: Product[],
   _printers: Printer[],
   language: 'ar' | 'en',
-  settings?: RestaurantSettings | null,
+  settingsArg?: RestaurantSettings | null,
   opts?: { isAddition?: boolean }
 ) => {
   const isAr = language === 'ar';
   const isAddition = !!opts?.isAddition;
+  const settings = await freshSettings(settingsArg);
+  // اسم المطعم بالإنجليزي دايمًا في كل التذاكر
+  const restaurantName = settings?.restaurant_name_en || 'MERIDIEN';
 
   // 1) تقسيم الأصناف حسب القسم (مطبخ/بار) من department بتاع التصنيف
   const kitchen: typeof order.items = [];
@@ -134,6 +181,7 @@ export const printOrderTickets = async (
     const html = `
       <html dir="${isAr ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>KOT ${st.label}</title>
       <style>${THERMAL_BASE}
+        .rname { text-align:center; font-size:18px; font-weight:900; letter-spacing:2px; margin-bottom:6px; direction:ltr; }
         .station { background:#000; color:#fff; text-align:center; font-size:22px; font-weight:800; letter-spacing:3px; padding:9px 4px; border-radius:5px; }
         .addition { text-align:center; font-size:18px; font-weight:900; letter-spacing:1px; padding:6px 4px; margin-top:6px; border:3px double #000; border-radius:5px; }
         .ordno { text-align:center; font-size:30px; font-weight:900; margin:9px 0 2px; }
@@ -145,20 +193,21 @@ export const printOrderTickets = async (
         .item .n { flex:1; font-weight:700; line-height:1.3; }
         .foot { text-align:center; font-size:10px; margin-top:10px; color:#333; }
       </style></head><body>
-        <div class="station">🔔 ${st.label}</div>
-        ${isAddition ? `<div class="addition">➕ ${isAr ? 'أصناف إضافية على الأوردر' : 'ADDED ITEMS'}</div>` : ''}
+        <div class="rname">${restaurantName}</div>
+        <div class="station">${st.label}</div>
+        ${isAddition ? `<div class="addition">${isAr ? 'أصناف إضافية على الأوردر' : 'ADDED ITEMS'}</div>` : ''}
         <div class="ordno">#${order.id.slice(-4).toUpperCase()}</div>
         <div class="sub">${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'طاولة' : 'Table'} ${order.table_number}` : ''}</div>
         <hr class="divider"/>
         <div class="meta">
-          <div>🕐 ${new Date(order.created_at).toLocaleString(isAr ? 'ar-EG' : 'en-US')}</div>
-          ${order.waiter_name ? `<div>👤 ${isAr ? 'الكابتن' : 'Waiter'}: <b>${order.waiter_name}</b></div>` : ''}
-          ${order.customer_name ? `<div>🧑 ${isAr ? 'العميل' : 'Customer'}: ${order.customer_name}</div>` : ''}
+          <div>${isAr ? 'الوقت' : 'Time'}: ${new Date(order.created_at).toLocaleString(isAr ? 'ar-EG' : 'en-US')}</div>
+          ${order.waiter_name ? `<div>${isAr ? 'الكابتن' : 'Waiter'}: <b>${order.waiter_name}</b></div>` : ''}
+          ${order.customer_name ? `<div>${isAr ? 'العميل' : 'Customer'}: ${order.customer_name}</div>` : ''}
         </div>
         <hr class="divider solid"/>
         ${rows}
         <hr class="divider solid"/>
-        <div class="foot">${isAr ? 'مريديان — نظام الطلبات' : 'Meridien — Order System'}</div>
+        <div class="foot">${restaurantName} ${isAr ? '— نظام الطلبات' : '— Order System'}</div>
       </body></html>`;
 
     let printed = false;
@@ -173,9 +222,10 @@ export const printOrderTickets = async (
 export const printCustomerReceipt = async (
   order: Order,
   language: 'ar' | 'en',
-  settings?: RestaurantSettings | null
+  settingsArg?: RestaurantSettings | null
 ) => {
   const isAr = language === 'ar';
+  const settings = await freshSettings(settingsArg);
 
   const orderTypeStr = isAr
     ? (order.order_type === 'takeaway' ? 'تيك أواي' : order.order_type === 'delivery' ? 'توصيل' : order.order_type === 'talabat' ? 'طلبات' : 'صالة')
@@ -191,11 +241,13 @@ export const printCustomerReceipt = async (
     order.payment_method === 'deferred' ? (isAr ? 'آجل' : 'Deferred') :
     order.payment_method === 'hospitality' ? (isAr ? 'ضيافة' : 'Hospitality') : '';
 
-  const logoHtml = settings?.logo_url
-    ? `<div class="logo-box"><img src="${settings.logo_url}" alt="Logo" class="logo" /></div>`
+  const logoSrc = settings?.logo_url ? await toPrintableLogo(settings.logo_url) : '';
+  const logoHtml = logoSrc
+    ? `<div class="logo-box"><img src="${logoSrc}" alt="Logo" class="logo" /></div>`
     : '';
 
-  const restaurantName = isAr ? (settings?.restaurant_name_ar || 'MERIDIEN') : (settings?.restaurant_name_en || 'MERIDIEN');
+  // اسم المطعم بالإنجليزي دايمًا على الفاتورة
+  const restaurantName = settings?.restaurant_name_en || 'MERIDIEN';
 
   const qrContent = (typeof window !== 'undefined' && window.location?.origin)
     ? window.location.origin + '/menu'
@@ -205,8 +257,8 @@ export const printCustomerReceipt = async (
     ? `<div class="qr-box"><img src="${qrDataUrl}" alt="QR" /><div class="qr-cap">${isAr ? 'امسح لتصفّح المنيو' : 'Scan for our menu'}</div></div>`
     : '';
 
-  const locationHtml = settings?.location_url ? `<div class="info-line">📍 ${settings.location_url}</div>` : '';
-  const phoneHtml = settings?.whatsapp_number ? `<div class="info-line">📞 ${settings.whatsapp_number}</div>` : '';
+  const locationHtml = settings?.location_url ? `<div class="info-line">${settings.location_url}</div>` : '';
+  const phoneHtml = settings?.whatsapp_number ? `<div class="info-line ltr">${isAr ? 'ت: ' : 'Tel: '}${settings.whatsapp_number}</div>` : '';
 
   const rows = order.items.map(i => {
     const qty = Number(i.quantity) || 1;
@@ -250,8 +302,9 @@ export const printCustomerReceipt = async (
     <style>${THERMAL_BASE}
       .logo-box { text-align:center; margin-bottom:6px; }
       .logo { max-width:64px; max-height:64px; object-fit:contain; }
-      .rname { text-align:center; font-size:22px; font-weight:900; letter-spacing:2px; margin:2px 0 4px; }
-      .info-line { text-align:center; font-size:11px; color:#222; margin:1px 0; }
+      .rname { text-align:center; font-size:22px; font-weight:900; letter-spacing:2px; margin:2px 0 4px; direction:ltr; }
+      .info-line { text-align:center; font-size:11px; color:#222; margin:1px 0; word-break:break-all; }
+      .info-line.ltr { direction:ltr; }
       .ticket-type { text-align:center; margin:8px 0; }
       .ticket-type span { display:inline-block; border:2px solid #000; border-radius:6px; padding:3px 14px; font-weight:800; font-size:14px; letter-spacing:1px; }
       .meta { font-size:12px; }
@@ -311,7 +364,7 @@ export const printCustomerReceipt = async (
       ${qrHtml}
       <hr class="divider"/>
       <div class="foot">
-        <div class="thanks">${isAr ? 'شكراً لزيارتكم! 🌟' : 'Thank you for your visit! 🌟'}</div>
+        <div class="thanks">${isAr ? 'شكراً لزيارتكم!' : 'Thank you for your visit!'}</div>
         <div class="brand">Powered by Meridien POS</div>
       </div>
     </body></html>`;
