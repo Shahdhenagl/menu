@@ -1,5 +1,6 @@
 import type { Order, Category, Product, Printer, RestaurantSettings } from '../types';
 import { db } from '../lib/supabase';
+import { configureQzSecurity } from './qzSecurity';
 import qz from 'qz-tray';
 import QRCode from 'qrcode';
 
@@ -61,6 +62,7 @@ const buildQrDataUrl = async (data: string): Promise<string> => {
 
 // يرجّع أسماء كل الطابعات المتوصلة بالجهاز زي ما هي في نظام التشغيل (عربي/إنجليزي)
 export const listQzPrinters = async (): Promise<string[]> => {
+  configureQzSecurity();
   if (!qz.websocket.isActive()) {
     await qz.websocket.connect();
   }
@@ -77,6 +79,7 @@ const printWithQZ = async (htmlContent: string, targetPrinters: (string | undefi
     return false;
   }
   try {
+    configureQzSecurity();
     if (!qz.websocket.isActive()) {
       await qz.websocket.connect();
     }
