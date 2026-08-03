@@ -98,7 +98,9 @@ export interface RestaurantSettings {
   enable_qz_printing?: boolean;
   qz_printer_cashier?: string;
   qz_printer_kitchen?: string;
+  qz_printer_kitchen_2?: string;
   qz_printer_bar?: string;
+  qz_printer_bar_2?: string;
 }
 
 export interface Expense {

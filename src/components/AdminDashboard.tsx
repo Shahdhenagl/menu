@@ -161,7 +161,9 @@ export default function AdminDashboard({
   const [enableQzPrinting, setEnableQzPrinting] = useState(settings.enable_qz_printing || false);
   const [qzPrinterCashier, setQzPrinterCashier] = useState(settings.qz_printer_cashier || '');
   const [qzPrinterKitchen, setQzPrinterKitchen] = useState(settings.qz_printer_kitchen || '');
+  const [qzPrinterKitchen2, setQzPrinterKitchen2] = useState(settings.qz_printer_kitchen_2 || '');
   const [qzPrinterBar, setQzPrinterBar] = useState(settings.qz_printer_bar || '');
+  const [qzPrinterBar2, setQzPrinterBar2] = useState(settings.qz_printer_bar_2 || '');
 
   const getSubUnitLabel = (baseUnit: string) => {
     if (!baseUnit) return null;
@@ -1450,7 +1452,9 @@ export default function AdminDashboard({
     setEnableQzPrinting(settings.enable_qz_printing || false);
     setQzPrinterCashier(settings.qz_printer_cashier || '');
     setQzPrinterKitchen(settings.qz_printer_kitchen || '');
+    setQzPrinterKitchen2(settings.qz_printer_kitchen_2 || '');
     setQzPrinterBar(settings.qz_printer_bar || '');
+    setQzPrinterBar2(settings.qz_printer_bar_2 || '');
   }, [settings]);
 
   // Passcode gate validation
@@ -2372,7 +2376,9 @@ export default function AdminDashboard({
         enable_qz_printing: enableQzPrinting,
         qz_printer_cashier: qzPrinterCashier,
         qz_printer_kitchen: qzPrinterKitchen,
-        qz_printer_bar: qzPrinterBar
+        qz_printer_kitchen_2: qzPrinterKitchen2,
+        qz_printer_bar: qzPrinterBar,
+        qz_printer_bar_2: qzPrinterBar2
       });
       await refreshData();
       alert(language === 'ar' ? 'تم حفظ إعدادات النظام بنجاح!' : 'System settings saved successfully!');
@@ -5040,23 +5046,43 @@ export default function AdminDashboard({
                     />
                   </div>
                   <div className="form-group">
-                    <label>{language === 'ar' ? 'طابعة المطبخ' : 'Kitchen Printer'}</label>
-                    <input 
-                      type="text" 
-                      className="input-gold" 
-                      value={qzPrinterKitchen} 
-                      onChange={(e) => setQzPrinterKitchen(e.target.value)} 
-                      placeholder="e.g. Kitchen Printer"
+                    <label>{language === 'ar' ? 'طابعة المطبخ 1' : 'Kitchen Printer 1'}</label>
+                    <input
+                      type="text"
+                      className="input-gold"
+                      value={qzPrinterKitchen}
+                      onChange={(e) => setQzPrinterKitchen(e.target.value)}
+                      placeholder="e.g. Kitchen Printer 1"
                     />
                   </div>
                   <div className="form-group">
-                    <label>{language === 'ar' ? 'طابعة البار' : 'Bar Printer'}</label>
-                    <input 
-                      type="text" 
-                      className="input-gold" 
-                      value={qzPrinterBar} 
-                      onChange={(e) => setQzPrinterBar(e.target.value)} 
-                      placeholder="e.g. Bar Printer"
+                    <label>{language === 'ar' ? 'طابعة المطبخ 2 (اختياري)' : 'Kitchen Printer 2 (optional)'}</label>
+                    <input
+                      type="text"
+                      className="input-gold"
+                      value={qzPrinterKitchen2}
+                      onChange={(e) => setQzPrinterKitchen2(e.target.value)}
+                      placeholder="e.g. Kitchen Printer 2"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'طابعة البار 1' : 'Bar Printer 1'}</label>
+                    <input
+                      type="text"
+                      className="input-gold"
+                      value={qzPrinterBar}
+                      onChange={(e) => setQzPrinterBar(e.target.value)}
+                      placeholder="e.g. Bar Printer 1"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>{language === 'ar' ? 'طابعة البار 2 (اختياري)' : 'Bar Printer 2 (optional)'}</label>
+                    <input
+                      type="text"
+                      className="input-gold"
+                      value={qzPrinterBar2}
+                      onChange={(e) => setQzPrinterBar2(e.target.value)}
+                      placeholder="e.g. Bar Printer 2"
                     />
                   </div>
                   <div style={{ gridColumn: '1 / -1', fontSize: '0.85rem', color: '#ff9800' }}>

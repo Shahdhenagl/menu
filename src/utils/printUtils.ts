@@ -2,7 +2,7 @@ import type { Order, Category, Product, Printer, RestaurantSettings } from '../t
 import qz from 'qz-tray';
 import QRCode from 'qrcode';
 
-// يولّد رمز QR كصورة data-URI مدمجة (يشتغل offline ومع طباعة QZ، بدون انتظار تحميل من النت)
+// يولّد رمز QR كصورة data-URI مدمجة (يشتغل offline)
 const buildQrDataUrl = async (data: string): Promise<string> => {
   try {
     return await QRCode.toDataURL(data, { margin: 1, width: 160, errorCorrectionLevel: 'M' });
@@ -11,416 +11,252 @@ const buildQrDataUrl = async (data: string): Promise<string> => {
   }
 };
 
-const printWithQZ = async (htmlContent: string, settings: RestaurantSettings) => {
+// يطبع HTML على قائمة طابعات محددة بالاسم عبر QZ Tray (كل طابعة على حدة)
+const printWithQZ = async (htmlContent: string, targetPrinters: (string | undefined)[]): Promise<boolean> => {
+  const printers = targetPrinters.filter((p): p is string => !!p && p.trim() !== '');
+  if (printers.length === 0) {
+    console.warn('QZ: مفيش طابعة معرّفة للقسم ده.');
+    return false;
+  }
   try {
     if (!qz.websocket.isActive()) {
       await qz.websocket.connect();
     }
-    
-    const printers = [
-      settings.qz_printer_cashier,
-      settings.qz_printer_kitchen,
-      settings.qz_printer_bar
-    ].filter(p => p && p.trim() !== '');
-
-    if (printers.length === 0) {
-      console.warn("QZ Printing is enabled but no printers are configured in settings.");
-      return false;
-    }
-
-    const data = [{
-      type: 'pixel',
-      format: 'html',
-      flavor: 'plain',
-      data: htmlContent,
-      options: { pageWidth: 80, margins: 0 }
-    }];
-
+    const data = [{ type: 'pixel', format: 'html', flavor: 'plain', data: htmlContent, options: { pageWidth: 80, margins: 0 } }];
     for (const printerName of printers) {
       try {
         const config = qz.configs.create(printerName);
         await qz.print(config, data);
       } catch (printErr) {
-        console.error(`Failed to print to QZ printer: ${printerName}`, printErr);
+        console.error(`فشل الطباعة على: ${printerName}`, printErr);
       }
     }
     return true;
   } catch (err) {
-    console.error("QZ Tray connection or print error", err);
+    console.error('QZ connection/print error', err);
     return false;
   }
 };
 
+// طباعة احتياطية عبر المتصفح (لما QZ مقفول) — بتطبع على الطابعة الافتراضية
+const printViaIframe = (htmlContent: string) => {
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  document.body.appendChild(iframe);
+  iframe.contentDocument?.write(htmlContent);
+  iframe.contentDocument?.close();
+  setTimeout(() => {
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print();
+    setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 800);
+  }, 250);
+};
+
+// ستايل مشترك للتذاكر الحرارية (80mm)
+const THERMAL_BASE = `
+  @page { margin: 0; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Tahoma','Arial',sans-serif; margin:0; padding:10px 12px; width:80mm; color:#000; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .center { text-align:center; }
+  .divider { border:0; border-top:1px dashed #000; margin:8px 0; }
+  .divider.solid { border-top:2px solid #000; }
+`;
+
+// ===== تذكرة المطبخ / البار (KOT) =====
 export const printOrderTickets = async (
-  order: Order, 
-  categories: Category[], 
-  products: Product[], 
-  printers: Printer[],
+  order: Order,
+  categories: Category[],
+  products: Product[],
+  _printers: Printer[],
   language: 'ar' | 'en',
   settings?: RestaurantSettings | null
 ) => {
-  // 1. Group order items by printer
-  const itemsByPrinter: Record<string, typeof order.items> = {};
-  
+  const isAr = language === 'ar';
+
+  // 1) تقسيم الأصناف حسب القسم (مطبخ/بار) من department بتاع التصنيف
+  const kitchen: typeof order.items = [];
+  const bar: typeof order.items = [];
   order.items.forEach(item => {
     const product = products.find(p => p.name_ar === item.name_ar || p.name_en === item.name_en);
-    let printerId = 'general';
     let dept = 'restaurant';
-    
     if (product) {
       const category = categories.find(c => c.id === product.category_id);
-      if (category) {
-        dept = category.department || 'restaurant';
-        if (category.printer_id) {
-          printerId = category.printer_id;
-        } else {
-          // Fallback to the first printer in the same department
-          const deptPrinter = printers.find(p => p.department === dept);
-          if (deptPrinter) {
-            printerId = deptPrinter.id;
-          } else {
-            printerId = `general_${dept}`;
-          }
-        }
-      }
+      if (category) dept = category.department || 'restaurant';
     }
-    
-    if (!itemsByPrinter[printerId]) {
-      itemsByPrinter[printerId] = [];
-    }
-    itemsByPrinter[printerId].push(item);
+    (dept === 'bar' ? bar : kitchen).push(item);
   });
 
-  // 2. Generate and print tickets sequentially
-  const printNext = (printerIds: string[], index: number) => {
-    if (index >= printerIds.length) return;
-    
-    const pId = printerIds[index];
-    const items = itemsByPrinter[pId];
-    const printerInfo = printers.find(p => p.id === pId);
-    const stationName = printerInfo 
-      ? (language === 'ar' ? printerInfo.name_ar : printerInfo.name_en) 
-      : (language === 'ar' ? 'عام' : 'General');
-      
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-    
-    const orderTypeStr = language === 'ar' 
-      ? (order.order_type === 'takeaway' ? 'تيك أواي' : order.order_type === 'delivery' ? 'توصيل' : order.order_type === 'talabat' ? 'طلبات' : 'صالة')
-      : (order.order_type || 'Unknown');
+  const orderTypeStr = isAr
+    ? (order.order_type === 'takeaway' ? 'تيك أواي' : order.order_type === 'delivery' ? 'توصيل' : order.order_type === 'talabat' ? 'طلبات' : 'صالة')
+    : (order.order_type || 'Dine-in');
 
-    const htmlContent = `
-      <html dir="${language === 'ar' ? 'rtl' : 'ltr'}">
-        <head>
-          <title>Print Ticket - ${stationName}</title>
-          <style>
-            body { font-family: 'Courier New', Courier, monospace; padding: 20px; font-size: 14px; color: #000; }
-            .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
-            .station { font-size: 18px; font-weight: bold; text-transform: uppercase; border: 2px solid #000; padding: 5px; display: inline-block; margin-bottom: 5px;}
-            .meta { margin-bottom: 10px; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { text-align: ${language === 'ar' ? 'right' : 'left'}; padding: 4px 0; border-bottom: 1px dotted #ccc; }
-            th { border-bottom: 1px solid #000; }
-            .qty { width: 40px; text-align: center; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="station">${stationName}</div>
-            <h2>${language === 'ar' ? 'طلب رقم' : 'Order #'} ${order.id.slice(-4).toUpperCase()}</h2>
-            <div>${orderTypeStr} ${order.table_number ? `- Table ${order.table_number}` : ''}</div>
-          </div>
-          <div class="meta">
-            <div>${language === 'ar' ? 'الوقت' : 'Time'}: ${new Date(order.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}</div>
-            ${order.waiter_name ? `<div>${language === 'ar' ? 'الكابتن' : 'Waiter'}: ${order.waiter_name}</div>` : ''}
-            ${order.customer_name ? `<div>${language === 'ar' ? 'العميل' : 'Customer'}: ${order.customer_name}</div>` : ''}
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th class="qty">${language === 'ar' ? 'الكمية' : 'Qty'}</th>
-                <th>${language === 'ar' ? 'الصنف' : 'Item'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items.map(i => `
-                <tr>
-                  <td class="qty">${i.quantity}</td>
-                  <td>${language === 'ar' ? i.name_ar : i.name_en}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <div style="text-align: center; margin-top: 20px; font-size: 10px;">
-            Meridien Restaurant System
-          </div>
-        </body>
-      </html>
-    `;
+  // 2) بناء التذكرة لكل قسم موجود، وتوجيهها لطابعات القسم بس
+  const stations: { label: string; items: typeof order.items; printers: (string | undefined)[] }[] = [];
+  if (kitchen.length) stations.push({
+    label: isAr ? 'المطبخ' : 'KITCHEN',
+    items: kitchen,
+    printers: [settings?.qz_printer_kitchen, settings?.qz_printer_kitchen_2],
+  });
+  if (bar.length) stations.push({
+    label: isAr ? 'البار' : 'BAR',
+    items: bar,
+    printers: [settings?.qz_printer_bar, settings?.qz_printer_bar_2],
+  });
 
+  for (const st of stations) {
+    const rows = st.items.map(i => `
+      <div class="item">
+        <div class="q">${i.quantity}</div>
+        <div class="n">${isAr ? i.name_ar : i.name_en}</div>
+      </div>`).join('');
+
+    const html = `
+      <html dir="${isAr ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>KOT ${st.label}</title>
+      <style>${THERMAL_BASE}
+        .station { background:#000; color:#fff; text-align:center; font-size:22px; font-weight:800; letter-spacing:3px; padding:9px 4px; border-radius:5px; }
+        .ordno { text-align:center; font-size:30px; font-weight:900; margin:9px 0 2px; }
+        .sub { text-align:center; font-size:13px; margin-bottom:6px; }
+        .meta { font-size:12px; padding:6px 0; }
+        .meta div { margin:2px 0; }
+        .item { display:flex; gap:10px; align-items:center; padding:8px 0; border-bottom:1px dashed #aaa; font-size:16px; }
+        .item .q { min-width:36px; height:32px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:19px; border:2px solid #000; border-radius:6px; }
+        .item .n { flex:1; font-weight:700; line-height:1.3; }
+        .foot { text-align:center; font-size:10px; margin-top:10px; color:#333; }
+      </style></head><body>
+        <div class="station">🔔 ${st.label}</div>
+        <div class="ordno">#${order.id.slice(-4).toUpperCase()}</div>
+        <div class="sub">${orderTypeStr}${order.table_number ? ` · ${isAr ? 'ترابيزة' : 'Table'} ${order.table_number}` : ''}</div>
+        <hr class="divider"/>
+        <div class="meta">
+          <div>🕐 ${new Date(order.created_at).toLocaleString(isAr ? 'ar-EG' : 'en-US')}</div>
+          ${order.waiter_name ? `<div>👤 ${isAr ? 'الكابتن' : 'Waiter'}: <b>${order.waiter_name}</b></div>` : ''}
+          ${order.customer_name ? `<div>🧑 ${isAr ? 'العميل' : 'Customer'}: ${order.customer_name}</div>` : ''}
+        </div>
+        <hr class="divider solid"/>
+        ${rows}
+        <hr class="divider solid"/>
+        <div class="foot">${isAr ? 'مريديان — نظام الطلبات' : 'Meridien — Order System'}</div>
+      </body></html>`;
+
+    let printed = false;
     if (settings?.enable_qz_printing) {
-      printWithQZ(htmlContent, settings).then(success => {
-        if (!success) {
-          // Fallback if QZ fails
-          fallbackPrint(htmlContent, printerIds, index);
-        } else {
-          // Move to next
-          printNext(printerIds, index + 1);
-        }
-      });
-    } else {
-      fallbackPrint(htmlContent, printerIds, index);
+      printed = await printWithQZ(html, st.printers);
     }
-  };
-
-  const fallbackPrint = (htmlContent: string, printerIds: string[], index: number) => {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
-    iframe.contentDocument?.write(htmlContent);
-    iframe.contentDocument?.close();
-    
-    setTimeout(() => {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-      
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-        printNext(printerIds, index + 1);
-      }, 500);
-    }, 250);
-  };
-
-  const pIds = Object.keys(itemsByPrinter);
-  if (pIds.length > 0) {
-    printNext(pIds, 0);
+    if (!printed) printViaIframe(html);
   }
 };
 
+// ===== فاتورة العميل (الكاشير) =====
 export const printCustomerReceipt = async (
   order: Order,
   language: 'ar' | 'en',
   settings?: RestaurantSettings | null
 ) => {
   const isAr = language === 'ar';
-  
-  const orderTypeStr = isAr 
+
+  const orderTypeStr = isAr
     ? (order.order_type === 'takeaway' ? 'تيك أواي' : order.order_type === 'delivery' ? 'توصيل' : order.order_type === 'talabat' ? 'طلبات' : 'صالة')
-    : (order.order_type || 'Unknown');
+    : (order.order_type || 'Dine-in');
 
   const paymentMethodStr = order.payment_method === 'cash' ? (isAr ? 'كاش' : 'Cash') :
-                           order.payment_method === 'visa' ? (isAr ? 'فيزا' : 'Visa') :
-                           order.payment_method === 'wallet_restaurant' ? (isAr ? 'محفظة المطعم' : 'Restaurant Wallet') :
-                           order.payment_method === 'wallet_bar' ? (isAr ? 'محفظة البار' : 'Bar Wallet') :
-                           order.payment_method === 'instapay' ? (isAr ? 'إنستاباي' : 'InstaPay') :
-                           order.payment_method === 'petty_cash' ? (isAr ? 'عهدة الشريك' : 'Petty Cash') :
-                           order.payment_method === 'split' ? (isAr ? 'مقسم' : 'Split') :
-                           order.payment_method === 'deferred' ? (isAr ? 'آجل' : 'Deferred') :
-                           order.payment_method === 'hospitality' ? (isAr ? 'ضيافة' : 'Hospitality') : '';
+    order.payment_method === 'visa' ? (isAr ? 'فيزا' : 'Visa') :
+    order.payment_method === 'wallet_restaurant' ? (isAr ? 'محفظة المطعم' : 'Restaurant Wallet') :
+    order.payment_method === 'wallet_bar' ? (isAr ? 'محفظة البار' : 'Bar Wallet') :
+    order.payment_method === 'instapay' ? (isAr ? 'إنستاباي' : 'InstaPay') :
+    order.payment_method === 'petty_cash' ? (isAr ? 'عهدة الشريك' : 'Petty Cash') :
+    order.payment_method === 'split' ? (isAr ? 'مقسم' : 'Split') :
+    order.payment_method === 'deferred' ? (isAr ? 'آجل' : 'Deferred') :
+    order.payment_method === 'hospitality' ? (isAr ? 'ضيافة' : 'Hospitality') : '';
 
-  const logoHtml = settings?.logo_url 
-    ? `<div class="logo-container"><img src="${settings.logo_url}" alt="Logo" class="logo" /></div>` 
+  const logoHtml = settings?.logo_url
+    ? `<div class="logo-box"><img src="${settings.logo_url}" alt="Logo" class="logo" /></div>`
     : '';
 
-  const restaurantName = isAr ? (settings?.restaurant_name_ar || 'MERIDIEN POS') : (settings?.restaurant_name_en || 'MERIDIEN POS');
+  const restaurantName = isAr ? (settings?.restaurant_name_ar || 'MERIDIEN') : (settings?.restaurant_name_en || 'MERIDIEN');
 
-  // محتوى الـ QR: رابط المنيو (أصل الموقع) عشان العميل يطلب تاني — fallback للموقع/العنوان أو رقم الفاتورة
-  const qrContent =
-    (typeof window !== 'undefined' && window.location && window.location.origin)
-      ? window.location.origin
-      : (settings?.location_url || `Invoice ${order.id.slice(-6).toUpperCase()}`);
+  const qrContent = (typeof window !== 'undefined' && window.location?.origin)
+    ? window.location.origin
+    : (settings?.location_url || `Invoice ${order.id.slice(-6).toUpperCase()}`);
   const qrDataUrl = await buildQrDataUrl(qrContent);
   const qrHtml = qrDataUrl
-    ? `<div class="qr-box"><img src="${qrDataUrl}" alt="QR" width="90" height="90" /><div class="qr-cap">${isAr ? 'امسح لتصفّح المنيو' : 'Scan for our menu'}</div></div>`
+    ? `<div class="qr-box"><img src="${qrDataUrl}" alt="QR" /><div class="qr-cap">${isAr ? 'امسح لتصفّح المنيو' : 'Scan for our menu'}</div></div>`
     : '';
 
-  const locationHtml = settings?.location_url ? `<div class="info-line">${isAr ? 'العنوان:' : 'Address:'} ${settings.location_url}</div>` : '';
-  const phoneHtml = settings?.whatsapp_number ? `<div class="info-line">${isAr ? 'تليفون:' : 'Phone:'} ${settings.whatsapp_number}</div>` : '';
+  const locationHtml = settings?.location_url ? `<div class="info-line">📍 ${settings.location_url}</div>` : '';
+  const phoneHtml = settings?.whatsapp_number ? `<div class="info-line">📞 ${settings.whatsapp_number}</div>` : '';
 
-  const htmlContent = `
-    <html dir="${isAr ? 'rtl' : 'ltr'}">
-      <head>
-        <title>Receipt - Order ${order.id.slice(-4)}</title>
-        <style>
-          @page { margin: 0; }
-          body { 
-            font-family: 'Tahoma', 'Arial', sans-serif; 
-            margin: 0; 
-            padding: 10px; 
-            width: 80mm; 
-            font-size: 14px; 
-            color: #000; 
-            background: #fff;
-          }
-          .receipt-container {
-            width: 100%;
-            max-width: 80mm;
-            margin: 0 auto;
-          }
-          .logo-container {
-            text-align: center;
-            margin-bottom: 10px;
-          }
-          .logo {
-            max-width: 60px;
-            max-height: 60px;
-            object-fit: contain;
-          }
-          .header { 
-            text-align: center; 
-            border-bottom: 2px dashed #000; 
-            padding-bottom: 10px; 
-            margin-bottom: 10px; 
-          }
-          .restaurant-name {
-            font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 5px;
-          }
-          .info-line {
-            font-size: 12px;
-            margin-bottom: 2px;
-          }
-          .meta { 
-            margin-bottom: 15px; 
-            font-size: 13px; 
-          }
-          .meta div {
-            margin-bottom: 4px;
-          }
-          table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin-bottom: 15px;
-          }
-          th, td { 
-            text-align: ${isAr ? 'right' : 'left'}; 
-            padding: 6px 0; 
-            border-bottom: 1px dotted #ccc; 
-          }
-          th { 
-            border-bottom: 1px solid #000; 
-            font-size: 13px;
-          }
-          .qty { width: 40px; text-align: center; font-weight: bold; }
-          .price { text-align: ${isAr ? 'left' : 'right'}; width: 70px; }
-          .totals {
-            border-top: 2px dashed #000;
-            padding-top: 10px;
-            margin-top: 10px;
-          }
-          .total-line {
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-            margin-bottom: 5px;
-          }
-          .grand-total {
-            font-size: 18px;
-            font-weight: bold;
-            border-top: 1px solid #000;
-            padding-top: 5px;
-            margin-top: 5px;
-          }
-          .footer {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 12px;
-            border-top: 1px dashed #000;
-            padding-top: 10px;
-          }
-          .qr-box {
-            margin: 15px auto 5px auto;
-            text-align: center;
-          }
-          .qr-box img {
-            display: block;
-            margin: 0 auto;
-            width: 90px;
-            height: 90px;
-          }
-          .qr-cap {
-            font-size: 10px;
-            color: #444;
-            margin-top: 4px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="receipt-container">
-          <div class="header">
-            ${logoHtml}
-            <div class="restaurant-name">${restaurantName}</div>
-            ${phoneHtml}
-            ${locationHtml}
-          </div>
-          
-          <div class="meta">
-            <div><strong>${isAr ? 'رقم الفاتورة:' : 'Invoice #:'}</strong> ${order.id.slice(-6).toUpperCase()}</div>
-            <div><strong>${isAr ? 'التاريخ:' : 'Date:'}</strong> ${new Date(order.created_at).toLocaleString(isAr ? 'ar-EG' : 'en-US')}</div>
-            <div><strong>${isAr ? 'نوع الطلب:' : 'Order Type:'}</strong> ${orderTypeStr} ${order.table_number ? `(${order.table_number})` : ''}</div>
-            ${order.waiter_name ? `<div><strong>${isAr ? 'الكابتن:' : 'Cashier/Waiter:'}</strong> ${order.waiter_name}</div>` : ''}
-            ${order.customer_name ? `<div><strong>${isAr ? 'العميل:' : 'Customer:'}</strong> ${order.customer_name}</div>` : ''}
-            ${paymentMethodStr ? `<div><strong>${isAr ? 'طريقة الدفع:' : 'Payment:'}</strong> ${paymentMethodStr}</div>` : ''}
-          </div>
+  const rows = order.items.map(i => `
+    <tr>
+      <td class="q">${i.quantity}×</td>
+      <td class="n">${isAr ? i.name_ar : i.name_en}</td>
+      <td class="p">${(i.price * i.quantity).toFixed(2)}</td>
+    </tr>`).join('');
 
-          <table>
-            <thead>
-              <tr>
-                <th class="qty">${isAr ? 'الكمية' : 'Qty'}</th>
-                <th>${isAr ? 'الصنف' : 'Item'}</th>
-                <th class="price">${isAr ? 'السعر' : 'Price'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${order.items.map(i => `
-                <tr>
-                  <td class="qty">${i.quantity}</td>
-                  <td>${isAr ? i.name_ar : i.name_en}</td>
-                  <td class="price">${(i.price * i.quantity).toFixed(2)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+  const html = `
+    <html dir="${isAr ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>Receipt #${order.id.slice(-4)}</title>
+    <style>${THERMAL_BASE}
+      .logo-box { text-align:center; margin-bottom:6px; }
+      .logo { max-width:64px; max-height:64px; object-fit:contain; }
+      .rname { text-align:center; font-size:22px; font-weight:900; letter-spacing:2px; margin:2px 0 4px; }
+      .info-line { text-align:center; font-size:11px; color:#222; margin:1px 0; }
+      .ticket-type { text-align:center; margin:8px 0; }
+      .ticket-type span { display:inline-block; border:2px solid #000; border-radius:6px; padding:3px 14px; font-weight:800; font-size:14px; letter-spacing:1px; }
+      .meta { font-size:12px; }
+      .meta div { display:flex; justify-content:space-between; margin:3px 0; }
+      .meta b { font-weight:700; }
+      table { width:100%; border-collapse:collapse; margin:6px 0; }
+      thead th { font-size:12px; border-bottom:2px solid #000; padding:5px 0; text-align:${isAr ? 'right' : 'left'}; }
+      thead th.p { text-align:${isAr ? 'left' : 'right'}; }
+      tbody td { padding:6px 0; border-bottom:1px dashed #ccc; font-size:13px; vertical-align:top; }
+      td.q { width:34px; font-weight:800; }
+      td.n { font-weight:600; line-height:1.35; }
+      td.p { width:66px; text-align:${isAr ? 'left' : 'right'}; font-weight:700; }
+      .total { display:flex; justify-content:space-between; align-items:center; background:#000; color:#fff; border-radius:6px; padding:9px 12px; margin-top:8px; }
+      .total .lbl { font-size:14px; font-weight:700; }
+      .total .val { font-size:19px; font-weight:900; }
+      .qr-box { text-align:center; margin:12px 0 4px; }
+      .qr-box img { width:92px; height:92px; display:block; margin:0 auto; }
+      .qr-cap { font-size:10px; color:#444; margin-top:3px; }
+      .foot { text-align:center; margin-top:10px; font-size:12px; }
+      .foot .thanks { font-weight:800; font-size:14px; }
+      .foot .brand { font-size:9px; color:#666; margin-top:6px; }
+    </style></head><body>
+      ${logoHtml}
+      <div class="rname">${restaurantName}</div>
+      ${phoneHtml}
+      ${locationHtml}
+      <div class="ticket-type"><span>${orderTypeStr}${order.table_number ? ` · ${order.table_number}` : ''}</span></div>
+      <hr class="divider"/>
+      <div class="meta">
+        <div><span>${isAr ? 'فاتورة' : 'Invoice'}</span><b>#${order.id.slice(-6).toUpperCase()}</b></div>
+        <div><span>${isAr ? 'التاريخ' : 'Date'}</span><b>${new Date(order.created_at).toLocaleString(isAr ? 'ar-EG' : 'en-US')}</b></div>
+        ${order.waiter_name ? `<div><span>${isAr ? 'الكابتن' : 'Waiter'}</span><b>${order.waiter_name}</b></div>` : ''}
+        ${order.customer_name ? `<div><span>${isAr ? 'العميل' : 'Customer'}</span><b>${order.customer_name}</b></div>` : ''}
+        ${paymentMethodStr ? `<div><span>${isAr ? 'الدفع' : 'Payment'}</span><b>${paymentMethodStr}</b></div>` : ''}
+      </div>
+      <table>
+        <thead><tr>
+          <th class="q">${isAr ? 'كمية' : 'Qty'}</th>
+          <th>${isAr ? 'الصنف' : 'Item'}</th>
+          <th class="p">${isAr ? 'السعر' : 'Price'}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="total">
+        <span class="lbl">${isAr ? 'الإجمالي المطلوب' : 'Grand Total'}</span>
+        <span class="val">${order.total_price.toFixed(2)} ${isAr ? 'ج.م' : 'EGP'}</span>
+      </div>
+      ${qrHtml}
+      <hr class="divider"/>
+      <div class="foot">
+        <div class="thanks">${isAr ? 'شكراً لزيارتكم! 🌟' : 'Thank you for your visit! 🌟'}</div>
+        <div class="brand">Powered by Meridien POS</div>
+      </div>
+    </body></html>`;
 
-          <div class="totals">
-            <div class="total-line grand-total">
-              <span>${isAr ? 'الإجمالي المطلوب:' : 'Grand Total:'}</span>
-              <span>${order.total_price.toFixed(2)} ${isAr ? 'ج.م' : 'EGP'}</span>
-            </div>
-          </div>
-          
-          ${qrHtml}
-
-          <div class="footer">
-            <div>${isAr ? 'شكراً لزيارتكم!' : 'Thank you for your visit!'}</div>
-            <div style="font-size: 10px; margin-top: 10px; color: #555;">Powered by Meridien POS</div>
-          </div>
-        </div>
-      </body>
-    </html>
-  `;
-
+  let printed = false;
   if (settings?.enable_qz_printing) {
-    const success = await printWithQZ(htmlContent, settings);
-    if (success) return; // Stop here if QZ was successful
+    printed = await printWithQZ(html, [settings?.qz_printer_cashier]);
   }
-
-  // Fallback to normal printing
-  const iframe = document.createElement('iframe');
-  iframe.style.display = 'none';
-  document.body.appendChild(iframe);
-  
-  iframe.contentDocument?.write(htmlContent);
-  iframe.contentDocument?.close();
-  
-  setTimeout(() => {
-    iframe.contentWindow?.focus();
-    iframe.contentWindow?.print();
-    
-    setTimeout(() => {
-      document.body.removeChild(iframe);
-    }, 500);
-  }, 250);
+  if (!printed) printViaIframe(html);
 };
