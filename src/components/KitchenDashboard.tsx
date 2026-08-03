@@ -1,7 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase, db } from '../lib/supabase';
-import type { Order, InventoryItem, ProductRecipe } from '../types';
-import { ChefHat, CheckCircle2, AlertTriangle, Clock, X, Package, Search } from 'lucide-react';
+import type { Order, OrderItem, InventoryItem, ProductRecipe, Category, Product, RestaurantSettings } from '../types';
+import { ChefHat, CheckCircle2, AlertTriangle, Clock, X, Package, Search, Wine, MapPin } from 'lucide-react';
+
+// ألوان الصالات — كل صالة بتاخد لون ثابت حسب ترتيبها في الإعدادات
+const HALL_COLORS = ['#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#3b82f6', '#14b8a6'];
+const TYPE_COLORS: Record<string, string> = {
+  takeaway: '#a855f7',
+  delivery: '#0ea5e9',
+  talabat: '#f97316',
+  website: '#22c55e',
+};
 
 interface KitchenDashboardProps {
   onClose?: () => void;
@@ -13,21 +22,31 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [recipes, setRecipes] = useState<ProductRecipe[]>([]);
   const [mfgOrders, setMfgOrders] = useState<any[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [settings, setSettings] = useState<RestaurantSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [requestedOrders, setRequestedOrders] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<'orders' | 'inventory'>('orders');
+  // تبويب المطبخ / تبويب البار — كل واحد بيعرض أصنافه هو بس (زي الطباعة بالظبط)
+  const [activeTab, setActiveTab] = useState<'kitchen' | 'bar' | 'inventory'>('kitchen');
   const [searchQuery, setSearchQuery] = useState('');
 
   const fetchData = async () => {
     try {
-      const [ords, inv, recps, mOrds] = await Promise.all([
+      const [ords, inv, recps, mOrds, cats, prods, sets] = await Promise.all([
         db.getOrders(),
         db.getInventoryItems(),
         supabase ? supabase.from('product_recipes').select('*').then(res => res.data || []) : Promise.resolve([]),
-        db.getManufacturingOrders()
+        db.getManufacturingOrders(),
+        db.getCategories(),
+        db.getProducts(),
+        db.getSettings(),
       ]);
       setOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing'));
       setInventory(inv);
+      setCategories(cats);
+      setProducts(prods);
+      setSettings(sets);
       setMfgOrders(mOrds.filter(o => o.requested_by.includes('المطبخ') || o.requested_by.includes('Kitchen')));
       
       if (Array.isArray(recps) && recps.length > 0) {
@@ -73,6 +92,59 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
       supabase?.removeChannel(channel);
     };
   }, [language]);
+
+  // ===== تقسيم الأصناف على المطبخ/البار — نفس منطق الطباعة بالظبط =====
+  // بندوّر على المنتج باسمه، ومنه على التصنيف، ومنه على القسم (bar أو غيره = مطبخ)
+  const departmentOfItem = (item: OrderItem): 'kitchen' | 'bar' => {
+    const product = products.find(p => p.name_ar === item.name_ar || p.name_en === item.name_en);
+    if (!product) return 'kitchen';
+    const category = categories.find(c => c.id === product.category_id);
+    return category?.department === 'bar' ? 'bar' : 'kitchen';
+  };
+
+  const itemsForStation = (order: Order, station: 'kitchen' | 'bar'): OrderItem[] =>
+    order.items.filter(i => departmentOfItem(i) === station);
+
+  // أوردرات التبويب الحالي: اللي فيها أصناف تخص القسم ده بس
+  const stationOrders = useMemo(() => {
+    if (activeTab === 'inventory') return [];
+    return orders
+      .map(o => ({ order: o, items: itemsForStation(o, activeTab) }))
+      .filter(x => x.items.length > 0);
+  }, [orders, activeTab, products, categories]);
+
+  const kitchenCount = useMemo(
+    () => orders.filter(o => itemsForStation(o, 'kitchen').length > 0).length,
+    [orders, products, categories]
+  );
+  const barCount = useMemo(
+    () => orders.filter(o => itemsForStation(o, 'bar').length > 0).length,
+    [orders, products, categories]
+  );
+
+  // ===== لون وعنوان كل أوردر حسب الصالة / نوع الطلب =====
+  const hallColor = (hall?: string): string => {
+    if (!hall) return 'var(--gold-primary)';
+    const halls = settings?.halls || [];
+    const idx = halls.findIndex(h => h.name === hall);
+    if (idx >= 0) return HALL_COLORS[idx % HALL_COLORS.length];
+    // صالة مش موجودة في الإعدادات: لون ثابت مشتق من اسمها
+    let hash = 0;
+    for (let i = 0; i < hall.length; i++) hash = (hash * 31 + hall.charCodeAt(i)) >>> 0;
+    return HALL_COLORS[hash % HALL_COLORS.length];
+  };
+
+  const orderAccent = (o: Order): string =>
+    o.hall ? hallColor(o.hall) : (TYPE_COLORS[o.order_type || ''] || 'var(--gold-primary)');
+
+  const orderTitle = (o: Order): string => {
+    const ar = language === 'ar';
+    if (o.order_type === 'takeaway') return ar ? 'تيك أواي' : 'Takeaway';
+    if (o.order_type === 'delivery') return ar ? 'دليفري' : 'Delivery';
+    if (o.order_type === 'talabat') return ar ? 'طلبات' : 'Talabat';
+    if (o.order_type === 'website') return ar ? 'موقع إلكتروني' : 'Website';
+    return `${ar ? 'طاولة' : 'Table'} ${o.table_number}`;
+  };
 
   // حساب النواقص بشكل تراكمي (FIFO): الطلبات الأقدم تحجز الخامة أولاً، فالطلب الأحدث
   // يشوف الرصيد المتبقي فعلاً بعد خصم احتياجات الطلبات اللي قبله — يمنع إظهار نفس الكمية
@@ -186,13 +258,22 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', background: '#222', padding: '0.5rem', borderRadius: '12px' }}>
-            <button 
-              onClick={() => setActiveTab('orders')}
-              style={{ padding: '0.5rem 1rem', background: activeTab === 'orders' ? 'var(--gold-primary)' : 'transparent', color: activeTab === 'orders' ? '#000' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease' }}>
-              {language === 'ar' ? 'الطلبات' : 'Orders'}
+          <div style={{ display: 'flex', gap: '0.5rem', background: '#222', padding: '0.5rem', borderRadius: '12px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setActiveTab('kitchen')}
+              style={{ padding: '0.5rem 1rem', background: activeTab === 'kitchen' ? 'var(--gold-primary)' : 'transparent', color: activeTab === 'kitchen' ? '#000' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <ChefHat size={16} />
+              {language === 'ar' ? 'المطبخ' : 'Kitchen'}
+              <span style={{ background: activeTab === 'kitchen' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.12)', borderRadius: '999px', padding: '0 0.5rem', fontSize: '0.8rem' }}>{kitchenCount}</span>
             </button>
-            <button 
+            <button
+              onClick={() => setActiveTab('bar')}
+              style={{ padding: '0.5rem 1rem', background: activeTab === 'bar' ? '#ec4899' : 'transparent', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Wine size={16} />
+              {language === 'ar' ? 'البار' : 'Bar'}
+              <span style={{ background: 'rgba(255,255,255,0.15)', borderRadius: '999px', padding: '0 0.5rem', fontSize: '0.8rem' }}>{barCount}</span>
+            </button>
+            <button
               onClick={() => setActiveTab('inventory')}
               style={{ padding: '0.5rem 1rem', background: activeTab === 'inventory' ? 'var(--gold-primary)' : 'transparent', color: activeTab === 'inventory' ? '#000' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease' }}>
               {language === 'ar' ? 'المخزون والنواقص' : 'Inventory & Shortages'}
@@ -206,33 +287,59 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
         </div>
       </div>
 
-      {activeTab === 'orders' && (
+      {/* دليل ألوان الصالات */}
+      {(activeTab === 'kitchen' || activeTab === 'bar') && (settings?.halls?.length || 0) > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem', background: '#1a1a1a', padding: '0.8rem 1.2rem', borderRadius: '12px', border: '1px solid #333' }}>
+          <span style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>{language === 'ar' ? 'ألوان الصالات:' : 'Hall colours:'}</span>
+          {(settings?.halls || []).map(h => (
+            <span key={h.name} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem' }}>
+              <span style={{ width: '14px', height: '14px', borderRadius: '4px', background: hallColor(h.name), display: 'inline-block' }} />
+              {h.name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {(activeTab === 'kitchen' || activeTab === 'bar') && (
         <div className="kitchen-orders-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(330px, 100%), 1fr))', gap: '1.5rem' }}>
-          {orders.map(order => {
+          {stationOrders.map(({ order, items: stationItems }) => {
             const shortages = shortagesByOrder[order.id] || [];
             const hasShortages = shortages.length > 0;
             const hasRequested = hasRequestedShortage(order);
             const isPreparing = order.status === 'preparing';
+            const accent = orderAccent(order);
 
             return (
-              <div key={order.id} style={{ 
-              background: '#1a1a1a', 
-              borderRadius: '15px', 
-              display: 'flex', 
+              <div key={order.id} style={{
+              background: '#1a1a1a',
+              borderRadius: '15px',
+              display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              border: isPreparing ? '2px solid rgba(59,130,246,0.6)' : '1px solid rgba(212,175,55,0.3)',
-              boxShadow: isPreparing ? '0 0 20px rgba(59,130,246,0.2)' : 'none',
+              // اللون بتاع الصالة على حدود الكارت كلها عشان يبان من بعيد
+              border: `2px solid ${accent}`,
+              borderTop: `6px solid ${accent}`,
+              boxShadow: isPreparing ? `0 0 20px ${accent}55` : 'none',
               transition: 'all 0.3s ease'
             }}>
-              
+
               {/* Order Header */}
-              <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isPreparing ? 'rgba(59,130,246,0.1)' : 'rgba(212,175,55,0.05)' }}>
+              <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: `${accent}1a` }}>
                 <div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-gray)', display: 'block', marginBottom: '0.2rem' }}>#{order.id.slice(-6)}</span>
                   <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>
-                    {order.order_type === 'takeaway' ? (language === 'ar' ? 'تيك أواي' : 'Takeaway') : order.order_type === 'delivery' ? (language === 'ar' ? 'دليفري' : 'Delivery') : order.order_type === 'website' ? (language === 'ar' ? 'موقع إلكتروني' : 'Website') : `${language === 'ar' ? 'طاولة' : 'Table'} ${order.table_number}`}
+                    {orderTitle(order)}
                   </span>
+                  {/* اسم الصالة */}
+                  {order.hall && (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.4rem',
+                      background: accent, color: '#000', fontWeight: 'bold',
+                      padding: '0.25rem 0.7rem', borderRadius: '999px', fontSize: '0.9rem',
+                    }}>
+                      <MapPin size={14} /> {order.hall}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <span style={{ 
@@ -255,15 +362,24 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
               {/* Order Items */}
               <div style={{ padding: '1.2rem', flex: 1 }}>
                 <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1rem 0', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {order.items.map((item, idx) => (
+                  {/* أصناف القسم ده بس — زي التذكرة المطبوعة بالظبط */}
+                  {stationItems.map((item, idx) => (
                     <li key={idx} style={{ display: 'flex', alignItems: 'center', background: '#222', padding: '0.8rem', borderRadius: '8px' }}>
                       <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'white' }}>
-                        <span style={{ color: 'var(--gold-primary)', marginInlineEnd: '0.8rem' }}>{item.quantity}x</span>
+                        <span style={{ color: accent, marginInlineEnd: '0.8rem' }}>{item.quantity}x</span>
                         {language === 'ar' ? item.name_ar : item.name_en}
                       </span>
                     </li>
                   ))}
                 </ul>
+                {/* تنبيه إن باقي الأوردر عند القسم التاني */}
+                {stationItems.length < order.items.length && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)', marginBottom: '0.8rem' }}>
+                    {language === 'ar'
+                      ? `+ ${order.items.length - stationItems.length} صنف في ${activeTab === 'kitchen' ? 'البار' : 'المطبخ'}`
+                      : `+ ${order.items.length - stationItems.length} item(s) at the ${activeTab === 'kitchen' ? 'bar' : 'kitchen'}`}
+                  </div>
+                )}
 
                 {/* Shortages Section */}
                 {hasShortages && order.status === 'pending' && (
@@ -351,10 +467,14 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
             </div>
           );
         })}
-        {orders.length === 0 && (
+        {stationOrders.length === 0 && (
           <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '5rem 2rem', color: 'var(--text-gray)' }}>
             <CheckCircle2 size={64} style={{ marginBottom: '1rem', opacity: 0.2 }} />
-            <p style={{ fontSize: '1.2rem' }}>{language === 'ar' ? 'لا يوجد طلبات حالياً في المطبخ' : 'No active orders in kitchen'}</p>
+            <p style={{ fontSize: '1.2rem' }}>
+              {language === 'ar'
+                ? `لا يوجد طلبات حالياً في ${activeTab === 'kitchen' ? 'المطبخ' : 'البار'}`
+                : `No active orders in the ${activeTab === 'kitchen' ? 'kitchen' : 'bar'}`}
+            </p>
           </div>
         )}
         </div>

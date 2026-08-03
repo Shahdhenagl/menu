@@ -3,7 +3,8 @@ import type { Category, Product, Order, RestaurantSettings, OrderItem, Expense, 
 
 import { db, supabase } from '../lib/supabase';
 import { warehouseHoldsItem, warehouseValue, warehouseStock } from '../lib/warehouse';
-import { printOrderTickets, printCustomerReceipt, listQzPrinters } from '../utils/printUtils';
+import { printOrderTickets, printCustomerReceipt, listQzPrinters, getDevicePrinters, saveDevicePrinters } from '../utils/printUtils';
+import type { DevicePrinters } from '../utils/printUtils';
 import { compressImage } from '../utils/imageUtils';
 import * as XLSX from 'xlsx';
 
@@ -168,6 +169,12 @@ export default function AdminDashboard({
   const [qzPrinterBar2, setQzPrinterBar2] = useState(settings.qz_printer_bar_2 || '');
   const [detectedPrinters, setDetectedPrinters] = useState<string[]>([]);
   const [detectingPrinters, setDetectingPrinters] = useState(false);
+  // طابعات خاصة بالجهاز ده (محفوظة محليًا، مش في الداتا بيز المشتركة)
+  const [devicePrinters, setDevicePrinters] = useState<DevicePrinters>(() => getDevicePrinters());
+  const handleDevicePrintersChange = (next: DevicePrinters) => {
+    setDevicePrinters(next);
+    saveDevicePrinters(next); // بيتحفظ فورًا — مالوش علاقة بزرار حفظ الإعدادات
+  };
 
   const handleDetectPrinters = async () => {
     setDetectingPrinters(true);
@@ -5179,6 +5186,49 @@ export default function AdminDashboard({
                   <div style={{ gridColumn: '1 / -1', fontSize: '0.85rem', color: '#ff9800' }}>
                     {language === 'ar' ? 'ملاحظة: دوسي "اكتشف الطابعات" وبعدين اختاري كل طابعة من القائمة (الاسم بيتحط صح تلقائيًا حتى لو عربي). لازم برنامج QZ Tray يكون شغّال في الخلفية.' : 'Note: Click "Detect Printers" then pick each one from the list (the exact name — even Arabic — is filled in automatically). QZ Tray must be running in the background.'}
                   </div>
+                </div>
+              )}
+
+              {/* ===== طابعات الجهاز ده فقط ===== */}
+              {enableQzPrinting && (
+                <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.3)', padding: '1rem', borderRadius: '10px', marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-color)', marginBottom: '0.75rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!devicePrinters.enabled}
+                      onChange={(e) => handleDevicePrintersChange({ ...devicePrinters, enabled: e.target.checked })}
+                      style={{ width: '18px', height: '18px' }}
+                    />
+                    <b>{language === 'ar' ? 'استخدم طابعات مختلفة على الجهاز ده' : 'Use different printers on THIS device'}</b>
+                  </label>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-gray)', margin: '0 0 1rem 0' }}>
+                    {language === 'ar'
+                      ? 'الأسماء اللي فوق مشتركة بين كل الأجهزة. لو الجهاز ده متوصل بطابعات بأسماء مختلفة، فعّل الاختيار ده واكتب أسماءه هنا — الإعداد ده محفوظ على الجهاز ده لوحده ومش بيأثر على باقي الأجهزة، وبيتحفظ فورًا من غير ما تدوس "حفظ".'
+                      : 'The names above are shared by every device. If this machine has printers with different names, enable this and enter them here — it is stored on this device only and saves instantly.'}
+                  </p>
+                  {devicePrinters.enabled && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
+                      {([
+                        ['qz_printer_cashier', language === 'ar' ? 'طابعة الكاشير' : 'Cashier Printer'],
+                        ['qz_printer_kitchen', language === 'ar' ? 'طابعة المطبخ 1' : 'Kitchen Printer 1'],
+                        ['qz_printer_kitchen_2', language === 'ar' ? 'طابعة المطبخ 2' : 'Kitchen Printer 2'],
+                        ['qz_printer_bar', language === 'ar' ? 'طابعة البار 1' : 'Bar Printer 1'],
+                        ['qz_printer_bar_2', language === 'ar' ? 'طابعة البار 2' : 'Bar Printer 2'],
+                      ] as [keyof DevicePrinters, string][]).map(([key, lbl]) => (
+                        <div className="form-group" key={key}>
+                          <label>{lbl}</label>
+                          <input
+                            type="text"
+                            className="input-gold"
+                            list="qz-printers-list"
+                            value={(devicePrinters[key] as string) || ''}
+                            onChange={(e) => handleDevicePrintersChange({ ...devicePrinters, [key]: e.target.value })}
+                            placeholder={language === 'ar' ? 'سيب فاضي = استخدم المشترك' : 'Empty = use the shared one'}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

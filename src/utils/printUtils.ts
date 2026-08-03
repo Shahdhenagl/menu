@@ -14,9 +14,59 @@ const SETTINGS_TTL_MS = 60_000;
 const SETTINGS_TIMEOUT_MS = 2500;
 let settingsCache: { at: number; value: RestaurantSettings } | null = null;
 
+// ===== طابعات خاصة بالجهاز ده =====
+// أسماء الطابعات في إعدادات المطعم مشتركة بين كل الأجهزة. لكن كل فرع/جهاز ممكن
+// تكون طابعاته بأسماء مختلفة، فبنسمح لكل جهاز يحفظ أسماءه محليًا (localStorage)
+// وهي بتتغلّب على الإعدادات المشتركة على الجهاز ده بس.
+export const DEVICE_PRINTERS_KEY = 'meridien_device_printers';
+
+export type DevicePrinters = {
+  enabled?: boolean; // مفعّل يعني استخدم أسماء الجهاز ده بدل المشتركة
+  qz_printer_cashier?: string;
+  qz_printer_kitchen?: string;
+  qz_printer_kitchen_2?: string;
+  qz_printer_bar?: string;
+  qz_printer_bar_2?: string;
+};
+
+const PRINTER_KEYS = [
+  'qz_printer_cashier', 'qz_printer_kitchen', 'qz_printer_kitchen_2',
+  'qz_printer_bar', 'qz_printer_bar_2',
+] as const;
+
+export const getDevicePrinters = (): DevicePrinters => {
+  try {
+    const raw = localStorage.getItem(DEVICE_PRINTERS_KEY);
+    return raw ? (JSON.parse(raw) as DevicePrinters) : {};
+  } catch {
+    return {};
+  }
+};
+
+export const saveDevicePrinters = (value: DevicePrinters) => {
+  try {
+    localStorage.setItem(DEVICE_PRINTERS_KEY, JSON.stringify(value));
+  } catch (err) {
+    console.error('تعذّر حفظ طابعات الجهاز', err);
+  }
+};
+
+/** بيركّب أسماء طابعات الجهاز فوق الإعدادات المشتركة (الفاضي بيتجاهل). */
+const applyDevicePrinters = (s: RestaurantSettings | null): RestaurantSettings | null => {
+  if (!s) return s;
+  const dev = getDevicePrinters();
+  if (!dev.enabled) return s;
+  const merged: RestaurantSettings = { ...s };
+  PRINTER_KEYS.forEach(k => {
+    const v = dev[k];
+    if (v && v.trim()) (merged as any)[k] = v.trim();
+  });
+  return merged;
+};
+
 const freshSettings = async (fallback?: RestaurantSettings | null): Promise<RestaurantSettings | null> => {
   const now = Date.now();
-  if (settingsCache && now - settingsCache.at < SETTINGS_TTL_MS) return settingsCache.value;
+  if (settingsCache && now - settingsCache.at < SETTINGS_TTL_MS) return applyDevicePrinters(settingsCache.value);
   try {
     const s = await Promise.race([
       db.getSettings(),
@@ -24,12 +74,12 @@ const freshSettings = async (fallback?: RestaurantSettings | null): Promise<Rest
     ]);
     if (s) {
       settingsCache = { at: now, value: s };
-      return s;
+      return applyDevicePrinters(s);
     }
     console.warn('QZ: جلب الإعدادات اتأخر — بنطبع بالإعدادات المحمّلة.');
-    return fallback || settingsCache?.value || null;
+    return applyDevicePrinters(fallback || settingsCache?.value || null);
   } catch {
-    return fallback || settingsCache?.value || null;
+    return applyDevicePrinters(fallback || settingsCache?.value || null);
   }
 };
 
