@@ -1604,6 +1604,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           }}>{language === 'ar' ? 'تعديل' : 'Edit'}</button>
                           
                           {order.status === 'delivered' ? (
+                            <>
+                            {/* فاتورة مبدئية يشوفها العميل قبل ما نحصّل منه */}
+                            <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#a855f7', color: '#fff' }} onClick={() => {
+                              playClickSound();
+                              printCustomerReceipt(order, language, settings, { preBill: true });
+                            }}>{language === 'ar' ? 'طباعة الفاتورة' : 'Print Bill'}</button>
                             <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#2ecc71', color: '#000' }} onClick={() => {
                               setCollectPaymentOrder(order);
                               setPayCash('');
@@ -1615,6 +1621,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               setPayIsDeferred(false);
                               setPayCustomerId(order.customer_id || '');
                             }}>{language === 'ar' ? 'تحصيل الدفع' : 'Collect Payment'}</button>
+                            </>
                           ) : order.status === 'prepared' ? (
                             <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#f39c12', color: '#000' }} onClick={async () => {
                               await db.updateOrderStatus(order.id, 'delivered', selectedWaiter?.name);
@@ -1849,6 +1856,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       {collectPaymentOrder.total_price.toFixed(2)} EGP
                     </span>
                   </div>
+                  {/* طباعة الفاتورة للعميل يشوفها قبل ما يدفع */}
+                  <button
+                    className="pos-btn-outline"
+                    style={{ width: '100%', marginTop: '1rem', padding: '0.6rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                    onClick={() => {
+                      playClickSound();
+                      printCustomerReceipt(collectPaymentOrder, language, settings, { preBill: true });
+                    }}
+                  >
+                    <PrinterIcon size={18} />
+                    {language === 'ar' ? 'طباعة الفاتورة للعميل (قبل الدفع)' : 'Print bill for customer (before payment)'}
+                  </button>
                 </div>
 
                 {/* Input Breakdown Fields */}

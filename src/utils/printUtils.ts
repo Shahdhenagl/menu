@@ -46,6 +46,10 @@ const toPrintableLogo = (src: string): Promise<string> =>
     }
   });
 
+// لينك المنيو اللي بيتحوّل QR على الفاتورة — ثابت عشان يفضل صح حتى لو الطباعة
+// اتعملت من localhost أو من دومين تاني
+const MENU_URL = 'https://menu-five-navy.vercel.app/menu';
+
 // يولّد رمز QR كصورة data-URI مدمجة (يشتغل offline)
 const buildQrDataUrl = async (data: string): Promise<string> => {
   try {
@@ -222,10 +226,13 @@ export const printOrderTickets = async (
 export const printCustomerReceipt = async (
   order: Order,
   language: 'ar' | 'en',
-  settingsArg?: RestaurantSettings | null
+  settingsArg?: RestaurantSettings | null,
+  opts?: { preBill?: boolean }
 ) => {
   const isAr = language === 'ar';
   const settings = await freshSettings(settingsArg);
+  // فاتورة مبدئية: بيشوفها العميل قبل الدفع — من غير طريقة دفع وعليها ختم "غير مدفوعة"
+  const isPreBill = !!opts?.preBill;
 
   const orderTypeStr = isAr
     ? (order.order_type === 'takeaway' ? 'تيك أواي' : order.order_type === 'delivery' ? 'توصيل' : order.order_type === 'talabat' ? 'طلبات' : 'صالة')
@@ -249,10 +256,7 @@ export const printCustomerReceipt = async (
   // اسم المطعم بالإنجليزي دايمًا على الفاتورة
   const restaurantName = settings?.restaurant_name_en || 'MERIDIEN';
 
-  const qrContent = (typeof window !== 'undefined' && window.location?.origin)
-    ? window.location.origin + '/menu'
-    : (settings?.location_url || `Invoice ${order.id.slice(-6).toUpperCase()}`);
-  const qrDataUrl = await buildQrDataUrl(qrContent);
+  const qrDataUrl = await buildQrDataUrl(MENU_URL);
   const qrHtml = qrDataUrl
     ? `<div class="qr-box"><img src="${qrDataUrl}" alt="QR" /><div class="qr-cap">${isAr ? 'امسح لتصفّح المنيو' : 'Scan for our menu'}</div></div>`
     : '';
@@ -307,6 +311,7 @@ export const printCustomerReceipt = async (
       .info-line.ltr { direction:ltr; }
       .ticket-type { text-align:center; margin:8px 0; }
       .ticket-type span { display:inline-block; border:2px solid #000; border-radius:6px; padding:3px 14px; font-weight:800; font-size:14px; letter-spacing:1px; }
+      .prebill { text-align:center; font-size:15px; font-weight:900; letter-spacing:1px; padding:6px 4px; margin:6px 0; border:3px double #000; border-radius:6px; }
       .meta { font-size:12px; }
       .meta div { display:flex; justify-content:space-between; margin:3px 0; }
       .meta b { font-weight:700; }
@@ -340,13 +345,14 @@ export const printCustomerReceipt = async (
       ${phoneHtml}
       ${locationHtml}
       <div class="ticket-type"><span>${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'طاولة' : 'Table'} ${order.table_number}` : ''}</span></div>
+      ${isPreBill ? `<div class="prebill">${isAr ? 'فاتورة مبدئية — غير مدفوعة' : 'PRE-BILL — NOT PAID'}</div>` : ''}
       <hr class="divider"/>
       <div class="meta">
         <div><span>${isAr ? 'فاتورة' : 'Invoice'}</span><b>#${order.id.slice(-6).toUpperCase()}</b></div>
         <div><span>${isAr ? 'التاريخ' : 'Date'}</span><b>${new Date(order.created_at).toLocaleString(isAr ? 'ar-EG' : 'en-US')}</b></div>
         ${order.waiter_name ? `<div><span>${isAr ? 'الكابتن' : 'Waiter'}</span><b>${order.waiter_name}</b></div>` : ''}
         ${order.customer_name ? `<div><span>${isAr ? 'العميل' : 'Customer'}</span><b>${order.customer_name}</b></div>` : ''}
-        ${paymentMethodStr ? `<div><span>${isAr ? 'الدفع' : 'Payment'}</span><b>${paymentMethodStr}</b></div>` : ''}
+        ${!isPreBill && paymentMethodStr ? `<div><span>${isAr ? 'الدفع' : 'Payment'}</span><b>${paymentMethodStr}</b></div>` : ''}
       </div>
       <table>
         <thead><tr>
