@@ -658,12 +658,28 @@ export const db = {
     if (supabase) {
       try {
         const currentSettings = await this.getSettings();
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('restaurant_settings')
           .update(settings)
           .eq('id', currentSettings.id)
           .select()
           .single();
+        if (error) {
+          // ممكن يكون عمود جديد لسه مش متضاف في الداتا بيز (زي halls أو الطابعات) —
+          // نعيد المحاولة بدون الأعمدة الجديدة عشان باقي الإعدادات على الأقل تتحفظ
+          console.warn("Settings update failed, retrying without new columns...", error);
+          const reduced: any = { ...settings };
+          delete reduced.halls;
+          delete reduced.qz_printer_kitchen_2;
+          delete reduced.qz_printer_bar_2;
+          const res = await supabase
+            .from('restaurant_settings')
+            .update(reduced)
+            .eq('id', currentSettings.id)
+            .select()
+            .single();
+          data = res.data; error = res.error;
+        }
         if (error) throw error;
         return data;
       } catch (err) {
