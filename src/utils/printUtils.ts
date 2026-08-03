@@ -148,7 +148,7 @@ export const printOrderTickets = async (
         <div class="station">🔔 ${st.label}</div>
         ${isAddition ? `<div class="addition">➕ ${isAr ? 'أصناف إضافية على الأوردر' : 'ADDED ITEMS'}</div>` : ''}
         <div class="ordno">#${order.id.slice(-4).toUpperCase()}</div>
-        <div class="sub">${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'ترابيزة' : 'Table'} ${order.table_number}` : ''}</div>
+        <div class="sub">${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'طاولة' : 'Table'} ${order.table_number}` : ''}</div>
         <hr class="divider"/>
         <div class="meta">
           <div>🕐 ${new Date(order.created_at).toLocaleString(isAr ? 'ar-EG' : 'en-US')}</div>
@@ -198,7 +198,7 @@ export const printCustomerReceipt = async (
   const restaurantName = isAr ? (settings?.restaurant_name_ar || 'MERIDIEN') : (settings?.restaurant_name_en || 'MERIDIEN');
 
   const qrContent = (typeof window !== 'undefined' && window.location?.origin)
-    ? window.location.origin
+    ? window.location.origin + '/menu'
     : (settings?.location_url || `Invoice ${order.id.slice(-6).toUpperCase()}`);
   const qrDataUrl = await buildQrDataUrl(qrContent);
   const qrHtml = qrDataUrl
@@ -214,6 +214,32 @@ export const printCustomerReceipt = async (
       <td class="n">${isAr ? i.name_ar : i.name_en}</td>
       <td class="p">${(i.price * i.quantity).toFixed(2)}</td>
     </tr>`).join('');
+
+  // حساب الإجمالي الفرعي والضريبة/الخصم بحيث تتطابق دايمًا مع الإجمالي المخزّن
+  const n = (v: any) => Number(v) || 0;
+  const itemsSubtotal = order.items.reduce((s, i) => s + n(i.price) * n(i.quantity), 0);
+  const grandTotal = n(order.total_price);
+  // نسبة الضريبة (للعرض في العنوان) — من الصالة إن وُجدت وإلا من إعدادات المطعم
+  let taxPercent = 0;
+  if (order.hall && settings?.halls) {
+    const h = settings.halls.find(hh => hh.name === order.hall);
+    if (h) taxPercent = n(h.tax_percent);
+  }
+  if (!taxPercent) taxPercent = n(settings?.tax_percent);
+  const diff = grandTotal - itemsSubtotal;            // موجب = ضريبة/خدمة ، سالب = خصم
+  const taxAmount = diff > 0.001 ? diff : 0;
+  const discountAmount = diff < -0.001 ? -diff : 0;
+  const money = (v: number) => v.toFixed(2) + (isAr ? ' ج.م' : ' EGP');
+  const taxLabel = isAr
+    ? (taxPercent > 0 ? `ضريبة (${taxPercent}%)` : 'ضريبة / خدمة')
+    : (taxPercent > 0 ? `Tax (${taxPercent}%)` : 'Tax / Service');
+  // كتلة التفاصيل تظهر فقط لو فيه ضريبة أو خصم
+  const breakdownHtml = (taxAmount > 0 || discountAmount > 0) ? `
+      <div class="sums">
+        <div><span>${isAr ? 'الإجمالي الفرعي' : 'Subtotal'}</span><span>${money(itemsSubtotal)}</span></div>
+        ${discountAmount > 0 ? `<div class="disc"><span>${isAr ? 'الخصم' : 'Discount'}</span><span>- ${money(discountAmount)}</span></div>` : ''}
+        ${taxAmount > 0 ? `<div><span>${taxLabel}</span><span>${money(taxAmount)}</span></div>` : ''}
+      </div>` : '';
 
   const html = `
     <html dir="${isAr ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>Receipt #${order.id.slice(-4)}</title>
@@ -234,6 +260,9 @@ export const printCustomerReceipt = async (
       td.q { width:34px; font-weight:800; }
       td.n { font-weight:600; line-height:1.35; }
       td.p { width:66px; text-align:${isAr ? 'left' : 'right'}; font-weight:700; }
+      .sums { font-size:13px; margin-top:6px; padding-top:6px; border-top:1px dashed #000; }
+      .sums div { display:flex; justify-content:space-between; margin:4px 0; }
+      .sums .disc { font-weight:700; }
       .total { display:flex; justify-content:space-between; align-items:center; background:#000; color:#fff; border-radius:6px; padding:9px 12px; margin-top:8px; }
       .total .lbl { font-size:14px; font-weight:700; }
       .total .val { font-size:19px; font-weight:900; }
@@ -248,7 +277,7 @@ export const printCustomerReceipt = async (
       <div class="rname">${restaurantName}</div>
       ${phoneHtml}
       ${locationHtml}
-      <div class="ticket-type"><span>${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'ترابيزة' : 'Table'} ${order.table_number}` : ''}</span></div>
+      <div class="ticket-type"><span>${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'طاولة' : 'Table'} ${order.table_number}` : ''}</span></div>
       <hr class="divider"/>
       <div class="meta">
         <div><span>${isAr ? 'فاتورة' : 'Invoice'}</span><b>#${order.id.slice(-6).toUpperCase()}</b></div>
@@ -265,6 +294,7 @@ export const printCustomerReceipt = async (
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      ${breakdownHtml}
       <div class="total">
         <span class="lbl">${isAr ? 'الإجمالي المطلوب' : 'Grand Total'}</span>
         <span class="val">${order.total_price.toFixed(2)} ${isAr ? 'ج.م' : 'EGP'}</span>
