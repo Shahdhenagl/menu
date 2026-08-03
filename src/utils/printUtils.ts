@@ -195,10 +195,30 @@ const printViaIframe = (htmlContent: string) => {
 };
 
 // ستايل مشترك للتذاكر الحرارية (80mm)
+// ورق الطابعة الحرارية 80مم، لكن المساحة اللي بتطبع فعليًا ~72مم (الباقي هوامش
+// ميكانيكية مش بتوصلها الرأس). لو خلّينا المحتوى 80مم بيتقص من الجنب.
+// فبنخلي المحتوى 72مم في نص صفحة 80مم → هامش متساوي على الجنبين ومفيش أكل كلام.
+const PAPER_WIDTH_MM = 80;
+const PRINT_WIDTH_MM = 72;
+
 const THERMAL_BASE = `
-  @page { margin: 0; }
+  @page { margin: 0; size: ${PAPER_WIDTH_MM}mm auto; }
   * { box-sizing: border-box; }
-  body { font-family: 'Tahoma','Arial',sans-serif; margin:0; padding:10px 12px; width:80mm; color:#000; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  html { width: ${PAPER_WIDTH_MM}mm; margin: 0; padding: 0; background:#fff; }
+  body {
+    font-family: 'Tahoma','Arial',sans-serif;
+    width: ${PRINT_WIDTH_MM}mm;
+    margin: 0 auto;              /* التوسيط بالظبط في نص الورقة */
+    padding: 3mm 1.5mm;
+    color:#000; background:#fff;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    /* أي كلمة طويلة تنزل سطر بدل ما تخرج بره وتتقص */
+    overflow-wrap:anywhere; word-wrap:break-word;
+  }
+  /* مفيش عنصر يعدّي عرض الورقة */
+  body * { max-width: 100%; }
+  table { table-layout: fixed; width: 100%; }
+  img { max-width: 100%; height: auto; }
   .center { text-align:center; }
   .divider { border:0; border-top:1px dashed #000; margin:8px 0; }
   .divider.solid { border-top:2px solid #000; }
