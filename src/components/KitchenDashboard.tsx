@@ -229,16 +229,23 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
     }
   };
 
-  const updateOrderStatus = async (id: string, status: Order['status']) => {
-    try {
-      if (supabase) {
-        await supabase.from('orders').update({ status }).eq('id', id);
-      } else {
-        await db.updateOrderStatus(id, status);
+  const updateOrderStatus = (id: string, status: Order['status']) => {
+    // تحديث فوري للشاشة (Optimistic) — الكارت يتحرك على طول من غير ما يستنى النت
+    setOrders(prev => prev
+      .map(o => (o.id === id ? { ...o, status } : o))
+      .filter(o => o.status === 'pending' || o.status === 'preparing'));
+    // الاتصال بالنت بيتم في الخلفية — لو فشل نرجّع اللودينج يصلّح الحالة
+    (async () => {
+      try {
+        if (supabase) {
+          await supabase.from('orders').update({ status }).eq('id', id);
+        } else {
+          await db.updateOrderStatus(id, status);
+        }
+      } catch (err) {
+        console.error('فشل تحديث حالة الطلب — هيتصحّح مع أول تحديث تلقائي', err);
       }
-    } catch (err) {
-      console.error(err);
-    }
+    })();
   };
 
   if (loading) {

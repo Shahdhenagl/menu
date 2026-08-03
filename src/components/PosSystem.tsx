@@ -138,21 +138,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     });
   };
 
-  const handleAcceptWebsiteOrder = async (order: Order) => {
+  const handleAcceptWebsiteOrder = (order: Order) => {
     if (!selectedWaiter) return;
-    try {
-      const updatedOrder = await db.updateOrder(order.id, {
-        waiter_id: selectedWaiter.id,
-        waiter_name: selectedWaiter.name
-      });
-      if (updatedOrder) {
-        setActiveOrders(activeOrders.map(o => o.id === order.id ? updatedOrder : o));
-        playSuccessSound();
-      }
-    } catch (err: any) {
-      console.error('Error accepting website order:', err);
-      alert(language === 'ar' ? 'فشل قبول الطلب' : 'Failed to accept order');
-    }
+    // تحديث فوري — الطلب يتقبل على طول والباقي في الخلفية
+    setActiveOrders(prev => prev.map(o => o.id === order.id ? { ...o, waiter_id: selectedWaiter.id, waiter_name: selectedWaiter.name } : o));
+    playSuccessSound();
+    db.updateOrder(order.id, {
+      waiter_id: selectedWaiter.id,
+      waiter_name: selectedWaiter.name
+    }).catch((err: any) => console.error('Error accepting website order:', err));
   };
 
   // Item transfer state
@@ -1712,9 +1706,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                             }}>{language === 'ar' ? 'تحصيل الدفع' : 'Collect Payment'}</button>
                             </>
                           ) : order.status === 'prepared' ? (
-                            <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#f39c12', color: '#000' }} onClick={async () => {
-                              await db.updateOrderStatus(order.id, 'delivered', selectedWaiter?.name);
-                              loadData();
+                            <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#f39c12', color: '#000' }} onClick={() => {
+                              // تحديث فوري — من غير انتظار النت
+                              setActiveOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'delivered' } : o));
+                              db.updateOrderStatus(order.id, 'delivered', selectedWaiter?.name).catch(err => console.error('فشل تحديث الحالة', err));
                             }}>{language === 'ar' ? 'تم التسليم' : 'Mark Delivered'}</button>
                           ) : (
                             <button className="pos-btn" disabled style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#4b5563', color: '#9ca3af', cursor: 'not-allowed' }} title={language === 'ar' ? 'بانتظار تجهيز المطبخ' : 'Waiting for kitchen'}>
@@ -1724,19 +1719,20 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           
                           <button className="pos-btn-outline" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1 }} onClick={() => {
                             triggerOtpProtectedAction('إلغاء الطلب', 'Cancel Order', async () => {
-                              await db.updateOrderStatus(order.id, 'cancelled', selectedWaiter?.name);
+                              // شيل الطلب من الشاشة فورًا
+                              setActiveOrders(prev => prev.filter(o => o.id !== order.id));
+                              db.updateOrderStatus(order.id, 'cancelled', selectedWaiter?.name).catch(err => console.error('فشل الإلغاء', err));
                               if (settings?.telegram_chat_id) {
                                 const text = `⚠️ <b>تنبيه إلغاء طلب نشط</b>\n\n` +
                                   `• <b>رقم الطلب:</b> <code>#${order.id.slice(0, 6)}</code>\n` +
                                   `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
                                   `• <b>العميل:</b> ${order.customer_name || 'غير معروف'}\n` +
                                   `• <b>القيمة الإجمالية:</b> ${order.total_price.toFixed(2)} EGP`;
-                                
+
                                 import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
                                   sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
                                 });
                               }
-                              loadData();
                             }, order.id);
                           }}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
                         </>
