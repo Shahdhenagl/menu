@@ -6,12 +6,30 @@ import QRCode from 'qrcode';
 
 // بيجيب أحدث إعدادات من الداتا بيز وقت الطباعة نفسها.
 // من غير كده الشاشة بتفضل شغّالة بالإعدادات اللي اتحمّلت أول ما فتحت (لوجو/أسماء قديمة).
+//
+// على أجهزة الكاشير القديمة/النت الضعيف الطلب ده ممكن يتأخر، فبنعمل حاجتين:
+//  1) كاش دقيقة واحدة → الطباعات المتتالية ما تستنّاش الشبكة كل مرة
+//  2) مهلة قصوى ثانيتين ونص → لو الشبكة زحفت، بنطبع بالإعدادات المتاحة بدل ما نعلّق
+const SETTINGS_TTL_MS = 60_000;
+const SETTINGS_TIMEOUT_MS = 2500;
+let settingsCache: { at: number; value: RestaurantSettings } | null = null;
+
 const freshSettings = async (fallback?: RestaurantSettings | null): Promise<RestaurantSettings | null> => {
+  const now = Date.now();
+  if (settingsCache && now - settingsCache.at < SETTINGS_TTL_MS) return settingsCache.value;
   try {
-    const s = await db.getSettings();
-    return s || fallback || null;
+    const s = await Promise.race([
+      db.getSettings(),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), SETTINGS_TIMEOUT_MS)),
+    ]);
+    if (s) {
+      settingsCache = { at: now, value: s };
+      return s;
+    }
+    console.warn('QZ: جلب الإعدادات اتأخر — بنطبع بالإعدادات المحمّلة.');
+    return fallback || settingsCache?.value || null;
   } catch {
-    return fallback || null;
+    return fallback || settingsCache?.value || null;
   }
 };
 
