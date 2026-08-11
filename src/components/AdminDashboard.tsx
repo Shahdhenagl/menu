@@ -4184,11 +4184,12 @@ export default function AdminDashboard({
                         <td className="font-en" style={{ textAlign: 'center' }}>
                           {order.payment_method ? (
                             <span style={{ 
-                              background: order.payment_method === 'split' ? 'rgba(139,92,246,0.1)' : 'rgba(16,185,129,0.1)',
-                              color: order.payment_method === 'split' ? '#8b5cf6' : '#10b981',
-                              padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold'
+                              background: order.payment_method === 'staff' ? 'rgba(56,189,248,0.1)' : order.payment_method === 'split' ? 'rgba(139,92,246,0.1)' : 'rgba(16,185,129,0.1)',
+                              color: order.payment_method === 'staff' ? '#38bdf8' : order.payment_method === 'split' ? '#8b5cf6' : '#10b981',
+                              padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold',
+                              border: `1px solid ${order.payment_method === 'staff' ? '#38bdf8' : order.payment_method === 'split' ? '#8b5cf6' : '#10b981'}`
                             }}>
-                              {order.payment_method.toUpperCase()}
+                              {order.payment_method === 'staff' ? (language === 'ar' ? 'فواتير استاف' : 'STAFF') : order.payment_method.toUpperCase()}
                             </span>
                           ) : '-'}
                         </td>
@@ -4754,6 +4755,7 @@ export default function AdminDashboard({
                 const totalProfit = totalSales - totalCost;
                 const deferredTotal = filteredInvoices.filter(o => o.payment_method === 'deferred' || o.payment_details?.deferred > 0).reduce((s, o) => s + (o.payment_details?.deferred || o.total_price), 0);
                 const hospitalityTotal = filteredInvoices.filter(o => o.payment_method === 'hospitality').reduce((s, o) => s + (o.payment_details?.original_price || 0), 0);
+                const staffTotal = filteredInvoices.filter(o => o.payment_method === 'staff').reduce((s, o) => s + (o.payment_details?.original_price || 0), 0);
                 return (
                   <>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.8rem', marginBottom: '1.5rem' }}>
@@ -4793,6 +4795,12 @@ export default function AdminDashboard({
                           {hospitalityTotal.toLocaleString()} <span style={{ fontSize: '0.7rem' }}>EGP</span>
                         </div>
                       </div>
+                      <div style={{ background: 'rgba(56,189,248,0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(56,189,248,0.2)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? '👨‍🍳 فواتير استاف' : '👨‍🍳 Staff Orders'}</div>
+                        <div className="font-en" style={{ fontSize: '1.3rem', fontWeight: '800', color: '#38bdf8' }}>
+                          {staffTotal.toLocaleString()} <span style={{ fontSize: '0.7rem' }}>EGP</span>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="table-wrapper">
@@ -4814,7 +4822,7 @@ export default function AdminDashboard({
                           {filteredInvoices.map(inv => {
                             const cost = inv.total_cost || 0;
                             const profit = inv.total_price - cost;
-                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet_restaurant' ? '📱 محفظة مطعم' : inv.payment_method === 'wallet_bar' ? '📱 محفظة بار' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : inv.payment_method === 'staff' ? '👨‍🍳 استاف' : inv.payment_method === 'petty_cash' ? '💼 عهدة' : '💵 كاش';
+                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet_restaurant' ? '📱 محفظة مطعم' : inv.payment_method === 'wallet_bar' ? '📱 محفظة بار' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : inv.payment_method === 'staff' ? '👨‍🍳 فواتير استاف' : inv.payment_method === 'petty_cash' ? '💼 عهدة' : '💵 كاش';
 
                             const typeLabel = inv.order_type === 'dine_in' ? '🍽️' : inv.order_type === 'takeaway' ? '🥡' : inv.order_type === 'delivery' ? '🚗' : inv.order_type === 'talabat' ? '📱' : '—';
                             return (
