@@ -591,7 +591,7 @@ const sections = [];
       const liveProds = await pRes.json();
 
       CATS = liveCats
-        .filter(c => c.show_on_menu !== false && c.name_ar !== 'مشروبات الاستاف')
+        .filter(c => c.show_on_menu !== false && c.name_ar !== 'مشروبات الاستاف' && c.name_ar !== 'الشيش')
         .map(c => ({
           id: c.id,
           s: c.department === 'bar' ? 'bar' : 'kitchen',
