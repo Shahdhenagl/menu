@@ -177,9 +177,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     if (staffModalMode === 'new') {
       setStaffOrderFor({ id: employee.id, name: employee.name });
       setOrderType('takeaway');
-      setSelectedHall('');
       setStaffModalOpen(false);
       setStaffPasscode('');
+      setView('pos');
       return;
     }
 
@@ -649,10 +649,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
 
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  // الضريبة حسب نوع الطلب: صالة (نسبة الصالة) / دليفري / تيك أواي
-  const hallTaxPercent = taxPercentForOrder(settings, orderType, selectedHall);
+  const hallTaxPercent = staffOrderFor ? 0 : taxPercentForOrder(settings, orderType, selectedHall);
   const cartTaxAmount = cartSubtotal * (hallTaxPercent / 100);
-  const cartTotal = cartSubtotal + cartTaxAmount;
+  const cartTotal = staffOrderFor ? 0 : (cartSubtotal + cartTaxAmount);
 
   // ===== ألوان وفلاتر لوحة الطلبات (بالصالة / نوع الطلب) =====
   const hallColor = (hall?: string): string => {
@@ -775,7 +774,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         payment_method: 'staff' as const,
         payment_details: {
           type: 'staff',
-          original_price: cartTotal,
+          original_price: cartSubtotal,
           employee_id: staffOrderFor.id,
           employee_name: staffOrderFor.name,
         },
@@ -794,7 +793,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     // Send Telegram Notification immediately for any placed order
     if (settings?.telegram_chat_id) {
       const itemsText = placedOrder.items.map(item => `- ${item.quantity}x ${language === 'ar' ? item.name_ar : item.name_en}`).join('\n');
-      const text = (staffOrderFor ? `👨‍🍳 <b>طلب استاف (مجاني)</b>\n• <b>الموظف:</b> ${staffOrderFor.name}\n• <b>قيمة الطلب:</b> ${cartTotal.toFixed(2)} EGP\n\n` : `📥 <b>طلب جديد!</b>\n\n`) +
+      const text = (staffOrderFor ? `👨‍🍳 <b>طلب استاف (مجاني)</b>\n• <b>الموظف:</b> ${staffOrderFor.name}\n• <b>قيمة الطلب:</b> ${cartSubtotal.toFixed(2)} EGP\n\n` : `📥 <b>طلب جديد!</b>\n\n`) +
         `• <b>رقم الطلب:</b> <code>#${placedOrder.id.slice(0, 6)}</code>\n` +
         `• <b>العميل:</b> ${placedOrder.customer_name || 'غير معروف'}\n` +
         `• <b>النوع:</b> ${placedOrder.order_type || 'takeaway'}\n` +
