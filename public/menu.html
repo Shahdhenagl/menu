@@ -246,7 +246,7 @@ const SECTIONS = [
 ];
 
 /* التصنيفات — s = القسم الرئيسي */
-const CATS = [
+let CATS = [
   { id:'k_break',      s:'kitchen', ar:'الفطار',              en:'Breakfast' },
   { id:'k_soup',       s:'kitchen', ar:'الشوربة',             en:'Soup' },
   { id:'k_appetizers', s:'kitchen', ar:'المقبلات والأطفال',   en:'Appetizers & Kids' },
@@ -278,7 +278,7 @@ const CATS = [
 ];
 
 const S = 'https://xrajwseaukolbidvwfsp.supabase.co/storage/v1/object/public/menu-images/';
-const PRODUCTS = [
+let PRODUCTS = [
   // الفطار
   {c:'k_break', ar:'فطار شرقي', en:'Oriental Breakfast', p:120, img:'/menu-images/16688.jpg'},
   {c:'k_break', ar:'فلاحي بارتي', en:'Fellah-y Barty', p:110, img:'/menu-images/ChatGPT_Image_May_24_2026_03_12_12_PM.png'},
@@ -574,26 +574,47 @@ const sections = [];
 
 (async function initLiveMenu() {
   try {
-    const res = await fetch('https://xrajwseaukolbidvwfsp.supabase.co/rest/v1/products?select=name_ar,price,is_available', {
-      headers: {
-        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhyYWp3c2VhdWtvbGJpZHZ3ZnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNzc0MzMsImV4cCI6MjA5NDg1MzQzM30.cTqy0r4RhdqFXGifhvucXjU8TWqBUzzr7wSD3j0hryE',
-        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhyYWp3c2VhdWtvbGJpZHZ3ZnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNzc0MzMsImV4cCI6MjA5NDg1MzQzM30.cTqy0r4RhdqFXGifhvucXjU8TWqBUzzr7wSD3j0hryE'
-      }
-    });
-    if (res.ok) {
-      const liveProducts = await res.json();
-      PRODUCTS.forEach(p => {
-        const lp = liveProducts.find(x => x.name_ar.trim() === p.ar.trim());
-        if (lp) {
-          p.p = lp.price;
-          p.is_available = lp.is_available;
-        }
-      });
+    const SUPABASE_URL = 'https://xrajwseaukolbidvwfsp.supabase.co';
+    const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhyYWp3c2VhdWtvbGJpZHZ3ZnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNzc0MzMsImV4cCI6MjA5NDg1MzQzM30.cTqy0r4RhdqFXGifhvucXjU8TWqBUzzr7wSD3j0hryE';
+    const headers = { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + ANON_KEY };
+    
+    const imageMap = {};
+    PRODUCTS.forEach(p => { if (p.img) imageMap[p.ar.trim()] = p.img; });
+
+    const [cRes, pRes] = await Promise.all([
+      fetch(SUPABASE_URL + '/rest/v1/categories?select=*&order=sort_order.asc', { headers }),
+      fetch(SUPABASE_URL + '/rest/v1/products?select=*', { headers })
+    ]);
+
+    if (cRes.ok && pRes.ok) {
+      const liveCats = await cRes.json();
+      const liveProds = await pRes.json();
+
+      CATS = liveCats
+        .filter(c => c.show_on_menu !== false && c.name_ar !== 'مشروبات الاستاف')
+        .map(c => ({
+          id: c.id,
+          s: c.department === 'bar' ? 'bar' : 'kitchen',
+          ar: c.name_ar,
+          en: c.name_en || c.name_ar,
+          list: c.name_ar.includes('إضافات') || c.name_ar.includes('اضافات')
+        }));
+
+      PRODUCTS = liveProds
+        .filter(p => p.is_available !== false)
+        .map(p => ({
+          c: p.category_id,
+          ar: p.name_ar,
+          en: p.name_en || '',
+          p: p.price,
+          img: p.image_url || imageMap[p.name_ar.trim()] || null
+        }));
     }
   } catch(e) { console.error('Live fetch failed', e); }
 
   runRender();
 })();
+
 
 function renderCategory(cat){
   const items = PRODUCTS.filter(p=>p.c===cat.id && p.is_available !== false);
