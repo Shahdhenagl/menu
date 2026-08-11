@@ -179,7 +179,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       setOrderType('takeaway');
       setStaffModalOpen(false);
       setStaffPasscode('');
-      setView('pos');
+      setView('menu');
       return;
     }
 
