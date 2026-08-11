@@ -7,6 +7,7 @@ export interface Category {
   sort_order: number;
   printer_id?: string | null;
   department?: 'restaurant' | 'bar';
+  show_on_menu?: boolean;
   created_at?: string;
 }
 

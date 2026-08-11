@@ -68,10 +68,14 @@ export default function CustomerMenu({
   // Custom tilt values per card for realistic 3D hovering
 
 
+  // التصنيفات المرئية في المنيو فقط (show_on_menu !== false)
+  const visibleCategories = categories.filter(c => c.show_on_menu !== false);
+
   // Filter products by category and search query
   const filteredProducts = products.filter(p => {
-    const pCat = categories.find(c => c.id === p.category_id);
-    const pDept = pCat ? (pCat.department || 'restaurant') : 'restaurant';
+    const pCat = visibleCategories.find(c => c.id === p.category_id);
+    if (!pCat) return false; // مخفي لأن تصنيفه مخفي
+    const pDept = pCat.department || 'restaurant';
     if (pDept !== websiteDepartment) return false;
 
     const matchCategory = selectedCategory === 'all' || p.category_id === selectedCategory;
@@ -264,7 +268,7 @@ export default function CustomerMenu({
           >
             {t.allCategories}
           </button>
-          {categories.filter(c => (c.department || 'restaurant') === websiteDepartment).map((cat) => (
+          {visibleCategories.filter(c => (c.department || 'restaurant') === websiteDepartment).map((cat) => (
             <button 
               key={cat.id} 
               className={`category-tab ${selectedCategory === cat.id ? 'active' : ''}`}
