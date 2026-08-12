@@ -6,7 +6,7 @@ import type { ShiftClosingReport } from './printUtils';
 import { taxPercentForOrder } from './tax';
 
 // وسائل الدفع اللي بتظهر في تقفيل الشفت
-export const METHOD_KEYS = ['cash', 'visa', 'wallet_restaurant', 'wallet_bar', 'instapay', 'deferred', 'petty_cash'] as const;
+export const METHOD_KEYS = ['cash', 'visa', 'wallet_restaurant', 'instapay', 'deferred', 'petty_cash'] as const;
 
 const num = (v: any): number => Number(v) || 0;
 
@@ -53,8 +53,7 @@ export const methodLabel = (m: string, ar: boolean): string => {
   switch (m) {
     case 'cash': return ar ? 'كاش' : 'Cash';
     case 'visa': return ar ? 'فيزا' : 'Visa';
-    case 'wallet_restaurant': return ar ? 'محفظة المطعم' : 'Restaurant Wallet';
-    case 'wallet_bar': return ar ? 'محفظة البار' : 'Bar Wallet';
+    case 'wallet_restaurant': return ar ? 'محفظة الكاشير' : 'Cashier Wallet';
     case 'instapay': return ar ? 'إنستاباي' : 'Instapay';
     case 'deferred': return ar ? 'آجل (مديونية)' : 'Deferred';
     case 'petty_cash': return ar ? 'عهدة الشريك' : 'Petty Cash';
@@ -102,8 +101,7 @@ export const buildShiftReport = ({
     if (o.payment_method === 'split' && o.payment_details) {
       byMethod.cash += num(o.payment_details.cash);
       byMethod.visa += num(o.payment_details.visa);
-      byMethod.wallet_restaurant += num(o.payment_details.wallet_restaurant) + num(o.payment_details.wallet);
-      byMethod.wallet_bar += num(o.payment_details.wallet_bar);
+      byMethod.wallet_restaurant += num(o.payment_details.wallet_restaurant);
       byMethod.instapay += num(o.payment_details.instapay);
       byMethod.deferred += num(o.payment_details.deferred);
     } else {

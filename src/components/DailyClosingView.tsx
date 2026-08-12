@@ -19,7 +19,7 @@ interface DailyClosingViewProps {
 }
 
 // وسائل الدفع المعروضة في التقفيل
-const METHODS = ['cash', 'visa', 'wallet_restaurant', 'wallet_bar', 'instapay', 'deferred', 'petty_cash'] as const;
+const METHODS = ['cash', 'visa', 'wallet_restaurant', 'instapay', 'deferred', 'petty_cash'] as const;
 type Method = typeof METHODS[number];
 
 const num = (v: any): number => Number(v) || 0;
@@ -64,8 +64,7 @@ export default function DailyClosingView({
     switch (m) {
       case 'cash': return ar ? 'كاش' : 'Cash';
       case 'visa': return ar ? 'فيزا' : 'Visa';
-      case 'wallet_restaurant': return ar ? 'محفظة المطعم' : 'Restaurant Wallet';
-      case 'wallet_bar': return ar ? 'محفظة البار' : 'Bar Wallet';
+      case 'wallet_restaurant': return ar ? 'محفظة الكاشير' : 'Cashier Wallet';
       case 'instapay': return ar ? 'إنستاباي' : 'Instapay';
       case 'deferred': return ar ? 'آجل (مديونية)' : 'Deferred';
       case 'petty_cash': return ar ? 'عهدة الشريك' : 'Petty Cash';
@@ -76,8 +75,7 @@ export default function DailyClosingView({
     switch (m) {
       case 'cash': return '#10b981';
       case 'visa': return '#3b82f6';
-      case 'wallet_restaurant': return '#8b5cf6';
-      case 'wallet_bar': return '#ec4899';
+      case 'wallet_restaurant': return '#06b6d4';
       case 'instapay': return '#f59e0b';
       case 'deferred': return '#ef4444';
       case 'petty_cash': return '#14b8a6';
@@ -113,8 +111,7 @@ export default function DailyClosingView({
       if (o.payment_method === 'split' && o.payment_details) {
         map.cash += num(o.payment_details.cash);
         map.visa += num(o.payment_details.visa);
-        map.wallet_restaurant += num(o.payment_details.wallet_restaurant) + num(o.payment_details.wallet);
-        map.wallet_bar += num(o.payment_details.wallet_bar);
+        map.wallet_restaurant += num(o.payment_details.wallet_restaurant);
         map.instapay += num(o.payment_details.instapay);
         map.deferred += num(o.payment_details.deferred);
       } else {

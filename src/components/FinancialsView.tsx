@@ -60,8 +60,8 @@ export default function FinancialsView({
 
   // تحويل أي قيمة لرقم آمن (أعمدة numeric في Supabase بترجع كنصوص)
   const num = (v: any): number => Number(v) || 0;
-  type PaymentMethod = 'cash' | 'visa' | 'wallet' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'deferred' | 'petty_cash';
-  const paymentMethods: PaymentMethod[] = ['cash', 'visa', 'wallet', 'wallet_restaurant', 'wallet_bar', 'instapay', 'deferred', 'petty_cash'];
+  type PaymentMethod = 'cash' | 'visa' | 'wallet' | 'wallet_restaurant' | 'instapay' | 'deferred' | 'petty_cash';
+  const paymentMethods: PaymentMethod[] = ['cash', 'visa', 'wallet', 'wallet_restaurant', 'instapay', 'deferred', 'petty_cash'];
   const paymentPartsForOrder = (order: Order): Partial<Record<PaymentMethod, number>> => {
     const parts: Partial<Record<PaymentMethod, number>> = {};
     if (order.payment_method === 'split' && order.payment_details) {
@@ -90,7 +90,7 @@ export default function FinancialsView({
   const netCashflow = totalRevenue - totalExpenses; // Note: Revenue now includes deferred, so true net cashflow requires checking balances
 
   // Revenue Breakdown
-  const revenueByType = { cash: 0, visa: 0, wallet: 0, wallet_restaurant: 0, wallet_bar: 0, instapay: 0, deferred: 0, petty_cash: 0 };
+  const revenueByType = { cash: 0, visa: 0, wallet: 0, wallet_restaurant: 0, instapay: 0, deferred: 0, petty_cash: 0 };
   
 
   filteredOrders.forEach(o => {
@@ -100,7 +100,7 @@ export default function FinancialsView({
   });
 
   // Actual Vault/Bank balances (All Time)
-  const actualBalances = { cash: 0, visa: 0, wallet: 0, wallet_restaurant: 0, wallet_bar: 0, instapay: 0, deferred: 0, petty_cash: 0 };
+  const actualBalances = { cash: 0, visa: 0, wallet: 0, wallet_restaurant: 0, instapay: 0, deferred: 0, petty_cash: 0 };
   
 
   // 1. Add All Revenues
@@ -124,11 +124,10 @@ export default function FinancialsView({
     if (tx.from_method && actualBalances[tx.from_method as keyof typeof actualBalances] !== undefined) {
       actualBalances[tx.from_method as keyof typeof actualBalances] -= num(tx.amount);
     }
-    if (tx.to_method && actualBalances[tx.to_method as keyof typeof actualBalances] !== undefined) {
+    if (tx.to_method && actualBalances[tx.to_method as keyof typeof actualBalances] !== undefined) {
       actualBalances[tx.to_method as keyof typeof actualBalances] += num(tx.amount);
     }
   });
-
 
   const stockMainValue = inventoryItems.reduce((sum, i) => sum + (num(i.stock_main) * num(i.avg_purchase_price)), 0);
   const stockFactoryValue = inventoryItems.reduce((sum, i) => sum + (num(i.stock_factory) * num(i.avg_purchase_price)), 0);
@@ -139,13 +138,11 @@ export default function FinancialsView({
       case 'cash': return language === 'ar' ? 'كاش' : 'Cash';
       case 'visa': return language === 'ar' ? 'فيزا' : 'Visa';
       case 'wallet': return language === 'ar' ? 'محفظة (قديم)' : 'Wallet (Old)';
-      case 'wallet_restaurant': return language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet';
-      case 'wallet_bar': return language === 'ar' ? 'محفظة البار' : 'Bar Wallet';
+      case 'wallet_restaurant': return language === 'ar' ? 'محفظة الكاشير' : 'Cashier Wallet';
       case 'instapay': return language === 'ar' ? 'إنستاباي' : 'Instapay';
       case 'deferred': return language === 'ar' ? 'آجل (مديونية)' : 'Deferred (Debt)';
       case 'split': return language === 'ar' ? 'دفع مقسم' : 'Split Payment';
       case 'petty_cash': return language === 'ar' ? 'عهدة الشريك' : 'Petty Cash';
-
       default: return method;
     }
   };
@@ -155,9 +152,7 @@ export default function FinancialsView({
       case 'cash': return '#10b981'; // Green
       case 'visa': return '#3b82f6'; // Blue
       case 'wallet': return '#8b5cf6'; // Purple
-      case 'wallet_restaurant': return '#8b5cf6'; 
-      case 'wallet_bar': return '#ec4899'; // Pink
-
+      case 'wallet_restaurant': return '#06b6d4'; // Cyan
       case 'instapay': return '#f59e0b'; // Orange
       case 'deferred': return '#ef4444'; // Red
       case 'petty_cash': return '#14b8a6'; // Teal
@@ -265,7 +260,7 @@ export default function FinancialsView({
             {language === 'ar' ? 'أرصدة الخزينة والحسابات (خلال الفترة)' : 'Treasury Balances (Period)'}
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-            {['cash', 'visa', 'wallet_restaurant', 'wallet_bar', 'instapay', 'deferred'].map(method => (
+            {['cash', 'visa', 'wallet_restaurant', 'instapay', 'deferred'].map(method => (
               <div key={method} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '12px', border: `1px solid ${getMethodColor(method)}` }}>
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-gray)' }}>{getMethodLabel(method)}</div>
                 <div className="font-en" style={{ fontSize: '1.4rem', fontWeight: '800', color: getMethodColor(method) }}>
