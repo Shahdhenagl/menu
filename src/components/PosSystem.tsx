@@ -649,9 +649,20 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
 
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const totalForItems = (
+    items: OrderItem[],
+    type?: Order['order_type'] | null,
+    hall?: string | null,
+    freeOrder = false
+  ) => {
+    const subtotal = items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
+    if (freeOrder) return 0;
+    const taxPercent = taxPercentForOrder(settings, type, hall);
+    return subtotal + (subtotal * taxPercent / 100);
+  };
   const hallTaxPercent = staffOrderFor ? 0 : taxPercentForOrder(settings, orderType, selectedHall);
   const cartTaxAmount = cartSubtotal * (hallTaxPercent / 100);
-  const cartTotal = staffOrderFor ? 0 : (cartSubtotal + cartTaxAmount);
+  const cartTotal = totalForItems(cart, orderType, selectedHall, !!staffOrderFor);
 
   // ===== ألوان وفلاتر لوحة الطلبات (بالصالة / نوع الطلب) =====
   const hallColor = (hall?: string): string => {
@@ -717,7 +728,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       // We are editing an existing order
       const updatedOrder = await db.updateOrder(editOrderId, {
         items: cart,
-        total_price: cartTotal,
+        total_price: totalForItems(
+          cart,
+          orderType || editingOrder.order_type,
+          (orderType || editingOrder.order_type) === 'dine_in' ? (selectedHall || editingOrder.hall) : undefined,
+          editingOrder.payment_method === 'staff'
+        ),
         customer_name: customerName,
         customer_phone: customerPhone,
         table_number: tableNumber,
@@ -732,6 +748,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       }).filter((i): i is OrderItem => i !== null);
 
       if (addedItems.length > 0) {
+        if (!['pending', 'preparing'].includes(editingOrder.status)) {
+          await db.updateOrder(editOrderId, { status: 'pending' }, selectedWaiter?.name);
+        }
         const additionOrder = { ...(updatedOrder || editingOrder), id: editOrderId, items: addedItems } as Order;
         printOrderTickets(additionOrder, categories, products, printers, language, settings, { isAddition: true });
       }
@@ -740,6 +759,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       setCart([]);
       setEditOrderId(null);
       setEditingOrder(null);
+      setSelectedHall('');
       setOriginalOrderItems([]);
       setView('waiter_dashboard');
       loadData();
@@ -1996,6 +2016,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       setCustomerPhone(editingOrder.customer_phone);
                       setOrderType(editingOrder.order_type || 'takeaway');
                       setTableNumber(editingOrder.table_number || '');
+                      setSelectedHall(editingOrder.hall || '');
                       setView('menu');
                     }}>
                       <Plus size={16} style={{ display: 'inline', marginRight: '4px' }}/> 
