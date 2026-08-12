@@ -628,24 +628,28 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const addToCart = (p: Product) => {
     const price = getProductPrice(p);
     setCart(prev => {
-      const existing = prev.find(item => item.id === p.id);
+      const existing = prev.find(item => item.id === p.id && !item.note);
       if (existing) {
-        return prev.map(item => item.id === p.id ? { ...item, quantity: item.quantity + 1 } : item);
+        return prev.map(item => item.id === p.id && !item.note ? { ...item, quantity: item.quantity + 1 } : item);
       }
       return [...prev, { id: p.id, name_ar: p.name_ar, name_en: p.name_en, price, quantity: 1 }];
     });
   };
 
-  const removeFromCart = (id: string) => setCart(prev => prev.filter(item => item.id !== id));
+  const removeFromCart = (index: number) => setCart(prev => prev.filter((_, idx) => idx !== index));
   
-  const updateQuantity = (id: string, delta: number) => {
-    setCart(prev => prev.map(item => {
-      if (item.id === id) {
+  const updateQuantity = (index: number, delta: number) => {
+    setCart(prev => prev.map((item, idx) => {
+      if (idx === index) {
         const newQ = item.quantity + delta;
         return newQ > 0 ? { ...item, quantity: newQ } : item;
       }
       return item;
     }));
+  };
+
+  const updateItemNote = (index: number, note: string) => {
+    setCart(prev => prev.map((item, idx) => idx === index ? { ...item, note } : item));
   };
 
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -707,7 +711,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       // Detect deletions and cancellation/reduction of quantities
       let deletedItemsText = '';
       originalOrderItems.forEach(orig => {
-        const currentItem = cart.find(c => c.id === orig.id);
+        const currentItem = cart.find(c => c.id === orig.id && (c.note || '') === (orig.note || ''));
         if (!currentItem) {
           deletedItemsText += `\n- <b>${orig.name_ar} (تم حذفه بالكامل)</b>. الكمية السابقة: ${orig.quantity}`;
         } else if (currentItem.quantity < orig.quantity) {
@@ -744,7 +748,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
       // احسب الأصناف الجديدة فقط (صنف جديد أو زيادة كمية) واطبعها للمطبخ/البار — من غير إعادة طباعة الأوردر كله
       const addedItems = cart.map(ci => {
-        const orig = originalOrderItems.find(o => o.id === ci.id);
+        const orig = originalOrderItems.find(o => o.id === ci.id && (o.note || '') === (ci.note || ''));
         const addedQty = orig ? ci.quantity - orig.quantity : ci.quantity;
         return addedQty > 0 ? { ...ci, quantity: addedQty } : null;
       }).filter((i): i is OrderItem => i !== null);
@@ -843,7 +847,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
       // 1. Deduct from source order
       const sourceItems = editingOrder.items.map(item => {
-        if (item.id === transferItem.id) {
+        if (item.id === transferItem.id && (item.note || '') === (transferItem.note || '')) {
           return { ...item, quantity: item.quantity - transferQty };
         }
         return item;
@@ -853,7 +857,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
       // 2. Add to target order
       const targetItems = [...targetOrder.items];
-      const existingItemIdx = targetItems.findIndex(item => item.id === transferItem.id);
+      const existingItemIdx = targetItems.findIndex(item => item.id === transferItem.id && (item.note || '') === (transferItem.note || ''));
       if (existingItemIdx > -1) {
         targetItems[existingItemIdx] = {
           ...targetItems[existingItemIdx],
@@ -1580,14 +1584,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
                   {cart.length === 0 && <p style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '2rem' }}>Empty</p>}
                   <AnimatePresence>
-                    {cart.map(item => {
-                      const originalItem = originalOrderItems.find(o => o.id === item.id);
+                    {cart.map((item, idx) => {
+                      const originalItem = originalOrderItems.find(o => o.id === item.id && (o.note || '') === (item.note || ''));
                       const isOriginal = originalItem !== undefined;
                       const minQuantity = originalItem ? originalItem.quantity : 1;
                       const cannotDecrease = isOriginal && item.quantity <= minQuantity;
 
                       return (
-                        <motion.div key={item.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8 }}
+                        <motion.div key={`${item.id}-${idx}`} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8 }}
                           style={{ background: 'var(--bg-card)', padding: '1rem', borderRadius: '12px', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1598,7 +1602,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#000', padding: '4px', borderRadius: '8px' }}>
                               <button 
                                 disabled={cannotDecrease}
-                                onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, -1); }} 
+                                onClick={(e) => { e.stopPropagation(); updateQuantity(idx, -1); }} 
                                 style={{ 
                                   background: cannotDecrease ? 'var(--border-color)' : 'var(--border-color)', 
                                   border: 'none', 
@@ -1610,17 +1614,27 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 <Minus size={16} />
                               </button>
                               <span style={{ fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{item.quantity}</span>
-                              <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, 1); }} style={{ background: 'var(--gold-primary)', border: 'none', color: '#000', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}><Plus size={16} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); updateQuantity(idx, 1); }} style={{ background: 'var(--gold-primary)', border: 'none', color: '#000', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}><Plus size={16} /></button>
                             </div>
                             
                             {!isOriginal ? (
-                              <button onClick={(e) => { e.stopPropagation(); removeFromCart(item.id); }} style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}>
+                              <button onClick={(e) => { e.stopPropagation(); removeFromCart(idx); }} style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}>
                                 <Trash2 size={18} />
                               </button>
                             ) : (
                               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>{language === 'ar' ? 'مؤكد' : 'Confirmed'}</span>
                             )}
                           </div>
+                          <textarea
+                            className="pos-input"
+                            value={item.note || ''}
+                            onChange={(e) => updateItemNote(idx, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder={language === 'ar' ? 'ملاحظة على الصنف (اختياري)' : 'Item note (optional)'}
+                            rows={2}
+                            disabled={isOriginal}
+                            style={{ width: '100%', resize: 'vertical', minHeight: '44px', fontSize: '0.9rem', opacity: isOriginal ? 0.75 : 1 }}
+                          />
                         </motion.div>
                       );
                     })}
@@ -1682,8 +1696,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 </h4>
                 <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
                   {cart.map((item, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', margin: '0.3rem 0' }}>
-                      <span>{item.quantity}x {language === 'ar' ? item.name_ar : item.name_en}</span>
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', fontSize: '0.95rem', margin: '0.3rem 0' }}>
+                      <span>
+                        {item.quantity}x {language === 'ar' ? item.name_ar : item.name_en}
+                        {item.note ? <small style={{ display: 'block', color: 'var(--gold-primary)', marginTop: '0.15rem' }}>{item.note}</small> : null}
+                      </span>
                       <span>{(item.price * item.quantity).toFixed(2)}</span>
                     </div>
                   ))}
@@ -2028,7 +2045,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '8px' }}>
                     {editingOrder.items.map((item, idx) => (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: idx === editingOrder.items.length - 1 ? 'none' : '1px solid var(--border-color)' }}>
-                        <span>{item.quantity}x {language === 'ar' ? item.name_ar : item.name_en}</span>
+                        <span>
+                          {item.quantity}x {language === 'ar' ? item.name_ar : item.name_en}
+                          {item.note ? <small style={{ display: 'block', color: 'var(--gold-primary)', marginTop: '0.15rem' }}>{item.note}</small> : null}
+                        </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                           <span>{(item.price * item.quantity).toFixed(2)}</span>
                           <button 

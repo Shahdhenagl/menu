@@ -274,7 +274,7 @@ export const printOrderTickets = async (
     const rows = st.items.map(i => `
       <div class="item">
         <div class="q">${i.quantity}</div>
-        <div class="n">${isAr ? i.name_ar : i.name_en}</div>
+        <div class="n">${isAr ? i.name_ar : i.name_en}${i.note ? `<div class="note">${i.note}</div>` : ''}</div>
       </div>`).join('');
 
     const html = `
@@ -290,6 +290,7 @@ export const printOrderTickets = async (
         .item { display:flex; gap:10px; align-items:center; padding:8px 0; border-bottom:1px dashed #aaa; font-size:16px; }
         .item .q { min-width:36px; height:32px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:19px; border:2px solid #000; border-radius:6px; }
         .item .n { flex:1; font-weight:700; line-height:1.3; }
+        .note { margin-top:4px; font-size:13px; font-weight:900; border:2px dashed #000; padding:4px 6px; border-radius:5px; }
         .foot { text-align:center; font-size:10px; margin-top:10px; color:#333; }
       </style></head><body>
         <div class="rname">${restaurantName}</div>
@@ -371,7 +372,7 @@ export const printCustomerReceipt = async (
     return `
     <tr>
       <td class="q"><span class="qbox">${qty}×</span></td>
-      <td class="n">${isAr ? i.name_ar : i.name_en}</td>
+      <td class="n">${isAr ? i.name_ar : i.name_en}${i.note ? `<div class="item-note">${i.note}</div>` : ''}</td>
       <td class="p">${lineTotal.toFixed(2)}</td>
     </tr>`;
   }).join('');
@@ -423,6 +424,7 @@ export const printCustomerReceipt = async (
       .qbox { display:inline-block; min-width:34px; padding:2px 4px; border:2px solid #000; border-radius:5px;
               font-size:14px; font-weight:900; text-align:center; direction:ltr; unicode-bidi:isolate; }
       td.n { font-weight:600; line-height:1.35; word-wrap:break-word; overflow-wrap:break-word; }
+      .item-note { margin-top:3px; font-size:11px; font-weight:800; color:#000; border:1px dashed #000; border-radius:4px; padding:2px 4px; }
       td.p { text-align:${isAr ? 'left' : 'right'}; font-weight:700; }
       .sums { font-size:13px; margin-top:6px; padding-top:6px; border-top:1px dashed #000; }
       .sums div { display:flex; justify-content:space-between; margin:4px 0; }

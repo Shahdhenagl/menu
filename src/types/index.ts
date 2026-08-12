@@ -45,6 +45,7 @@ export interface OrderItem {
   name_en: string;
   price: number;
   quantity: number;
+  note?: string;
 }
 
 export interface Order {

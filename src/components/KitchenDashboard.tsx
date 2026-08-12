@@ -433,6 +433,7 @@ export default function KitchenDashboard({ onClose, language }: KitchenDashboard
                       <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--text-white)' }}>
                         <span style={{ color: accent, marginInlineEnd: '0.8rem' }}>{item.quantity}x</span>
                         {language === 'ar' ? item.name_ar : item.name_en}
+                        {item.note ? <small style={{ display: 'block', color: '#fbbf24', marginTop: '0.25rem', fontSize: '0.9rem' }}>{item.note}</small> : null}
                       </span>
                     </li>
                   ))}
