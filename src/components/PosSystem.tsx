@@ -70,27 +70,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [productRecipes, setProductRecipes] = useState<ProductRecipe[]>([]);
 
   const [view, setView] = useState<PosView>(() => {
-    try {
-      const hasDeviceHall = localStorage.getItem('meridien_pos_device_hall');
-      const hasWaiter = localStorage.getItem('meridien_active_pos_waiter');
-      if (!hasDeviceHall) return 'device_hall_select';
-      if (hasWaiter) return 'waiter_dashboard';
-      return 'role_select';
-    } catch { return 'device_hall_select'; }
+    try { return localStorage.getItem('meridien_pos_device_hall') ? 'role_select' : 'device_hall_select'; } catch { return 'device_hall_select'; }
   });
-  const [role, setRole] = useState<'waiter' | 'customer' | null>(() => {
-    try { return localStorage.getItem('meridien_active_pos_waiter') ? 'waiter' : null; } catch { return null; }
-  });
+  const [role, setRole] = useState<'waiter' | 'customer' | null>(null);
   const [mobileShowCart, setMobileShowCart] = useState(false);
   const [posDepartment, setPosDepartment] = useState<'restaurant'|'bar'>('restaurant');
   
   // Waiter Auth & Dashboard
-  const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(() => {
-    try {
-      const stored = localStorage.getItem('meridien_active_pos_waiter');
-      return stored ? JSON.parse(stored) : null;
-    } catch { return null; }
-  });
+  const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(null);
   const [waiterPasscode, setWaiterPasscode] = useState('');
   const [viewAllOrders, setViewAllOrders] = useState(false);
 
@@ -133,15 +120,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   // Menu & Cart
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [cart, setCart] = useState<OrderItem[]>([]);
-  const [productSearchQuery, setProductSearchQuery] = useState('');
 
   // Waiting/Delivered states, Payment and Transfer states
   const [originalOrderItems, setOriginalOrderItems] = useState<OrderItem[]>([]);
   const [collectPaymentOrder, setCollectPaymentOrder] = useState<Order | null>(null);
   const [payCash, setPayCash] = useState<number | ''>('');
   const [payVisa, setPayVisa] = useState<number | ''>('');
-  const [payWalletRestaurant, setPayWalletRestaurant] = useState<number | ''>('');
-
+  const [payWalletCashier, setPayWalletCashier] = useState<number | ''>('');
+  
   const [payInstapay, setPayInstapay] = useState<number | ''>('');
   const [payIsDeferred, setPayIsDeferred] = useState(false);
   const [payCustomerId, setPayCustomerId] = useState('');
@@ -282,137 +268,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [transferTargetOrderId, setTransferTargetOrderId] = useState<string>('');
   const [transferQty, setTransferQty] = useState<number>(1);
   
-  // Merge order state
-  const [mergeTargetOrderId, setMergeTargetOrderId] = useState<string>('');
-  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
-  
   const previousPendingCount = useRef(0);
   const previousWebsiteOrdersCount = useRef(0);
-
-  const handleTransferSubmit = async () => {
-    if (!transferItem || !transferTargetOrderId || !editingOrder) return;
-    if (transferQty < 1 || transferQty > transferItem.quantity) return;
-
-    try {
-      const targetOrder = activeOrders.find(o => o.id === transferTargetOrderId);
-      if (!targetOrder) return;
-
-      // 1. Deduct from source order
-      const sourceItems = editingOrder.items.map(item => {
-        if (item.id === transferItem.id && (item.note || '') === (transferItem.note || '')) {
-          return { ...item, quantity: item.quantity - transferQty };
-        }
-        return item;
-      }).filter(item => item.quantity > 0);
-
-      const sourceTotal = totalForItems(sourceItems, editingOrder.order_type, editingOrder.hall, editingOrder.payment_method === 'staff');
-
-      // 2. Add to target order
-      const targetItems = [...targetOrder.items];
-      const existingItemIdx = targetItems.findIndex(item => item.id === transferItem.id && (item.note || '') === (transferItem.note || ''));
-      if (existingItemIdx > -1) {
-        targetItems[existingItemIdx] = {
-          ...targetItems[existingItemIdx],
-          quantity: targetItems[existingItemIdx].quantity + transferQty
-        };
-      } else {
-        targetItems.push({
-          ...transferItem,
-          quantity: transferQty
-        });
-      }
-
-      const targetTotal = totalForItems(targetItems, targetOrder.order_type, targetOrder.hall, targetOrder.payment_method === 'staff');
-
-      // 3. Save updates
-      await db.updateOrder(editingOrder.id, {
-        items: sourceItems,
-        total_price: sourceTotal
-      }, selectedWaiter?.name);
-
-      await db.updateOrder(targetOrder.id, {
-        items: targetItems,
-        total_price: targetTotal
-      }, selectedWaiter?.name);
-
-      // 4. Send Telegram Notification
-      if (settings?.telegram_chat_id) {
-        const text = `🔄 <b>تنبيه نقل أصناف بين الطلبات</b>\n\n` +
-          `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
-          `• <b>من الطلب:</b> <code>#${editingOrder.id.slice(0, 6)}</code> (${editingOrder.customer_name})\n` +
-          `• <b>إلى الطلب:</b> <code>#${targetOrder.id.slice(0, 6)}</code> (${targetOrder.customer_name})\n` +
-          `• <b>الصنف المنقول:</b> ${language === 'ar' ? transferItem.name_ar : transferItem.name_en}\n` +
-          `• <b>الكمية المنقولة:</b> ${transferQty}`;
-
-        import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
-          sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
-        });
-      }
-
-      // Reset states
-      setTransferItem(null);
-      setTransferTargetOrderId('');
-      setTransferQty(1);
-      setEditingOrder(null);
-      setEditOrderId(null);
-      setView('waiter_dashboard');
-      loadData();
-    } catch (err) {
-      alert(language === 'ar' ? 'فشل نقل الصنف، يرجى المحاولة مرة أخرى' : 'Failed to transfer item, please try again.');
-    }
-  };
-
-  const handleMergeSubmit = async () => {
-    if (!mergeTargetOrderId || !editingOrder) return;
-    
-    try {
-      const targetOrder = activeOrders.find(o => o.id === mergeTargetOrderId);
-      if (!targetOrder) return;
-
-      const targetItems = [...targetOrder.items];
-      editingOrder.items.forEach(item => {
-        const existingItemIdx = targetItems.findIndex(ti => ti.id === item.id && (ti.note || '') === (item.note || ''));
-        if (existingItemIdx > -1) {
-          targetItems[existingItemIdx] = {
-            ...targetItems[existingItemIdx],
-            quantity: targetItems[existingItemIdx].quantity + item.quantity
-          };
-        } else {
-          targetItems.push({ ...item });
-        }
-      });
-
-      const targetTotal = totalForItems(targetItems, targetOrder.order_type, targetOrder.hall, targetOrder.payment_method === 'staff');
-
-      await db.updateOrder(targetOrder.id, {
-        items: targetItems,
-        total_price: targetTotal
-      }, selectedWaiter?.name);
-
-      await db.deleteOrder(editingOrder.id, selectedWaiter?.name);
-
-      if (settings?.telegram_chat_id) {
-        const text = `🔀 <b>تنبيه دمج طاولات (طلبات)</b>\n\n` +
-          `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
-          `• <b>تم دمج الطلب:</b> <code>#${editingOrder.id.slice(0, 6)}</code> (${editingOrder.customer_name})\n` +
-          `• <b>إلى الطلب:</b> <code>#${targetOrder.id.slice(0, 6)}</code> (${targetOrder.customer_name})`;
-
-        import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
-          sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
-        });
-      }
-
-      setIsMergeModalOpen(false);
-      setMergeTargetOrderId('');
-      setEditingOrder(null);
-      setEditOrderId(null);
-      setView('waiter_dashboard');
-      loadData();
-    } catch (e) {
-      console.error("Failed to merge orders:", e);
-      alert(language === 'ar' ? 'فشل دمج الطلبات' : 'Failed to merge orders');
-    }
-  };
 
   useEffect(() => {
     loadData();
@@ -684,7 +541,26 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
 
   const handleClose = async () => {
-    onClose();
+    if (view === 'role_select') {
+      onClose();
+    } else {
+      if (selectedWaiter) {
+        try {
+          await db.updateWaiterActiveStatus(selectedWaiter.id, false);
+        } catch (e) {}
+      }
+      localStorage.removeItem('meridien_active_pos_waiter');
+      setRole(null);
+      setSelectedWaiter(null);
+      setWaiterPasscode('');
+      setCustomerPhone('');
+      setCustomerName('');
+      setOrderType(null);
+      setCart([]);
+      setEditOrderId(null);
+      setEditingOrder(null);
+      setView('role_select');
+    }
   };
 
   const handleWaiterLogin = async () => {
@@ -731,12 +607,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const getVisibleProducts = () => {
     return products.filter(p => {
       if (!p.is_available) return false;
-      if (productSearchQuery.trim() !== '') {
-        const query = productSearchQuery.toLowerCase();
-        if (!(p.name_ar?.toLowerCase().includes(query) || p.name_en?.toLowerCase().includes(query))) return false;
-      } else {
-        if (p.category_id !== activeCategory) return false;
-      }
+      if (p.category_id !== activeCategory) return false;
       if (orderType === 'talabat' && (p.talabat_price === undefined || p.talabat_price === null)) return false;
       return true;
     });
@@ -904,13 +775,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
   const money = (value: number) => `${(Number(value) || 0).toFixed(2)} EGP`;
   const isToday = (date?: string) => !!date && getLocalDayStr(new Date(date)) === getLocalDayStr();
-  type PayMethod = 'cash' | 'visa' | 'wallet_restaurant' | 'instapay' | 'deferred';
-  const payMethods: PayMethod[] = ['cash', 'visa', 'wallet_restaurant', 'instapay', 'deferred'];
+  type PayMethod = 'cash' | 'visa' | 'wallet_cashier' | 'instapay' | 'deferred';
+  const payMethods: PayMethod[] = ['cash', 'visa', 'wallet_cashier', 'instapay', 'deferred'];
   const payMethodLabel = (method: string) => {
     if (method === 'cash') return language === 'ar' ? 'كاش' : 'Cash';
     if (method === 'visa') return language === 'ar' ? 'فيزا' : 'Visa';
-    if (method === 'wallet_restaurant') return language === 'ar' ? 'محفظة الكاشير' : 'Cashier Wallet';
-    if (method === 'instapay') return language === 'ar' ? 'انستا باي' : 'InstaPay';
+    if (method === 'wallet_cashier') return language === 'ar' ? 'خزنة الكاشير' : 'Cashier Wallet';
+    if (method === 'instapay') return language === 'ar' ? 'إنستاباي' : 'Instapay';
     if (method === 'deferred') return language === 'ar' ? 'آجل' : 'Deferred';
     if (method === 'split') return language === 'ar' ? 'مقسم' : 'Split';
     return method;
@@ -939,8 +810,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const summaryScopeLabel = () => {
     if (summaryScopeFilter === 'all') return language === 'ar' ? 'كل الصالات والخزن' : 'All halls and drawers';
     if (summaryScopeFilter.startsWith('hall:')) return summaryScopeFilter.slice(5);
-    if (summaryScopeFilter.startsWith('drawer:1')) return drawerName(1, settings, language === 'ar');
-    if (summaryScopeFilter.startsWith('drawer:2')) return drawerName(2, settings, language === 'ar');
+    if (summaryScopeFilter === 'drawer:1') return drawerName(1, settings, language === 'ar');
+    if (summaryScopeFilter === 'drawer:2') return drawerName(2, settings, language === 'ar');
     return summaryScopeFilter;
   };
   const summaryOrders = todayOrders.filter(o =>
@@ -948,43 +819,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     (summaryOrderTypeFilter === 'all' || o.order_type === summaryOrderTypeFilter)
   );
   const todayCompletedOrders = summaryOrders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality' && o.payment_method !== 'staff');
-  const paymentStats = payMethods.reduce((acc, method) => ({
-    ...acc,
-    [method]: { subtotal: 0, tax: 0, total: 0 }
-  }), {} as Record<PayMethod, { subtotal: number, tax: number, total: number }>);
-
-  let summarySubtotal = 0;
-  let summaryTaxAmount = 0;
-  let summaryRevenue = 0;
-
+  const paymentTotals = payMethods.reduce((acc, method) => ({ ...acc, [method]: 0 }), {} as Record<PayMethod, number>);
   todayCompletedOrders.forEach(order => {
-    const subtotal = order.items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
-    const taxPercent = taxPercentForOrder(settings, order.order_type, order.hall);
-    const taxAmount = subtotal * taxPercent / 100;
-    const finalTotal = subtotal + taxAmount;
-    const actualTotal = Number(order.total_price) || finalTotal;
-
-    summarySubtotal += subtotal;
-    summaryTaxAmount += taxAmount;
-    summaryRevenue += actualTotal;
-
     Object.entries(paymentParts(order)).forEach(([method, amount]) => {
-      const amt = Number(amount) || 0;
-      if (amt > 0) {
-        const ratio = actualTotal > 0 ? amt / actualTotal : 1;
-        paymentStats[method as PayMethod].total += amt;
-        paymentStats[method as PayMethod].subtotal += subtotal * ratio;
-        paymentStats[method as PayMethod].tax += taxAmount * ratio;
-      }
+      paymentTotals[method as PayMethod] += Number(amount) || 0;
     });
   });
-
-  const paymentTotals = payMethods.reduce((acc, method) => ({ ...acc, [method]: paymentStats[method].total }), {} as Record<PayMethod, number>);
   const unpaidTableOrders = summaryOrders.filter(o =>
     o.order_type === 'dine_in' &&
     ['pending', 'preparing', 'prepared', 'delivered'].includes(o.status)
   );
   const unpaidTablesTotal = unpaidTableOrders.reduce((sum, o) => sum + totalForOrder(o), 0);
+  const summaryRevenue = todayCompletedOrders.reduce((sum, o) => sum + (Number(o.total_price) || 0), 0);
   const printShiftSummary = () => {
     const ar = language === 'ar';
     const typeLabel = summaryOrderTypeFilter === 'all' ? (ar ? 'كل أنواع الطلب' : 'All order types') : orderTypeLabel({ order_type: summaryOrderTypeFilter } as Order);
@@ -1087,13 +933,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         return addedQty > 0 ? { ...ci, quantity: addedQty } : null;
       }).filter((i): i is OrderItem => i !== null);
 
-      const isAllBarAddedItems = addedItems.length > 0 && addedItems.every(ci => {
-        const product = products.find(p => p.id === ci.id);
-        return product?.department === 'bar';
-      });
-
       if (addedItems.length > 0) {
-        if (!['pending', 'preparing'].includes(editingOrder.status) && !isAllBarAddedItems) {
+        if (!['pending', 'preparing'].includes(editingOrder.status)) {
           await db.updateOrder(editOrderId, { status: 'pending' }, selectedWaiter?.name);
         }
         const additionOrder = { ...(updatedOrder || editingOrder), id: editOrderId, items: addedItems } as Order;
@@ -1121,11 +962,6 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       assignedWaiterName = randomWaiter.name;
     }
 
-    const isAllBarItems = cart.length > 0 && cart.every(cartItem => {
-      const product = products.find(p => p.id === cartItem.id);
-      return product?.department === 'bar';
-    });
-
     const newOrder: Omit<Order, 'id'> = {
       customer_name: customerName || 'Guest',
       customer_phone: customerPhone || 'N/A',
@@ -1136,7 +972,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       items: cart,
       // طلب الاستاف مجاني: الإجمالي صفر، والقيمة الحقيقية بتتحفظ في payment_details للتقارير
       total_price: staffOrderFor ? 0 : cartTotal,
-      status: isAllBarItems ? 'prepared' : 'pending',
+      status: 'pending',
       order_type: orderType || 'takeaway',
       waiter_id: assignedWaiterId,
       waiter_name: assignedWaiterName,
@@ -1245,64 +1081,17 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       setTransferItem(null);
       setTransferTargetOrderId('');
       setTransferQty(1);
-      setEditingOrder(null);
-      setEditOrderId(null);
-      setView('waiter_dashboard');
+
+      // Update local state to trigger render correctly
+      setEditingOrder({
+        ...editingOrder,
+        items: sourceItems,
+        total_price: sourceTotal
+      });
+
       loadData();
     } catch (err) {
       alert(language === 'ar' ? 'فشل نقل الصنف، يرجى المحاولة مرة أخرى' : 'Failed to transfer item, please try again.');
-    }
-  };
-
-  const handleMergeSubmit = async () => {
-    if (!mergeTargetOrderId || !editingOrder) return;
-    
-    try {
-      const targetOrder = activeOrders.find(o => o.id === mergeTargetOrderId);
-      if (!targetOrder) return;
-
-      const targetItems = [...targetOrder.items];
-      editingOrder.items.forEach(item => {
-        const existingItemIdx = targetItems.findIndex(ti => ti.id === item.id && (ti.note || '') === (item.note || ''));
-        if (existingItemIdx > -1) {
-          targetItems[existingItemIdx] = {
-            ...targetItems[existingItemIdx],
-            quantity: targetItems[existingItemIdx].quantity + item.quantity
-          };
-        } else {
-          targetItems.push({ ...item });
-        }
-      });
-
-      const targetTotal = totalForItems(targetItems, targetOrder.order_type, targetOrder.hall, targetOrder.payment_method === 'staff');
-
-      await db.updateOrder(targetOrder.id, {
-        items: targetItems,
-        total_price: targetTotal
-      }, selectedWaiter?.name);
-
-      await db.deleteOrder(editingOrder.id, selectedWaiter?.name);
-
-      if (settings?.telegram_chat_id) {
-        const text = `🔀 <b>تنبيه دمج طاولات (طلبات)</b>\n\n` +
-          `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
-          `• <b>تم دمج الطلب:</b> <code>#${editingOrder.id.slice(0, 6)}</code> (${editingOrder.customer_name})\n` +
-          `• <b>إلى الطلب:</b> <code>#${targetOrder.id.slice(0, 6)}</code> (${targetOrder.customer_name})`;
-
-        import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
-          sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
-        });
-      }
-
-      setIsMergeModalOpen(false);
-      setMergeTargetOrderId('');
-      setEditingOrder(null);
-      setEditOrderId(null);
-      setView('waiter_dashboard');
-      loadData();
-    } catch (e) {
-      console.error("Failed to merge orders:", e);
-      alert(language === 'ar' ? 'فشل دمج الطلبات' : 'Failed to merge orders');
     }
   };
 
@@ -2061,45 +1850,64 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           {view === 'menu' && (
             <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', display: 'flex', paddingTop: '3.75rem' }}>
               <div className="pos-menu-sidebar">
-                {categories.map(cat => (
-                  <div 
-                    key={cat.id} 
-                    className={`pos-cat-item ${activeCategory === cat.id ? 'active' : ''}`}
-                    onClick={() => setActiveCategory(cat.id)}
-                  >
+                <div style={{ display: 'flex', padding: '10px', gap: '5px', borderBottom: '1px solid var(--border-color)' }}>
+                  <button 
+                    onClick={() => setPosDepartment('restaurant')} 
+                    style={{ flex: 1, padding: '8px', background: posDepartment === 'restaurant' ? 'var(--gold-primary)' : 'var(--border-color)', color: posDepartment === 'restaurant' ? '#000' : 'var(--text-white)', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'المطعم' : 'Restaurant'}
+                  </button>
+                  <button 
+                    onClick={() => setPosDepartment('bar')} 
+                    style={{ flex: 1, padding: '8px', background: posDepartment === 'bar' ? '#3b82f6' : 'var(--border-color)', color: posDepartment === 'bar' ? 'var(--text-white)' : 'var(--text-white)', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'البار' : 'Bar'}
+                  </button>
+                </div>
+                {categories.filter(c => (c.department || 'restaurant') === posDepartment).map(cat => (
+                  <div key={cat.id} className={`pos-cat-item ${activeCategory === cat.id ? 'active' : ''}`} onClick={() => setActiveCategory(cat.id)}>
                     {language === 'ar' ? cat.name_ar : cat.name_en}
                   </div>
                 ))}
               </div>
               <div className="pos-products">
                 {getVisibleProducts().map(p => {
-                  const stock = getStockStatus(p);
+                  const stockStatus = getStockStatus(p);
                   return (
-                    <div 
-                      key={p.id} 
-                      className="pos-product-card" 
-                      onClick={() => { if (stock !== 'out') addToCart(p); }}
-                      style={{ opacity: stock === 'out' ? 0.5 : 1, borderColor: stock === 'low' ? '#f59e0b' : 'transparent' }}
-                    >
-                      <img src={p.image_url || '/placeholder.png'} className="pos-product-img" alt={p.name_ar} />
-                      <div style={{ padding: '0.75rem' }}>
-                        <h4 style={{ margin: '0 0 0.5rem', fontSize: '1rem' }}>{language === 'ar' ? p.name_ar : p.name_en}</h4>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: 'var(--gold-primary)', fontWeight: 'bold' }}>{getProductPrice(p).toFixed(2)} EGP</span>
-                          {stock === 'low' && <span style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: 'bold' }}>Low Stock</span>}
-                          {stock === 'out' && <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 'bold' }}>Out</span>}
-                        </div>
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} key={p.id} className="pos-product-card" style={{ position: 'relative' }} onClick={() => addToCart(p)}>
+                    {stockStatus !== 'ok' && (
+                      <div style={{
+                        position: 'absolute', top: 8, insetInlineStart: 8, zIndex: 3,
+                        padding: '3px 10px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700,
+                        color: 'var(--text-white)', boxShadow: '0 2px 6px rgba(0,0,0,.45)',
+                        background: stockStatus === 'out' ? '#c0392b' : '#e08e0b'
+                      }}>
+                        {stockStatus === 'out'
+                          ? (language === 'ar' ? 'نفذ' : 'Out')
+                          : (language === 'ar' ? 'قرب يخلص' : 'Low')}
+                      </div>
+                    )}
+                    {p.image_url ? (
+                      <img src={p.image_url} alt={p.name_en} className="pos-product-img" />
+                    ) : (
+                      <div className="pos-product-img" style={{ background: 'var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Utensils size={40} color="#666" /></div>
+                    )}
+                    <div style={{ padding: '1rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>{language === 'ar' ? p.name_ar : p.name_en}</h4>
+                      <div style={{ color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '1.2rem' }}>
+                        {getProductPrice(p).toFixed(2)} EGP
                       </div>
                     </div>
+                  </motion.div>
                   );
                 })}
               </div>
               <div className="pos-cart-panel">
-                <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0 }}>{t.cart}</h3>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    {orderType?.toUpperCase()} {tableNumber && `- Table ${tableNumber}`}
-                  </p>
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h2 style={{ margin: 0, color: 'var(--gold-primary)' }}>{t.cart}</h2>
+                    <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      {orderType?.toUpperCase()} {tableNumber && `- Table ${tableNumber}`}
+                    </p>
+                  </div>
                   <button 
                     className="mobile-only-btn pos-btn-outline" 
                     style={{ display: 'none', padding: '0.5rem 1rem', fontSize: '0.9rem', borderRadius: '8px' }} 
@@ -2278,13 +2086,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setView('customer_info');
                 }}>{t.newOrder}</button>
                 
-                {role !== 'waiter' && (
-                  <button className="pos-btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444' }} onClick={() => {
-                    setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setRole('waiter'); setSelectedWaiter(null); setView('waiter_auth');
-                  }}>
-                    {language === 'ar' ? 'خروج' : 'Exit'}
-                  </button>
-                )}
+                <button className="pos-btn-outline" style={{ borderColor: '#ef4444', color: '#ef4444' }} onClick={() => {
+                  setCart([]); setCustomerName(''); setCustomerPhone(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setRole('waiter'); setSelectedWaiter(null); setView('waiter_auth');
+                }}>
+                  {language === 'ar' ? 'خروج' : 'Exit'}
+                </button>
               </div>
             </motion.div>
           )}
@@ -2446,7 +2252,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               setCollectPaymentOrder(order);
                               setPayCash('');
                               setPayVisa('');
-                              setPayWalletRestaurant('');
+                              setPayWalletCashier('');
+
                               setPayInstapay('');
                               setPayIsDeferred(false);
                               setPayCustomerId(order.customer_id || '');
@@ -2601,14 +2408,6 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
                 </div>
 
-                <button className="pos-btn" style={{ width: '100%', padding: '1rem', marginBottom: '1rem', background: '#3b82f6', color: '#fff' }} onClick={() => {
-                  const otherOrders = activeOrders.filter(o => o.id !== editingOrder.id);
-                  setMergeTargetOrderId(otherOrders[0]?.id || '');
-                  setIsMergeModalOpen(true);
-                }}>
-                  {language === 'ar' ? 'دمج الطاولة مع طاولة أخرى' : 'Merge Table with another'}
-                </button>
-
                 <button className="pos-btn" style={{ width: '100%', padding: '1rem', marginBottom: '1rem' }} onClick={async () => {
                   await db.updateOrder(editingOrder.id, {
                     status: editingOrder.status,
@@ -2700,18 +2499,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     <div style={{ fontSize: '1.7rem', fontWeight: 900, color: 'var(--gold-primary)' }}>{summaryOrders.length}</div>
                   </div>
                   <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.25)' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'المحصل (الإجمالي)' : 'Collected (Total)'}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'المحصل' : 'Collected'}</span>
                     <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#10b981' }}>{money(summaryRevenue)}</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem', lineHeight: '1.6' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>{language === 'ar' ? 'قبل الضريبة:' : 'Subtotal:'}</span>
-                        <span>{money(summarySubtotal)}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>{language === 'ar' ? 'إجمالي الضريبة:' : 'Tax:'}</span>
-                        <span>{money(summaryTaxAmount)}</span>
-                      </div>
-                    </div>
                   </div>
                   <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.25)' }}>
                     <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'لسه متحصلش من الطاولات' : 'Unpaid tables'}</span>
@@ -2723,19 +2512,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                     <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تقسيمة وسائل الدفع' : 'Payment Methods'}</h3>
                     {payMethods.map(method => (
-                      <div key={method} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.6rem 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 600 }}>{payMethodLabel(method)}</span>
-                          <b className="font-en" style={{ color: 'var(--gold-primary)' }}>{money(paymentStats[method].total)}</b>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          <span>{language === 'ar' ? 'قبل الضريبة' : 'Subtotal'}</span>
-                          <span className="font-en">{money(paymentStats[method].subtotal)}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          <span>{language === 'ar' ? 'الضريبة' : 'Tax'}</span>
-                          <span className="font-en">{money(paymentStats[method].tax)}</span>
-                        </div>
+                      <div key={method} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.45rem 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <span>{payMethodLabel(method)}</span>
+                        <b className="font-en">{money(paymentTotals[method])}</b>
                       </div>
                     ))}
                   </div>
@@ -2795,91 +2574,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     ))}
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {isMergeModalOpen && editingOrder && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'rgba(0,0,0,0.85)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 99999,
-                padding: '1rem'
-              }}
-            >
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                style={{
-                  background: 'var(--bg-card)',
-                  padding: '2rem',
-                  borderRadius: '16px',
-                  width: '100%',
-                  maxWidth: '450px',
-                  border: '1px solid var(--border-color)',
-                  boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
-                }}
-              >
-                <h2 style={{ margin: '0 0 1.5rem 0', color: 'var(--gold-primary)', textAlign: 'center' }}>
-                  {language === 'ar' ? 'دمج طلب (نقل كل الأصناف)' : 'Merge Order'}
-                </h2>
-
-                <div style={{ marginBottom: '2rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                    {language === 'ar' ? 'اختر الطلب (الطاولة) لدمج هذا الطلب معه:' : 'Select target order (table) to merge with:'}
-                  </label>
-                  {activeOrders.filter(o => o.id !== editingOrder.id).length === 0 ? (
-                    <div style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                      {language === 'ar' ? 'لا توجد طلبات نشطة أخرى للدمج!' : 'No other active orders to merge with!'}
-                    </div>
-                  ) : (
-                    <select
-                      className="pos-input"
-                      value={mergeTargetOrderId}
-                      onChange={(e) => setMergeTargetOrderId(e.target.value)}
-                    >
-                      {activeOrders.filter(o => o.id !== editingOrder.id).map(o => (
-                        <option key={o.id} value={o.id}>
-                          #{o.id.slice(0, 6)} - {o.customer_name} {o.table_number && o.table_number !== '-' ? `(Table ${o.table_number})` : ''} - {o.total_price.toFixed(2)} EGP
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <button 
-                    className="pos-btn" 
-                    style={{ flex: 1, padding: '1rem' }} 
-                    disabled={activeOrders.filter(o => o.id !== editingOrder.id).length === 0 || !mergeTargetOrderId}
-                    onClick={handleMergeSubmit}
-                  >
-                    {language === 'ar' ? 'تأكيد الدمج' : 'Confirm Merge'}
-                  </button>
-
-                  <button 
-                    className="pos-btn-outline" 
-                    style={{ flex: 1, padding: '1rem' }} 
-                    onClick={() => setIsMergeModalOpen(false)}
-                  >
-                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
-                  </button>
-                </div>
               </motion.div>
             </motion.div>
           )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {/* Collect Payment Modal */}
@@ -2960,131 +2658,137 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 </div>
 
                 {/* ===== الخزنة اللي هيتحصّل فيها ===== */}
-                {!collectPaymentOrder.hall && (
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      {language === 'ar' ? 'التحصيل في أنهي خزنة؟' : 'Collect into which drawer?'}
-                    </label>
-                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                      {([1, 2] as const).map(d => (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => {
-                            playClickSound();
-                            setPayDrawer(d);
-                          }}
-                          style={{
-                            flex: 1, padding: '0.9rem', borderRadius: '12px', cursor: 'pointer',
-                            fontWeight: 'bold', fontSize: '1rem', transition: 'all 0.2s',
-                            border: payDrawer === d ? '2px solid var(--gold-primary)' : '2px solid #3f3f46',
-                            background: payDrawer === d ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : 'var(--bg-card)',
-                            color: payDrawer === d ? '#000' : 'var(--text-muted)',
-                          }}
-                        >
-                          {drawerName(d, settings, language === 'ar')}
-                        </button>
-                      ))}
-                    </div>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    {language === 'ar' ? 'التحصيل في أنهي خزنة؟' : 'Collect into which drawer?'}
+                    {collectPaymentOrder.hall && (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginInlineStart: '0.5rem' }}>
+                        ({language === 'ar' ? `متحددة تلقائيًا من ${collectPaymentOrder.hall}` : `auto from ${collectPaymentOrder.hall}`})
+                      </span>
+                    )}
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    {([1, 2] as const).map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => {
+                          if (collectPaymentOrder.hall) return;
+                          playClickSound();
+                          setPayDrawer(d);
+                        }}
+                        style={{
+                          flex: 1, padding: '0.9rem', borderRadius: '12px', cursor: collectPaymentOrder.hall ? 'not-allowed' : 'pointer',
+                          fontWeight: 'bold', fontSize: '1rem', transition: 'all 0.2s',
+                          border: payDrawer === d ? '2px solid var(--gold-primary)' : '2px solid #3f3f46',
+                          background: payDrawer === d ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : 'var(--bg-card)',
+                          color: payDrawer === d ? '#000' : 'var(--text-muted)',
+                        }}
+                      >
+                        {drawerName(d, settings, language === 'ar')}
+                      </button>
+                    ))}
                   </div>
-                )}
+                </div>
 
                 {/* Input Breakdown Fields */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
                   <div>
-                    <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      <span>💵 {language === 'ar' ? 'نقدي (كاش):' : 'Cash:'}</span>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          const t = Number(totalForOrder(collectPaymentOrder).toFixed(2));
-                          setPayCash(t); setPayVisa(''); setPayWalletRestaurant(''); setPayInstapay('');
-                        }}
-                        style={{ background: 'none', border: 'none', color: 'var(--gold-primary)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
-                      >
-                        {language === 'ar' ? 'سداد كامل' : 'Full Amount'}
-                      </button>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      💵 {language === 'ar' ? 'نقدي (كاش):' : 'Cash:'}
                     </label>
-                    <input 
-                      type="number"
-                      className="pos-input"
-                      placeholder="0.00"
-                      value={payCash}
-                      onChange={(e) => setPayCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                      min="0"
-                    />
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input 
+                        type="number"
+                        className="pos-input"
+                        style={{ flex: 1 }}
+                        placeholder="0.00"
+                        value={payCash}
+                        onChange={(e) => setPayCash(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                        min="0"
+                      />
+                      <button
+                        type="button"
+                        style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid var(--gold-primary)', background: 'rgba(212,175,55,0.1)', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        onClick={() => { playClickSound(); setPayCash(totalForOrder(collectPaymentOrder)); }}
+                      >
+                        {language === 'ar' ? 'كامل' : 'Full'}
+                      </button>
+                    </div>
                   </div>
 
                   <div>
-                    <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      <span>💳 {language === 'ar' ? 'فيزا / كارت:' : 'Visa / Card:'}</span>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          const t = Number(totalForOrder(collectPaymentOrder).toFixed(2));
-                          setPayCash(''); setPayVisa(t); setPayWalletRestaurant(''); setPayInstapay('');
-                        }}
-                        style={{ background: 'none', border: 'none', color: 'var(--gold-primary)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
-                      >
-                        {language === 'ar' ? 'سداد كامل' : 'Full Amount'}
-                      </button>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      💳 {language === 'ar' ? 'فيزا / كارت:' : 'Visa / Card:'}
                     </label>
-                    <input 
-                      type="number"
-                      className="pos-input"
-                      placeholder="0.00"
-                      value={payVisa}
-                      onChange={(e) => setPayVisa(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                      min="0"
-                    />
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input 
+                        type="number"
+                        className="pos-input"
+                        style={{ flex: 1 }}
+                        placeholder="0.00"
+                        value={payVisa}
+                        onChange={(e) => setPayVisa(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                        min="0"
+                      />
+                      <button
+                        type="button"
+                        style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid var(--gold-primary)', background: 'rgba(212,175,55,0.1)', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        onClick={() => { playClickSound(); setPayVisa(totalForOrder(collectPaymentOrder)); }}
+                      >
+                        {language === 'ar' ? 'كامل' : 'Full'}
+                      </button>
+                    </div>
                   </div>
 
                   <div>
-                    <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      <span>📱 {language === 'ar' ? 'محفظة الكاشير:' : 'Cashier Wallet:'}</span>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          const t = Number(totalForOrder(collectPaymentOrder).toFixed(2));
-                          setPayCash(''); setPayVisa(''); setPayWalletRestaurant(t); setPayInstapay('');
-                        }}
-                        style={{ background: 'none', border: 'none', color: 'var(--gold-primary)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
-                      >
-                        {language === 'ar' ? 'سداد كامل' : 'Full Amount'}
-                      </button>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      📱 {language === 'ar' ? 'خزنة الكاشير:' : 'Cashier Wallet:'}
+
                     </label>
-                    <input
-                      type="number"
-                      className="pos-input"
-                      placeholder="0.00"
-                      value={payWalletRestaurant}
-                      onChange={(e) => setPayWalletRestaurant(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                      min="0"
-                    />
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input 
+                        type="number"
+                        className="pos-input"
+                        style={{ flex: 1 }}
+                        placeholder="0.00"
+                        value={payWalletCashier}
+                        onChange={(e) => setPayWalletCashier(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                        min="0"
+                      />
+                      <button
+                        type="button"
+                        style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid var(--gold-primary)', background: 'rgba(212,175,55,0.1)', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        onClick={() => { playClickSound(); setPayWalletCashier(totalForOrder(collectPaymentOrder)); }}
+                      >
+                        {language === 'ar' ? 'كامل' : 'Full'}
+                      </button>
+                    </div>
                   </div>
 
+
                   <div>
-                    <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      <span>⚡ {language === 'ar' ? 'إنستا باي:' : 'InstaPay:'}</span>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          const t = Number(totalForOrder(collectPaymentOrder).toFixed(2));
-                          setPayCash(''); setPayVisa(''); setPayWalletRestaurant(''); setPayInstapay(t);
-                        }}
-                        style={{ background: 'none', border: 'none', color: 'var(--gold-primary)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
-                      >
-                        {language === 'ar' ? 'سداد كامل' : 'Full Amount'}
-                      </button>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      ⚡ {language === 'ar' ? 'إنستا باي:' : 'InstaPay:'}
                     </label>
-                    <input 
-                      type="number"
-                      className="pos-input"
-                      placeholder="0.00"
-                      value={payInstapay}
-                      onChange={(e) => setPayInstapay(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                      min="0"
-                    />
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input 
+                        type="number"
+                        className="pos-input"
+                        style={{ flex: 1 }}
+                        placeholder="0.00"
+                        value={payInstapay}
+                        onChange={(e) => setPayInstapay(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                        min="0"
+                      />
+                      <button
+                        type="button"
+                        style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid var(--gold-primary)', background: 'rgba(212,175,55,0.1)', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        onClick={() => { playClickSound(); setPayInstapay(totalForOrder(collectPaymentOrder)); }}
+                      >
+                        {language === 'ar' ? 'كامل' : 'Full'}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Deferred Toggle */}
@@ -3220,9 +2924,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 {(() => {
                   const cashVal = Number(payCash) || 0;
                   const visaVal = Number(payVisa) || 0;
-                  const walletRestaurantVal = Number(payWalletRestaurant) || 0;
+                  const walletCashierVal = Number(payWalletCashier) || 0;
                   const instapayVal = Number(payInstapay) || 0;
-                  const totalPaid = cashVal + visaVal + walletRestaurantVal + walletBarVal + instapayVal;
+                  const totalPaid = cashVal + visaVal + walletCashierVal + instapayVal;
 
                   const payableTotal = totalForOrder(collectPaymentOrder);
                   const remaining = payableTotal - totalPaid;
@@ -3291,7 +2995,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               const activeMethods = [
                                 cashVal > 0 && 'cash',
                                 visaVal > 0 && 'visa',
-                                walletRestaurantVal > 0 && 'wallet_restaurant',
+                                walletCashierVal > 0 && 'wallet_cashier',
+
                                 instapayVal > 0 && 'instapay',
                                 remaining > 0.01 && payIsDeferred && 'deferred'
                               ].filter(Boolean) as string[];
@@ -3305,7 +3010,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               const paymentDetails = {
                                 cash: cashVal,
                                 visa: visaVal,
-                                wallet_restaurant: walletRestaurantVal,
+                                wallet_cashier: walletCashierVal,
+
                                 instapay: instapayVal,
                                 deferred: remaining > 0.01 && payIsDeferred ? remaining : 0,
                                 customer_id: remaining > 0.01 && payIsDeferred ? payCustomerId : undefined
@@ -3419,6 +3125,197 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem' }}>
                       <span>{language === 'ar' ? 'قيمة الطلب:' : 'Order value:'}</span>
                       <b style={{ color: '#fff' }}>{totalForOrder(collectPaymentOrder).toFixed(2)} EGP</b>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem', marginTop: '0.4rem' }}>
+                      <span>{language === 'ar' ? 'المطلوب تحصيله:' : 'To collect:'}</span>
+                      <b style={{ color: '#38bdf8' }}>{language === 'ar' ? 'مجاني' : 'Free'}</b>
+                    </div>
+                  </div>
+                )}
+
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                  {language === 'ar' ? 'الموظف المستفيد *' : 'Employee *'}
+                </label>
+                <select
+                  className="pos-input"
+                  value={staffEmployeeId}
+                  onChange={e => setStaffEmployeeId(e.target.value)}
+                  style={{ marginBottom: '1.25rem', background: '#111', textAlign: 'start' }}
+                >
+                  <option value="">{language === 'ar' ? '— اختر الموظف —' : '— Select employee —'}</option>
+                  {employeesList.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                  {language === 'ar' ? 'كلمة السر *' : 'Password *'}
+                </label>
+                <input
+                  type="password"
+                  className="pos-input"
+                  value={staffPasscode}
+                  onChange={e => setStaffPasscode(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleStaffOrder(); } }}
+                  placeholder={language === 'ar' ? 'كلمة سر فواتير الاستاف' : 'Staff orders password'}
+                  style={{ marginBottom: '1.5rem', background: '#111', letterSpacing: '0.3rem' }}
+                />
+
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button
+                    className="pos-btn"
+                    style={{ flex: 2, background: '#38bdf8', color: '#000' }}
+                    disabled={staffSaving || !staffEmployeeId || !staffPasscode}
+                    onClick={handleStaffOrder}
+                  >
+                    {staffSaving
+                      ? (language === 'ar' ? 'جاري التسجيل…' : 'Saving…')
+                      : staffModalMode === 'new'
+                        ? (language === 'ar' ? 'تأكيد ومتابعة' : 'Confirm & continue')
+                        : (language === 'ar' ? 'تسجيل الفاتورة' : 'Record order')}
+                  </button>
+                  <button className="pos-btn-outline" style={{ flex: 1 }} disabled={staffSaving} onClick={() => setStaffModalOpen(false)}>
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Transfer Item Modal */}
+          {transferItem && editingOrder && (
+            <motion.div 
+              key="transfer_item_modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.85)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 9999,
+                padding: '1rem',
+                backdropFilter: 'blur(8px)',
+                direction: language === 'ar' ? 'rtl' : 'ltr'
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '2px solid var(--gold-primary)',
+                  borderRadius: '20px',
+                  width: '100%',
+                  maxWidth: '450px',
+                  padding: '2rem',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, color: 'var(--gold-primary)', fontSize: '1.3rem', fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'نقل الصنف بين الطاولات' : 'Transfer Item Between Tables'}
+                  </h3>
+                  <button 
+                    onClick={() => setTransferItem(null)} 
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid var(--border-color)' }}>
+                  <div style={{ color: 'var(--gold-primary)', fontWeight: 'bold', marginBottom: '0.4rem' }}>
+                    {language === 'ar' ? transferItem.name_ar : transferItem.name_en}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                    {language === 'ar' ? `الكمية المتوفرة بالطلب الحالي: ${transferItem.quantity}` : `Available quantity in current order: ${transferItem.quantity}`}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginBottom: '1.5rem' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      {language === 'ar' ? 'الكمية المراد نقلها:' : 'Quantity to Transfer:'}
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#000', padding: '6px 12px', borderRadius: '8px', width: 'fit-content' }}>
+                      <button 
+                        disabled={transferQty <= 1}
+                        onClick={() => setTransferQty(prev => Math.max(1, prev - 1))} 
+                        style={{ background: 'var(--border-color)', border: 'none', color: 'var(--text-white)', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <span style={{ fontWeight: 'bold', minWidth: '30px', textAlign: 'center', fontSize: '1.2rem' }}>{transferQty}</span>
+                      <button 
+                        disabled={transferQty >= transferItem.quantity}
+                        onClick={() => setTransferQty(prev => Math.min(transferItem.quantity, prev + 1))} 
+                        style={{ background: 'var(--gold-primary)', border: 'none', color: '#000', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      {language === 'ar' ? 'الطلب المستهدف (رقم الطاولة / اسم العميل):' : 'Target Order (Table / Customer):'}
+                    </label>
+                    {activeOrders.filter(o => o.id !== editingOrder.id).length === 0 ? (
+                      <div style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                        {language === 'ar' ? 'لا توجد طلبات نشطة أخرى لنقل الصنف إليها!' : 'No other active orders to transfer to!'}
+                      </div>
+                    ) : (
+                      <select
+                        className="pos-input"
+                        value={transferTargetOrderId}
+                        onChange={(e) => setTransferTargetOrderId(e.target.value)}
+                      >
+                        {activeOrders.filter(o => o.id !== editingOrder.id).map(o => (
+                          <option key={o.id} value={o.id}>
+                            #{o.id.slice(0, 6)} - {o.customer_name} {o.table_number && o.table_number !== '-' ? `(Table ${o.table_number})` : ''} - {o.total_price.toFixed(2)} EGP
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <button 
+                    className="pos-btn" 
+                    style={{ flex: 1, padding: '1rem' }} 
+                    disabled={activeOrders.filter(o => o.id !== editingOrder.id).length === 0 || !transferTargetOrderId}
+                    onClick={handleTransferSubmit}
+                  >
+                    {language === 'ar' ? 'تأكيد النقل' : 'Confirm Transfer'}
+                  </button>
+
+                  <button 
+                    className="pos-btn-outline" 
+                    style={{ flex: 1, padding: '1rem' }} 
+                    onClick={() => setTransferItem(null)}
+                  >
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Attendance Modal */}
+          {attendanceModalOpen && (
+            <motion.div 
+              key="attendance_modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               style={{
                 position: 'fixed',
