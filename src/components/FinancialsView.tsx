@@ -407,7 +407,7 @@ export default function FinancialsView({
                 <select className="input-gold" value={transferFrom} onChange={e => setTransferFrom(e.target.value)} style={{ width: '100%' }}>
                   <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
                   <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
-                  <option value="wallet_restaurant">{language === 'ar' ? 'خزنة الكاشير' : 'Cafe Wallet'}</option>
+                  <option value="wallet_restaurant">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
 
                   <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
                   {userRole === 'admin' && (
@@ -423,7 +423,7 @@ export default function FinancialsView({
                 <select className="input-gold" value={transferTo} onChange={e => setTransferTo(e.target.value)} style={{ width: '100%' }}>
                   <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
                   <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
-                  <option value="wallet_restaurant">{language === 'ar' ? 'خزنة الكاشير' : 'Cafe Wallet'}</option>
+                  <option value="wallet_restaurant">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
 
                   <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
                   {userRole === 'admin' && (

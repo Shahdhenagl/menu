@@ -780,7 +780,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const payMethodLabel = (method: string) => {
     if (method === 'cash') return language === 'ar' ? 'كاش' : 'Cash';
     if (method === 'visa') return language === 'ar' ? 'فيزا' : 'Visa';
-    if (method === 'wallet_restaurant') return language === 'ar' ? 'خزنة الكاشير' : 'Cafe Wallet';
+    if (method === 'wallet_restaurant') return language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet';
     if (method === 'instapay') return language === 'ar' ? 'إنستاباي' : 'Instapay';
     if (method === 'deferred') return language === 'ar' ? 'آجل' : 'Deferred';
     if (method === 'split') return language === 'ar' ? 'مقسم' : 'Split';
@@ -2759,7 +2759,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      📱 {language === 'ar' ? 'خزنة الكاشير:' : 'Cafe Wallet:'}
+                      📱 {language === 'ar' ? 'محفظة الكافيه:' : 'Cafe Wallet:'}
 
                     </label>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
