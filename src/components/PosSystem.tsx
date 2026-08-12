@@ -14,7 +14,7 @@ import {
   ShoppingBag, Utensils, CheckCircle, X,
   Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
   Pizza, Coffee, ChefHat, Wine, Cake, MessageCircle, Camera, Search,
-  Bell, Sun, Moon
+  Bell, Sun, Moon, BarChart3
 } from 'lucide-react';
 import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe } from '../types';
@@ -42,7 +42,7 @@ interface PosSystemProps {
   setLanguage?: (lang: 'ar' | 'en') => void;
 }
 
-type PosView = 'role_select' | 'waiter_auth' | 'customer_info' | 'order_type' | 'menu' | 'checkout' | 'success' | 'waiter_dashboard' | 'waiter_order_edit';
+type PosView = 'role_select' | 'waiter_auth' | 'customer_info' | 'order_type' | 'table_status' | 'menu' | 'checkout' | 'success' | 'waiter_dashboard' | 'waiter_order_edit';
 
 export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLanguage }) => {
   // Global Data
@@ -50,6 +50,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [products, setProducts] = useState<Product[]>([]);
   const [waiters, setWaiters] = useState<SystemUser[]>([]);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
   // فلتر لوحة الطلبات: 'all' | `hall:<اسم>` | `type:<نوع>`
   const [dashFilter, setDashFilter] = useState<string>('all');
   // ثيم لايت/دارك (بيحط .light-theme على الصفحة زي باقي التطبيق)
@@ -96,6 +97,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [orderType, setOrderType] = useState<'takeaway' | 'talabat' | 'dine_in' | 'delivery' | 'website' | null>(null);
   const [tableNumber, setTableNumber] = useState('');
   const [selectedHall, setSelectedHall] = useState('');
+  const [tableStatusFilter, setTableStatusFilter] = useState<'all' | 'empty' | 'occupied' | 'delivered' | 'check'>('all');
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryOrderTypeFilter, setSummaryOrderTypeFilter] = useState<'all' | 'dine_in' | 'takeaway' | 'delivery' | 'talabat' | 'website'>('all');
   
   // Payment and Customers
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -329,6 +333,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     }));
     setProducts(prods);
     setWaiters(users.filter(u => u.role === 'waiter'));
+    setAllOrders(ords);
     setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing' || o.status === 'prepared' || o.status === 'delivered'));
     setPrinters(prnts);
     setSettings(sets);
@@ -703,6 +708,139 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const chipCount = (key: string): number =>
     key === 'all' ? dashBaseOrders.length
       : dashBaseOrders.filter(o => key.startsWith('hall:') ? o.hall === key.slice(5) : (o.order_type || '') === key.slice(5)).length;
+
+  type TableStatus = 'empty' | 'occupied' | 'delivered' | 'check';
+  const tableStatusLabels: Record<TableStatus | 'all', string> = {
+    all: language === 'ar' ? 'الكل' : 'All',
+    empty: language === 'ar' ? 'فاضية' : 'Empty',
+    occupied: language === 'ar' ? 'مشغولة' : 'Occupied',
+    delivered: language === 'ar' ? 'استلمت الكل' : 'All served',
+    check: language === 'ar' ? 'استلمت الشيك' : 'Check printed',
+  };
+  const tableStatusColors: Record<TableStatus, string> = {
+    empty: '#10b981',
+    occupied: '#f59e0b',
+    delivered: '#3b82f6',
+    check: '#8b5cf6',
+  };
+  const dineInOrdersForHall = (hall: string) =>
+    activeOrders.filter(o =>
+      o.order_type === 'dine_in' &&
+      o.hall === hall &&
+      o.table_number &&
+      o.table_number !== '-' &&
+      ['pending', 'preparing', 'prepared', 'delivered'].includes(o.status)
+    );
+  const getTableOrder = (hall: string, tableNo: number) =>
+    dineInOrdersForHall(hall).find(o => String(o.table_number) === String(tableNo));
+  const checkPrintedKey = (orderId: string) => `meridien_check_printed_${orderId}`;
+  const isCheckPrinted = (orderId?: string) => {
+    if (!orderId) return false;
+    try { return localStorage.getItem(checkPrintedKey(orderId)) === '1'; } catch { return false; }
+  };
+  const markCheckPrinted = (orderId: string) => {
+    try { localStorage.setItem(checkPrintedKey(orderId), '1'); } catch {}
+  };
+  const getTableStatus = (hall: string, tableNo: number): TableStatus => {
+    const order = getTableOrder(hall, tableNo);
+    if (!order) return 'empty';
+    if (isCheckPrinted(order.id)) return 'check';
+    if (order.status === 'delivered' || order.status === 'prepared') return 'delivered';
+    return 'occupied';
+  };
+  const tableStatusCount = (status: TableStatus | 'all') => {
+    if (!selectedHall) return 0;
+    return Array.from({ length: 40 }, (_, i) => i + 1)
+      .filter(n => status === 'all' || getTableStatus(selectedHall, n) === status)
+      .length;
+  };
+  const money = (value: number) => `${(Number(value) || 0).toFixed(2)} EGP`;
+  const isToday = (date?: string) => !!date && getLocalDayStr(new Date(date)) === getLocalDayStr();
+  type PayMethod = 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'deferred';
+  const payMethods: PayMethod[] = ['cash', 'visa', 'wallet_restaurant', 'wallet_bar', 'instapay', 'deferred'];
+  const payMethodLabel = (method: string) => {
+    if (method === 'cash') return language === 'ar' ? 'كاش' : 'Cash';
+    if (method === 'visa') return language === 'ar' ? 'فيزا' : 'Visa';
+    if (method === 'wallet_restaurant') return language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet';
+    if (method === 'wallet_bar') return language === 'ar' ? 'محفظة البار' : 'Bar Wallet';
+    if (method === 'instapay') return language === 'ar' ? 'إنستاباي' : 'Instapay';
+    if (method === 'deferred') return language === 'ar' ? 'آجل' : 'Deferred';
+    if (method === 'split') return language === 'ar' ? 'مقسم' : 'Split';
+    return method;
+  };
+  const paymentParts = (order: Order): Partial<Record<PayMethod, number>> => {
+    const parts: Partial<Record<PayMethod, number>> = {};
+    const n = (v: any) => Number(v) || 0;
+    if (order.payment_method === 'split' && order.payment_details) {
+      payMethods.forEach(method => {
+        const amount = n(order.payment_details?.[method]);
+        if (amount > 0) parts[method] = amount;
+      });
+      return parts;
+    }
+    const method = (order.payment_method || 'cash') as PayMethod;
+    if (payMethods.includes(method)) parts[method] = n(order.total_price);
+    return parts;
+  };
+  const todayOrders = allOrders.filter(o => isToday(o.created_at));
+  const summaryOrders = todayOrders.filter(o => summaryOrderTypeFilter === 'all' || o.order_type === summaryOrderTypeFilter);
+  const todayCompletedOrders = summaryOrders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality' && o.payment_method !== 'staff');
+  const paymentTotals = payMethods.reduce((acc, method) => ({ ...acc, [method]: 0 }), {} as Record<PayMethod, number>);
+  todayCompletedOrders.forEach(order => {
+    Object.entries(paymentParts(order)).forEach(([method, amount]) => {
+      paymentTotals[method as PayMethod] += Number(amount) || 0;
+    });
+  });
+  const unpaidTableOrders = summaryOrders.filter(o =>
+    o.order_type === 'dine_in' &&
+    ['pending', 'preparing', 'prepared', 'delivered'].includes(o.status)
+  );
+  const unpaidTablesTotal = unpaidTableOrders.reduce((sum, o) => sum + totalForOrder(o), 0);
+  const summaryRevenue = todayCompletedOrders.reduce((sum, o) => sum + (Number(o.total_price) || 0), 0);
+  const printShiftSummary = () => {
+    const ar = language === 'ar';
+    const typeLabel = summaryOrderTypeFilter === 'all' ? (ar ? 'كل أنواع الطلب' : 'All order types') : orderTypeLabel({ order_type: summaryOrderTypeFilter } as Order);
+    const methodRows = payMethods.map(method => `
+      <tr><td>${payMethodLabel(method)}</td><td>${money(paymentTotals[method])}</td></tr>
+    `).join('');
+    const unpaidRows = unpaidTableOrders.map(o => `
+      <tr><td>${o.hall || ''}</td><td>${o.table_number}</td><td>#${o.id.slice(-4)}</td><td>${money(totalForOrder(o))}</td></tr>
+    `).join('');
+    const hallRows = (settings?.halls || []).map(h => {
+      const counts = (['empty', 'occupied', 'delivered', 'check'] as TableStatus[])
+        .map(status => `${tableStatusLabels[status]}: ${Array.from({ length: 40 }, (_, i) => i + 1).filter(n => getTableStatus(h.name, n) === status).length}`)
+        .join(' | ');
+      return `<tr><td>${h.name}</td><td>${counts}</td></tr>`;
+    }).join('');
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`
+      <html dir="${ar ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${ar ? 'تقرير تقفيل شيفت' : 'Shift Closing Report'}</title>
+      <style>
+        body{font-family:Tahoma,Arial,sans-serif;padding:24px;color:#111}
+        h1,h2{margin:0 0 12px}
+        table{width:100%;border-collapse:collapse;margin:12px 0 22px}
+        th,td{border:1px solid #ddd;padding:8px;text-align:${ar ? 'right' : 'left'}}
+        th{background:#111;color:#fff}
+        .total{font-size:20px;font-weight:800;margin:10px 0}
+      </style></head><body>
+        <h1>${ar ? 'تقرير تقفيل شيفت' : 'Shift Closing Report'}</h1>
+        <div>${new Date().toLocaleString(ar ? 'ar-EG' : 'en-US')}</div>
+        <div>${ar ? 'الفلتر' : 'Filter'}: ${typeLabel}</div>
+        <div class="total">${ar ? 'إجمالي المحصل' : 'Collected'}: ${money(summaryRevenue)}</div>
+        <div class="total">${ar ? 'لسه متحصلش من الطاولات' : 'Unpaid table total'}: ${money(unpaidTablesTotal)}</div>
+        <h2>${ar ? 'تقسيمة وسائل الدفع' : 'Payment Breakdown'}</h2>
+        <table><thead><tr><th>${ar ? 'وسيلة الدفع' : 'Method'}</th><th>${ar ? 'المبلغ' : 'Amount'}</th></tr></thead><tbody>${methodRows}</tbody></table>
+        <h2>${ar ? 'حالة الطاولات' : 'Table Status'}</h2>
+        <table><thead><tr><th>${ar ? 'الصالة' : 'Hall'}</th><th>${ar ? 'الحالات' : 'Statuses'}</th></tr></thead><tbody>${hallRows}</tbody></table>
+        <h2>${ar ? 'مبالغ غير محصلة' : 'Unpaid Tables'}</h2>
+        <table><thead><tr><th>${ar ? 'الصالة' : 'Hall'}</th><th>${ar ? 'الطاولة' : 'Table'}</th><th>${ar ? 'الأوردر' : 'Order'}</th><th>${ar ? 'المبلغ' : 'Amount'}</th></tr></thead><tbody>${unpaidRows || `<tr><td colspan="4">${ar ? 'لا يوجد' : 'None'}</td></tr>`}</tbody></table>
+      </body></html>
+    `);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
 
   const placeOrder = async () => {
     if (cart.length === 0) return;
@@ -1175,6 +1313,28 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               </button>
             )}
 
+            {selectedWaiter && (
+              <button
+                onClick={() => setSummaryOpen(true)}
+                style={{
+                  background: 'rgba(0,0,0,0.5)',
+                  border: '1px solid var(--gold-primary)',
+                  color: 'var(--gold-primary)',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontFamily: 'inherit',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem'
+                }}
+              >
+                <BarChart3 size={18} />
+                {language === 'ar' ? 'ملخص الحالات' : 'Status Summary'}
+              </button>
+            )}
+
             {/* تبديل الوضع الفاتح/الداكن */}
             <button
               onClick={togglePosTheme}
@@ -1437,16 +1597,16 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
             <motion.div key="o_type" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
               <h2 style={{ fontSize: '2rem', marginBottom: '3rem' }}>{t.howToReceive}</h2>
               <div className="grid-options">
-                <div className={`option-card ${orderType === 'takeaway' ? 'active' : ''}`} onClick={() => setOrderType('takeaway')}>
+                <div className={`option-card ${orderType === 'takeaway' ? 'active' : ''}`} onClick={() => { setOrderType('takeaway'); setSelectedHall(''); setTableNumber(''); }}>
                   <ShoppingBag size={48} /><h3>{t.takeaway}</h3>
                 </div>
-                <div className={`option-card ${orderType === 'dine_in' ? 'active' : ''}`} onClick={() => setOrderType('dine_in')}>
+                <div className={`option-card ${orderType === 'dine_in' ? 'active' : ''}`} onClick={() => { setOrderType('dine_in'); setTableNumber(''); }}>
                   <Utensils size={48} /><h3>{t.dineIn}</h3>
                 </div>
-                <div className={`option-card ${orderType === 'delivery' ? 'active' : ''}`} onClick={() => setOrderType('delivery')}>
+                <div className={`option-card ${orderType === 'delivery' ? 'active' : ''}`} onClick={() => { setOrderType('delivery'); setSelectedHall(''); setTableNumber(''); }}>
                   <ArrowRight size={48} /><h3>{t.delivery}</h3>
                 </div>
-                <div className={`option-card ${orderType === 'talabat' ? 'active' : ''}`} onClick={() => setOrderType('talabat')}>
+                <div className={`option-card ${orderType === 'talabat' ? 'active' : ''}`} onClick={() => { setOrderType('talabat'); setSelectedHall(''); setTableNumber(''); }}>
                   <ShoppingBag size={48} color="#FF5A00" /><h3>{t.talabat}</h3>
                 </div>
                 {/* طلب استاف — مجاني، بيتسجل باسم الموظف وبيخصم من المخزون */}
@@ -1483,7 +1643,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <h3 style={{ marginBottom: '1rem' }}>{language === 'ar' ? 'اختر الصالة' : 'Select Hall'}</h3>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'center' }}>
                         {settings.halls.map((h, i) => (
-                          <button key={i} type="button" onClick={() => setSelectedHall(h.name)}
+                          <button key={i} type="button" onClick={() => {
+                            setSelectedHall(h.name);
+                            setTableNumber('');
+                            setTableStatusFilter('all');
+                            setView('table_status');
+                          }}
                             style={{
                               padding: '0.8rem 1.4rem', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontFamily: 'inherit', fontSize: '1rem',
                               border: selectedHall === h.name ? '2px solid var(--gold-primary)' : '2px solid var(--border-color)',
@@ -1496,18 +1661,84 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       </div>
                     </div>
                   )}
-                  {(!settings?.halls || settings.halls.length === 0 || selectedHall) && (
-                    <div>
-                      <h3 style={{ marginBottom: '0.75rem' }}>{t.tableNum}</h3>
-                      <input type="text" className="pos-input" style={{ maxWidth: '200px' }} value={tableNumber} onChange={e => setTableNumber(e.target.value)} placeholder="e.g. 5" />
-                    </div>
-                  )}
                 </motion.div>
               )}
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '3rem' }}>
                 <button className="pos-btn-outline" onClick={() => setView('customer_info')}>{t.back}</button>
-                <button className="pos-btn" disabled={!orderType || (orderType === 'dine_in' && (!tableNumber || ((settings?.halls?.length ?? 0) > 0 && !selectedHall)))} onClick={() => setView('menu')}>{t.continue}</button>
+                <button className="pos-btn" disabled={!orderType || orderType === 'dine_in'} onClick={() => setView('menu')}>{t.continue}</button>
+              </div>
+            </motion.div>
+          )}
+
+          {view === 'table_status' && orderType === 'dine_in' && selectedHall && (
+            <motion.div key="table_status" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }} style={{ width: '100%', padding: '2rem', overflowY: 'auto' }}>
+              <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+                  <div>
+                    <h2 style={{ margin: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? `طاولات ${selectedHall}` : `${selectedHall} Tables`}</h2>
+                    <p style={{ margin: '0.4rem 0 0', color: 'var(--text-muted)' }}>{language === 'ar' ? 'اختار طاولة فاضية لفتح الأوردر' : 'Select an empty table to start the order'}</p>
+                  </div>
+                  <button className="pos-btn-outline" onClick={() => { setTableNumber(''); setView('order_type'); }}>{t.back}</button>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+                  {(['all', 'empty', 'occupied', 'delivered', 'check'] as const).map(status => {
+                    const color = status === 'all' ? 'var(--gold-primary)' : tableStatusColors[status];
+                    const active = tableStatusFilter === status;
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => setTableStatusFilter(status)}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                          padding: '0.55rem 1rem', borderRadius: '999px', cursor: 'pointer',
+                          border: `2px solid ${color}`, background: active ? color : 'transparent',
+                          color: active ? '#000' : color, fontWeight: 'bold', fontFamily: 'inherit',
+                        }}
+                      >
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: active ? '#000' : color }} />
+                        {tableStatusLabels[status]}
+                        <span style={{ background: active ? '#00000022' : `${color}33`, borderRadius: '999px', padding: '0 0.45rem', fontSize: '0.8rem' }}>{tableStatusCount(status)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.9rem' }}>
+                  {Array.from({ length: 40 }, (_, i) => i + 1).map(tableNo => {
+                    const status = getTableStatus(selectedHall, tableNo);
+                    const order = getTableOrder(selectedHall, tableNo);
+                    if (tableStatusFilter !== 'all' && tableStatusFilter !== status) return null;
+                    const isEmpty = status === 'empty';
+                    const color = tableStatusColors[status];
+                    return (
+                      <button
+                        key={tableNo}
+                        type="button"
+                        disabled={!isEmpty}
+                        onClick={() => {
+                          if (!isEmpty) return;
+                          setTableNumber(String(tableNo));
+                          setView('menu');
+                        }}
+                        title={!isEmpty && order ? `#${order.id.slice(-6)} - ${order.customer_name}` : ''}
+                        style={{
+                          minHeight: '96px', borderRadius: '12px', border: `2px solid ${color}`,
+                          background: isEmpty ? `${color}22` : `linear-gradient(135deg, ${color}44, rgba(0,0,0,0.28))`,
+                          color: 'var(--text-white)', cursor: isEmpty ? 'pointer' : 'not-allowed',
+                          opacity: isEmpty ? 1 : 0.78, fontFamily: 'inherit', textAlign: 'center',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
+                        }}
+                      >
+                        <span style={{ fontSize: '1.8rem', fontWeight: 900, color }}>{tableNo}</span>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 800 }}>{tableStatusLabels[status]}</span>
+                        {order ? <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>#{order.id.slice(-4)}</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </motion.div>
           )}
@@ -1910,6 +2141,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                             {/* فاتورة مبدئية يشوفها العميل قبل ما نحصّل منه */}
                             <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#a855f7', color: 'var(--text-white)' }} onClick={() => {
                               playClickSound();
+                              markCheckPrinted(order.id);
                               printCustomerReceipt(order, language, settings, { preBill: true });
                             }}>{language === 'ar' ? 'طباعة الفاتورة' : 'Print Bill'}</button>
                             <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#2ecc71', color: '#000' }} onClick={() => {
@@ -2106,6 +2338,128 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         </AnimatePresence>
 
         <AnimatePresence>
+          {summaryOpen && (
+            <motion.div
+              key="summary_modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.86)', padding: '1rem', overflowY: 'auto', direction: language === 'ar' ? 'rtl' : 'ltr' }}
+              onClick={() => setSummaryOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.96, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.96, y: 20 }}
+                onClick={e => e.stopPropagation()}
+                style={{ maxWidth: '1180px', margin: '2rem auto', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.25rem' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                  <div>
+                    <h2 style={{ margin: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'ملخص الحالات وتقفيل الشيفت' : 'Status Summary & Shift Close'}</h2>
+                    <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>{new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <select className="pos-input" value={summaryOrderTypeFilter} onChange={e => setSummaryOrderTypeFilter(e.target.value as any)} style={{ width: '190px' }}>
+                      <option value="all">{language === 'ar' ? 'كل أنواع الطلب' : 'All order types'}</option>
+                      <option value="dine_in">{language === 'ar' ? 'صالة' : 'Dine-in'}</option>
+                      <option value="takeaway">{language === 'ar' ? 'تيك أواي' : 'Takeaway'}</option>
+                      <option value="delivery">{language === 'ar' ? 'دليفري' : 'Delivery'}</option>
+                      <option value="talabat">{language === 'ar' ? 'طلبات' : 'Talabat'}</option>
+                      <option value="website">{language === 'ar' ? 'موقع' : 'Website'}</option>
+                    </select>
+                    <button className="pos-btn" style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} onClick={printShiftSummary}>
+                      <PrinterIcon size={18} />
+                      {language === 'ar' ? 'طباعة تقرير الشيفت' : 'Print Shift Report'}
+                    </button>
+                    <button className="pos-btn-outline" style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} onClick={() => setSummaryOpen(false)}>
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(212,175,55,0.25)' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'أوردرات اليوم' : "Today's orders"}</span>
+                    <div style={{ fontSize: '1.7rem', fontWeight: 900, color: 'var(--gold-primary)' }}>{summaryOrders.length}</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.25)' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'المحصل' : 'Collected'}</span>
+                    <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#10b981' }}>{money(summaryRevenue)}</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.25)' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'لسه متحصلش من الطاولات' : 'Unpaid tables'}</span>
+                    <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#ef4444' }}>{money(unpaidTablesTotal)}</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                    <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تقسيمة وسائل الدفع' : 'Payment Methods'}</h3>
+                    {payMethods.map(method => (
+                      <div key={method} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.45rem 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <span>{payMethodLabel(method)}</span>
+                        <b className="font-en">{money(paymentTotals[method])}</b>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                    <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'مبالغ غير محصلة' : 'Unpaid Table Orders'}</h3>
+                    <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                      {unpaidTableOrders.length === 0 ? (
+                        <p style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'لا يوجد مبالغ غير محصلة' : 'No unpaid table orders'}</p>
+                      ) : unpaidTableOrders.map(o => (
+                        <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', padding: '0.55rem 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                          <span>{o.hall} - {language === 'ar' ? 'طاولة' : 'Table'} {o.table_number} <small style={{ color: 'var(--text-muted)' }}>#{o.id.slice(-4)}</small></span>
+                          <b className="font-en" style={{ color: '#ef4444' }}>{money(totalForOrder(o))}</b>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
+                  <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'حالة طاولات كل صالة' : 'Tables By Hall'}</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+                    {(settings?.halls || []).map(h => (
+                      <div key={h.name} style={{ border: `1px solid ${hallColor(h.name)}`, borderRadius: '10px', padding: '0.9rem' }}>
+                        <h4 style={{ margin: '0 0 0.75rem', color: hallColor(h.name) }}>{h.name}</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                          {(['empty', 'occupied', 'delivered', 'check'] as TableStatus[]).map(status => (
+                            <div key={status} style={{ background: `${tableStatusColors[status]}22`, border: `1px solid ${tableStatusColors[status]}`, borderRadius: '8px', padding: '0.6rem' }}>
+                              <span style={{ display: 'block', color: tableStatusColors[status], fontWeight: 800 }}>{tableStatusLabels[status]}</span>
+                              <b>{Array.from({ length: 40 }, (_, i) => i + 1).filter(n => getTableStatus(h.name, n) === status).length}</b>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                  <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'أوردرات اليوم' : "Today's Orders"}</h3>
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {summaryOrders.length === 0 ? (
+                      <p style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'لا توجد أوردرات في هذا الفلتر' : 'No orders in this filter'}</p>
+                    ) : summaryOrders.map(o => (
+                      <div key={o.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.75rem', alignItems: 'center', padding: '0.65rem 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <span>
+                          <b>#{o.id.slice(-4)}</b> {orderTypeLabel(o)} {o.hall ? `- ${o.hall}` : ''} {o.table_number && o.table_number !== '-' ? `- ${language === 'ar' ? 'طاولة' : 'Table'} ${o.table_number}` : ''}
+                          <small style={{ display: 'block', color: 'var(--text-muted)' }}>{o.customer_name} - {new Date(o.created_at).toLocaleTimeString(language === 'ar' ? 'ar-EG' : 'en-US')}</small>
+                        </span>
+                        <span style={{ color: o.status === 'completed' ? '#10b981' : '#f59e0b', fontWeight: 800 }}>{o.status}</span>
+                        <b className="font-en">{money(o.status === 'completed' ? Number(o.total_price) || 0 : totalForOrder(o))}</b>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
           {/* Collect Payment Modal */}
           {collectPaymentOrder && (
             <motion.div 
@@ -2174,6 +2528,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     style={{ width: '100%', marginTop: '1rem', padding: '0.6rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                     onClick={() => {
                       playClickSound();
+                      markCheckPrinted(collectPaymentOrder.id);
                       printCustomerReceipt({ ...collectPaymentOrder, total_price: totalForOrder(collectPaymentOrder) }, language, settings, { preBill: true });
                     }}
                   >
