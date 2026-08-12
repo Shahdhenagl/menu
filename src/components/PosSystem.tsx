@@ -780,7 +780,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const payMethodLabel = (method: string) => {
     if (method === 'cash') return language === 'ar' ? 'كاش' : 'Cash';
     if (method === 'visa') return language === 'ar' ? 'فيزا' : 'Visa';
-    if (method === 'wallet_restaurant') return language === 'ar' ? 'خزنة الكاشير' : 'Cashier Wallet';
+    if (method === 'wallet_restaurant') return language === 'ar' ? 'خزنة الكاشير' : 'Cafe Wallet';
     if (method === 'instapay') return language === 'ar' ? 'إنستاباي' : 'Instapay';
     if (method === 'deferred') return language === 'ar' ? 'آجل' : 'Deferred';
     if (method === 'split') return language === 'ar' ? 'مقسم' : 'Split';
@@ -831,6 +831,16 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   );
   const unpaidTablesTotal = unpaidTableOrders.reduce((sum, o) => sum + totalForOrder(o), 0);
   const summaryRevenue = todayCompletedOrders.reduce((sum, o) => sum + (Number(o.total_price) || 0), 0);
+  const summarySubtotal = todayCompletedOrders.reduce((sum, o) => {
+    return sum + o.items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0);
+  }, 0);
+  const summaryTax = todayCompletedOrders.reduce((sum, o) => {
+    const base = o.items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0);
+    const percent = taxPercentForOrder(settings, o.order_type, o.hall);
+    return sum + (base * (percent / 100));
+  }, 0);
+  const summaryDiscount = Math.max(0, summarySubtotal + summaryTax - summaryRevenue);
+
   const printShiftSummary = () => {
     const ar = language === 'ar';
     const typeLabel = summaryOrderTypeFilter === 'all' ? (ar ? 'كل أنواع الطلب' : 'All order types') : orderTypeLabel({ order_type: summaryOrderTypeFilter } as Order);
@@ -864,13 +874,19 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         th,td{border:1px solid #ddd;padding:8px;text-align:${ar ? 'right' : 'left'}}
         th{background:#111;color:#fff}
         .total{font-size:20px;font-weight:800;margin:10px 0}
+        .total.sub{font-size:16px;font-weight:600;margin:6px 0;color:#444}
       </style></head><body>
         <h1>${ar ? 'تقرير تقفيل شيفت' : 'Shift Closing Report'}</h1>
         <div>${new Date().toLocaleString(ar ? 'ar-EG' : 'en-US')}</div>
         <div>${ar ? 'النطاق' : 'Scope'}: ${scopeLabel}</div>
         <div>${ar ? 'نوع الطلب' : 'Order type'}: ${typeLabel}</div>
-        <div class="total">${ar ? 'إجمالي المحصل' : 'Collected'}: ${money(summaryRevenue)}</div>
-        <div class="total">${ar ? 'لسه متحصلش من الطاولات' : 'Unpaid table total'}: ${money(unpaidTablesTotal)}</div>
+        <hr style="margin:16px 0; border:1px solid #eee;" />
+        <div class="total sub">${ar ? 'إجمالي قبل الضريبة' : 'Total Before Tax'}: ${money(summarySubtotal)}</div>
+        <div class="total sub">${ar ? 'إجمالي الضريبة' : 'Total Tax'}: ${money(summaryTax)}</div>
+        ${summaryDiscount > 0.001 ? `<div class="total sub" style="color:#d32f2f">${ar ? 'إجمالي الخصم' : 'Total Discount'}: - ${money(summaryDiscount)}</div>` : ''}
+        <div class="total">${ar ? 'إجمالي المحصل النهائي' : 'Final Collected'}: ${money(summaryRevenue)}</div>
+        <hr style="margin:16px 0; border:1px solid #eee;" />
+        <div class="total sub">${ar ? 'لسه متحصلش من الطاولات' : 'Unpaid table total'}: ${money(unpaidTablesTotal)}</div>
         <h2>${ar ? 'تقسيمة وسائل الدفع' : 'Payment Breakdown'}</h2>
         <table><thead><tr><th>${ar ? 'وسيلة الدفع' : 'Method'}</th><th>${ar ? 'المبلغ' : 'Amount'}</th></tr></thead><tbody>${methodRows}</tbody></table>
         <h2>${ar ? 'حالة الطاولات' : 'Table Status'}</h2>
@@ -2743,7 +2759,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      📱 {language === 'ar' ? 'خزنة الكاشير:' : 'Cashier Wallet:'}
+                      📱 {language === 'ar' ? 'خزنة الكاشير:' : 'Cafe Wallet:'}
 
                     </label>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -3604,3 +3620,4 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     </div>
   );
 };
+

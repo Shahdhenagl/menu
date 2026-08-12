@@ -64,7 +64,7 @@ export default function DailyClosingView({
     switch (m) {
       case 'cash': return ar ? 'كاش' : 'Cash';
       case 'visa': return ar ? 'فيزا' : 'Visa';
-      case 'wallet_restaurant': return ar ? 'محفظة الكاشير' : 'Cashier Wallet';
+      case 'wallet_restaurant': return ar ? 'محفظة الكاشير' : 'Cafe Wallet';
       case 'instapay': return ar ? 'إنستاباي' : 'Instapay';
       case 'deferred': return ar ? 'آجل (مديونية)' : 'Deferred';
       case 'petty_cash': return ar ? 'عهدة الشريك' : 'Petty Cash';
@@ -774,3 +774,4 @@ const tdStyle = (ar: boolean, align: 'start' | 'end' = 'start'): React.CSSProper
   textAlign: align === 'end' ? (ar ? 'left' : 'right') : (ar ? 'right' : 'left'),
   padding: '0.7rem 0.5rem', color: 'var(--text-light)', fontVariantNumeric: 'tabular-nums',
 });
+

@@ -339,7 +339,7 @@ export const printCustomerReceipt = async (
 
   const paymentMethodStr = order.payment_method === 'cash' ? (isAr ? 'كاش' : 'Cash') :
     order.payment_method === 'visa' ? (isAr ? 'فيزا' : 'Visa') :
-    order.payment_method === 'wallet_restaurant' ? (isAr ? 'محفظة الكاشير' : 'Cashier Wallet') :
+    order.payment_method === 'wallet_restaurant' ? (isAr ? 'محفظة الكاشير' : 'Cafe Wallet') :
     order.payment_method === 'instapay' ? (isAr ? 'إنستاباي' : 'InstaPay') :
     order.payment_method === 'petty_cash' ? (isAr ? 'عهدة الشريك' : 'Petty Cash') :
     order.payment_method === 'split' ? (isAr ? 'مقسم' : 'Split') :
@@ -635,3 +635,4 @@ export const printShiftClosing = async (
   }
   if (!printed) printViaIframe(html);
 };
+

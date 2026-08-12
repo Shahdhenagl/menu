@@ -53,7 +53,7 @@ export const methodLabel = (m: string, ar: boolean): string => {
   switch (m) {
     case 'cash': return ar ? 'كاش' : 'Cash';
     case 'visa': return ar ? 'فيزا' : 'Visa';
-    case 'wallet_restaurant': return ar ? 'محفظة الكاشير' : 'Cashier Wallet';
+    case 'wallet_restaurant': return ar ? 'محفظة الكاشير' : 'Cafe Wallet';
     case 'instapay': return ar ? 'إنستاباي' : 'Instapay';
     case 'deferred': return ar ? 'آجل (مديونية)' : 'Deferred';
     case 'petty_cash': return ar ? 'عهدة الشريك' : 'Petty Cash';
@@ -208,3 +208,4 @@ export const buildShiftReport = ({
     methodsRaw,
   };
 };
+

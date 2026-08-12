@@ -3699,7 +3699,7 @@ export default function AdminDashboard({
                     {(Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).map((method) => {
                       const stats = paymentMethodsStats[method];
                       const methodNameAr = method === 'cash' ? '💵 كاش (نقدي)' : method === 'visa' ? '💳 فيزا (بطاقة)' : method === 'wallet_restaurant' ? '📱 محفظة الكاشير' : method === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
-                      const methodNameEn = method === 'cash' ? 'Cash' : method === 'visa' ? 'Visa / Card' : method === 'wallet_restaurant' ? 'Cashier Wallet' : method === 'petty_cash' ? 'Petty Cash' : 'InstaPay';
+                      const methodNameEn = method === 'cash' ? 'Cash' : method === 'visa' ? 'Visa / Card' : method === 'wallet_restaurant' ? 'Cafe Wallet' : method === 'petty_cash' ? 'Petty Cash' : 'InstaPay';
 
                       return (
                         <tr key={method}>
@@ -8085,7 +8085,7 @@ export default function AdminDashboard({
                       }}
                     >
                       <span>📱</span>
-                      <span>{language === 'ar' ? 'محفظة الكاشير' : 'Cashier Wallet'}</span>
+                      <span>{language === 'ar' ? 'محفظة الكاشير' : 'Cafe Wallet'}</span>
                     </button>
 
                     {/* Instapay Option */}
@@ -9887,3 +9887,4 @@ export default function AdminDashboard({
     </div>
   );
 }
+
