@@ -60,6 +60,21 @@ export default function FinancialsView({
 
   // تحويل أي قيمة لرقم آمن (أعمدة numeric في Supabase بترجع كنصوص)
   const num = (v: any): number => Number(v) || 0;
+  type PaymentMethod = 'cash' | 'visa' | 'wallet' | 'wallet_restaurant' | 'wallet_bar' | 'instapay' | 'deferred' | 'petty_cash';
+  const paymentMethods: PaymentMethod[] = ['cash', 'visa', 'wallet', 'wallet_restaurant', 'wallet_bar', 'instapay', 'deferred', 'petty_cash'];
+  const paymentPartsForOrder = (order: Order): Partial<Record<PaymentMethod, number>> => {
+    const parts: Partial<Record<PaymentMethod, number>> = {};
+    if (order.payment_method === 'split' && order.payment_details) {
+      paymentMethods.forEach(method => {
+        const amount = num(order.payment_details?.[method]);
+        if (amount > 0) parts[method] = amount;
+      });
+      return parts;
+    }
+    const method = (order.payment_method || 'cash') as PaymentMethod;
+    parts[paymentMethods.includes(method) ? method : 'cash'] = num(order.total_price);
+    return parts;
+  };
 
   // Only consider completed orders, excluding hospitality. Deferred is now INCLUDED in revenue
   const filteredOrders = orders.filter(o =>
@@ -79,22 +94,9 @@ export default function FinancialsView({
   
 
   filteredOrders.forEach(o => {
-    if (o.payment_method === 'split' && o.payment_details) {
-      revenueByType.cash += num(o.payment_details.cash);
-      revenueByType.visa += num(o.payment_details.visa);
-      revenueByType.wallet += num(o.payment_details.wallet);
-      revenueByType.wallet_restaurant += num(o.payment_details.wallet_restaurant);
-      revenueByType.wallet_bar += num(o.payment_details.wallet_bar);
-      revenueByType.instapay += num(o.payment_details.instapay);
-      revenueByType.deferred += num(o.payment_details.deferred);
-    } else {
-      const method = o.payment_method || 'cash';
-      if (revenueByType[method as keyof typeof revenueByType] !== undefined) {
-        revenueByType[method as keyof typeof revenueByType] += num(o.total_price);
-      } else {
-        revenueByType.cash += num(o.total_price); // fallback
-      }
-    }
+    Object.entries(paymentPartsForOrder(o)).forEach(([method, amount]) => {
+      revenueByType[method as keyof typeof revenueByType] += num(amount);
+    });
   });
 
   // Actual Vault/Bank balances (All Time)
@@ -104,22 +106,9 @@ export default function FinancialsView({
   // 1. Add All Revenues
   const allCompletedOrders = orders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality');
   allCompletedOrders.forEach(o => {
-    if (o.payment_method === 'split' && o.payment_details) {
-      actualBalances.cash += num(o.payment_details.cash);
-      actualBalances.visa += num(o.payment_details.visa);
-      actualBalances.wallet += num(o.payment_details.wallet);
-      actualBalances.wallet_restaurant += num(o.payment_details.wallet_restaurant);
-      actualBalances.wallet_bar += num(o.payment_details.wallet_bar);
-      actualBalances.instapay += num(o.payment_details.instapay);
-      actualBalances.deferred += num(o.payment_details.deferred);
-    } else {
-      const method = o.payment_method || 'cash';
-      if (actualBalances[method as keyof typeof actualBalances] !== undefined) {
-        actualBalances[method as keyof typeof actualBalances] += num(o.total_price);
-      } else {
-        actualBalances.cash += num(o.total_price); // fallback
-      }
-    }
+    Object.entries(paymentPartsForOrder(o)).forEach(([method, amount]) => {
+      actualBalances[method as keyof typeof actualBalances] += num(amount);
+    });
   });
 
   // 2. Subtract All Expenses
@@ -311,14 +300,18 @@ export default function FinancialsView({
               {filteredOrders.length === 0 ? (
                 <p style={{ color: 'var(--text-gray)', textAlign: 'center', padding: '2rem' }}>{language === 'ar' ? 'لا توجد إيرادات مسجلة في هذه الفترة' : 'No revenues found in this period'}</p>
               ) : (
-                filteredOrders.map(order => (
-                  <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                filteredOrders.map(order => {
+                  const paymentParts = Object.entries(paymentPartsForOrder(order)).filter(([, amount]) => num(amount) > 0);
+                  return (
+                  <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', padding: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 'bold', color: 'var(--text-light)' }}>#{String(order.id).slice(-4)}</span>
-                        <span style={{ fontSize: '0.8rem', padding: '2px 6px', borderRadius: '4px', background: `${getMethodColor(order.payment_method || 'cash')}20`, color: getMethodColor(order.payment_method || 'cash') }}>
-                          {getMethodLabel(order.payment_method || 'cash')}
-                        </span>
+                        {paymentParts.map(([method, amount]) => (
+                          <span key={method} style={{ fontSize: '0.8rem', padding: '2px 6px', borderRadius: '4px', background: `${getMethodColor(method)}20`, color: getMethodColor(method) }}>
+                            {getMethodLabel(method)}: {formatCurrency(num(amount))}
+                          </span>
+                        ))}
                       </div>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>
                         {new Date(order.created_at || '').toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}
@@ -326,7 +319,8 @@ export default function FinancialsView({
                     </div>
                     <span style={{ fontWeight: 'bold', color: '#10b981' }}>+{num(order.total_price)}</span>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

@@ -186,7 +186,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     if (!collectPaymentOrder) return;
     setStaffSaving(true);
     try {
-      const originalPrice = collectPaymentOrder.total_price;
+      const originalPrice = totalForOrder(collectPaymentOrder);
       const staffOrder = await db.updateOrder(collectPaymentOrder.id, {
         status: 'completed',
         payment_method: 'staff',
@@ -660,6 +660,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     const taxPercent = taxPercentForOrder(settings, type, hall);
     return subtotal + (subtotal * taxPercent / 100);
   };
+  const totalForOrder = (order: Order) =>
+    totalForItems(order.items, order.order_type, order.hall, order.payment_method === 'staff');
   const hallTaxPercent = staffOrderFor ? 0 : taxPercentForOrder(settings, orderType, selectedHall);
   const cartTaxAmount = cartSubtotal * (hallTaxPercent / 100);
   const cartTotal = totalForItems(cart, orderType, selectedHall, !!staffOrderFor);
@@ -847,7 +849,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         return item;
       }).filter(item => item.quantity > 0);
 
-      const sourceTotal = sourceItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const sourceTotal = totalForItems(sourceItems, editingOrder.order_type, editingOrder.hall, editingOrder.payment_method === 'staff');
 
       // 2. Add to target order
       const targetItems = [...targetOrder.items];
@@ -864,7 +866,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         });
       }
 
-      const targetTotal = targetItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const targetTotal = totalForItems(targetItems, targetOrder.order_type, targetOrder.hall, targetOrder.payment_method === 'staff');
 
       // 3. Save updates
       await db.updateOrder(editingOrder.id, {
@@ -2143,7 +2145,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'إجمالي الفاتورة:' : 'Total Price:'}</span>
                     <span style={{ fontWeight: 'bold', color: 'var(--gold-primary)', fontSize: '1.2rem' }}>
-                      {collectPaymentOrder.total_price.toFixed(2)} EGP
+                      {totalForOrder(collectPaymentOrder).toFixed(2)} EGP
                     </span>
                   </div>
                   {/* طباعة الفاتورة للعميل يشوفها قبل ما يدفع */}
@@ -2152,7 +2154,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     style={{ width: '100%', marginTop: '1rem', padding: '0.6rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                     onClick={() => {
                       playClickSound();
-                      printCustomerReceipt(collectPaymentOrder, language, settings, { preBill: true });
+                      printCustomerReceipt({ ...collectPaymentOrder, total_price: totalForOrder(collectPaymentOrder) }, language, settings, { preBill: true });
                     }}
                   >
                     <PrinterIcon size={18} />
@@ -2414,7 +2416,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   const instapayVal = Number(payInstapay) || 0;
                   const totalPaid = cashVal + visaVal + walletRestaurantVal + walletBarVal + instapayVal;
 
-                  const remaining = collectPaymentOrder.total_price - totalPaid;
+                  const payableTotal = totalForOrder(collectPaymentOrder);
+                  const remaining = payableTotal - totalPaid;
 
                   let statusText = '';
                   let isError = false;
@@ -2506,6 +2509,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                               const paidOrder = await db.updateOrder(collectPaymentOrder.id, {
                                 status: 'completed',
+                                total_price: payableTotal,
                                 payment_method: finalMethod,
                                 payment_details: paymentDetails,
                                 drawer: payDrawer, // الخزنة اللي اتحصّل فيها — عليها بيتم التقفيل
@@ -2513,7 +2517,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               }, selectedWaiter?.name);
 
                               // طباعة فاتورة العميل تلقائي عند الدفع
-                              printCustomerReceipt(paidOrder || ({ ...collectPaymentOrder, status: 'completed', payment_method: finalMethod, payment_details: paymentDetails } as any), language, settings);
+                              printCustomerReceipt(paidOrder || ({ ...collectPaymentOrder, status: 'completed', total_price: payableTotal, payment_method: finalMethod, payment_details: paymentDetails } as any), language, settings);
 
                               setCollectPaymentOrder(null);
                               loadData();
@@ -2546,7 +2550,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                    payment_method: 'hospitality',
                                    total_price: 0,
                                    drawer: payDrawer,
-                                   payment_details: { type: 'hospitality', original_price: collectPaymentOrder.total_price }
+                                   payment_details: { type: 'hospitality', original_price: payableTotal }
                                  }, selectedWaiter?.name);
                                  printCustomerReceipt(hospOrder || ({ ...collectPaymentOrder, status: 'completed', payment_method: 'hospitality', total_price: 0 } as any), language, settings);
                                  setCollectPaymentOrder(null);
@@ -2610,7 +2614,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   <div style={{ background: 'rgba(56,189,248,0.06)', border: '1px dashed rgba(56,189,248,0.3)', borderRadius: '10px', padding: '0.9rem', marginBottom: '1.25rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem' }}>
                       <span>{language === 'ar' ? 'قيمة الطلب:' : 'Order value:'}</span>
-                      <b style={{ color: '#fff' }}>{collectPaymentOrder.total_price.toFixed(2)} EGP</b>
+                      <b style={{ color: '#fff' }}>{totalForOrder(collectPaymentOrder).toFixed(2)} EGP</b>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem', marginTop: '0.4rem' }}>
                       <span>{language === 'ar' ? 'المطلوب تحصيله:' : 'To collect:'}</span>
