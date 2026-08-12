@@ -1,0 +1,3 @@
+﻿diff --git a/PosSystem.proper.tsx b/broken_pos.tsx
+index 31258d6..f0ed970 100644
+Binary files a/PosSystem.proper.tsx and b/broken_pos.tsx differ

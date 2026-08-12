@@ -1,0 +1,191 @@
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a1a1aa', fontSize: '0.9rem', marginTop: '0.4rem' }}>
+                      <span>{language === 'ar' ? 'المطلوب تحصيله:' : 'To collect:'}</span>
+                      <b style={{ color: '#38bdf8' }}>{language === 'ar' ? 'مجاني' : 'Free'}</b>
+                    </div>
+                  </div>
+                )}
+
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                  {language === 'ar' ? 'الموظف المستفيد *' : 'Employee *'}
+                </label>
+                <select
+                  className="pos-input"
+                  value={staffEmployeeId}
+                  onChange={e => setStaffEmployeeId(e.target.value)}
+                  style={{ marginBottom: '1.25rem', background: '#111', textAlign: 'start' }}
+                >
+                  <option value="">{language === 'ar' ? '— اختر الموظف —' : '— Select employee —'}</option>
+                  {employeesList.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                  ))}
+                </select>
+
+                <label style={{ display: 'block', marginBottom: '0.5rem', color: '#a1a1aa', fontSize: '0.9rem' }}>
+                  {language === 'ar' ? 'كلمة السر *' : 'Password *'}
+                </label>
+                <input
+                  type="password"
+                  className="pos-input"
+                  value={staffPasscode}
+                  onChange={e => setStaffPasscode(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleStaffOrder(); } }}
+                  placeholder={language === 'ar' ? 'كلمة سر فواتير الاستاف' : 'Staff orders password'}
+                  style={{ marginBottom: '1.5rem', background: '#111', letterSpacing: '0.3rem' }}
+                />
+
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button
+                    className="pos-btn"
+                    style={{ flex: 2, background: '#38bdf8', color: '#000' }}
+                    disabled={staffSaving || !staffEmployeeId || !staffPasscode}
+                    onClick={handleStaffOrder}
+                  >
+                    {staffSaving
+                      ? (language === 'ar' ? 'جاري التسجيل…' : 'Saving…')
+                      : staffModalMode === 'new'
+                        ? (language === 'ar' ? 'تأكيد ومتابعة' : 'Confirm & continue')
+                        : (language === 'ar' ? 'تسجيل الفاتورة' : 'Record order')}
+                  </button>
+                  <button className="pos-btn-outline" style={{ flex: 1 }} disabled={staffSaving} onClick={() => setStaffModalOpen(false)}>
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Transfer Item Modal */}
+          {transferItem && editingOrder && (
+            <motion.div 
+              key="transfer_item_modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.85)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 9999,
+                padding: '1rem',
+                backdropFilter: 'blur(8px)',
+                direction: language === 'ar' ? 'rtl' : 'ltr'
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '2px solid var(--gold-primary)',
+                  borderRadius: '20px',
+                  width: '100%',
+                  maxWidth: '450px',
+                  padding: '2rem',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, color: 'var(--gold-primary)', fontSize: '1.3rem', fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'نقل الصنف بين الطاولات' : 'Transfer Item Between Tables'}
+                  </h3>
+                  <button 
+                    onClick={() => setTransferItem(null)} 
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid var(--border-color)' }}>
+                  <div style={{ color: 'var(--gold-primary)', fontWeight: 'bold', marginBottom: '0.4rem' }}>
+                    {language === 'ar' ? transferItem.name_ar : transferItem.name_en}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                    {language === 'ar' ? `الكمية المتوفرة بالطلب الحالي: ${transferItem.quantity}` : `Available quantity in current order: ${transferItem.quantity}`}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginBottom: '1.5rem' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      {language === 'ar' ? 'الكمية المراد نقلها:' : 'Quantity to Transfer:'}
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#000', padding: '6px 12px', borderRadius: '8px', width: 'fit-content' }}>
+                      <button 
+                        disabled={transferQty <= 1}
+                        onClick={() => setTransferQty(prev => Math.max(1, prev - 1))} 
+                        style={{ background: 'var(--border-color)', border: 'none', color: 'var(--text-white)', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <span style={{ fontWeight: 'bold', minWidth: '30px', textAlign: 'center', fontSize: '1.2rem' }}>{transferQty}</span>
+                      <button 
+                        disabled={transferQty >= transferItem.quantity}
+                        onClick={() => setTransferQty(prev => Math.min(transferItem.quantity, prev + 1))} 
+                        style={{ background: 'var(--gold-primary)', border: 'none', color: '#000', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      {language === 'ar' ? 'الطلب المستهدف (رقم الطاولة / اسم العميل):' : 'Target Order (Table / Customer):'}
+                    </label>
+                    {activeOrders.filter(o => o.id !== editingOrder.id).length === 0 ? (
+                      <div style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                        {language === 'ar' ? 'لا توجد طلبات نشطة أخرى لنقل الصنف إليها!' : 'No other active orders to transfer to!'}
+                      </div>
+                    ) : (
+                      <select
+                        className="pos-input"
+                        value={transferTargetOrderId}
+                        onChange={(e) => setTransferTargetOrderId(e.target.value)}
+                      >
+                        {activeOrders.filter(o => o.id !== editingOrder.id).map(o => (
+                          <option key={o.id} value={o.id}>
+                            #{o.id.slice(0, 6)} - {o.customer_name} {o.table_number && o.table_number !== '-' ? `(Table ${o.table_number})` : ''} - {o.total_price.toFixed(2)} EGP
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <button 
+                    className="pos-btn" 
+                    style={{ flex: 1, padding: '1rem' }} 
+                    disabled={activeOrders.filter(o => o.id !== editingOrder.id).length === 0 || !transferTargetOrderId}
+                    onClick={handleTransferSubmit}
+                  >
+                    {language === 'ar' ? 'تأكيد النقل' : 'Confirm Transfer'}
+                  </button>
+
+                  <button 
+                    className="pos-btn-outline" 
+                    style={{ flex: 1, padding: '1rem' }} 
+                    onClick={() => setTransferItem(null)}
+                  >
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Attendance Modal */}
+          {attendanceModalOpen && (
+            <motion.div 
+              key="attendance_modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}

@@ -1,0 +1,153 @@
+Line 2645: div=0 | {summaryOpen && (
+Line 2646: div=0 | <motion.div
+Line 2647: div=0 | key="summary_modal"
+Line 2648: div=0 | initial={{ opacity: 0 }}
+Line 2649: div=0 | animate={{ opacity: 1 }}
+Line 2650: div=0 | exit={{ opacity: 0 }}
+Line 2651: div=0 | style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.86)', padding: '1rem', overflowY: 'auto', direction: language === 'ar' ? 'rtl' : 'ltr' }}
+Line 2652: div=0 | onClick={() => setSummaryOpen(false)}
+Line 2653: div=0 | >
+Line 2654: div=0 | <motion.div
+Line 2655: div=0 | initial={{ scale: 0.96, y: 20 }}
+Line 2656: div=0 | animate={{ scale: 1, y: 0 }}
+Line 2657: div=0 | exit={{ scale: 0.96, y: 20 }}
+Line 2658: div=0 | onClick={e => e.stopPropagation()}
+Line 2659: div=0 | style={{ maxWidth: '1180px', margin: '2rem auto', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.25rem' }}
+Line 2660: div=0 | >
+Line 2661: div=1 | <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+Line 2662: div=2 | <div>
+Line 2663: div=2 | <h2 style={{ margin: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'ملخص الحالات وتقفيل الشيفت' : 'Status Summary & Shift Close'}</h2>
+Line 2664: div=2 | <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>{new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}</p>
+Line 2665: div=1 | </div>
+Line 2666: div=2 | <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+Line 2667: div=2 | <select className="pos-input" value={summaryScopeFilter} onChange={e => setSummaryScopeFilter(e.target.value)} style={{ width: '220px' }}>
+Line 2668: div=2 | <option value="all">{language === 'ar' ? 'كل الصالات والخزن' : 'All halls and drawers'}</option>
+Line 2669: div=2 | {(settings?.halls || []).map(h => (
+Line 2670: div=2 | <option key={`hall:${h.name}`} value={`hall:${h.name}`}>{h.name}</option>
+Line 2671: div=2 | ))}
+Line 2672: div=2 | <option value="drawer:1">{drawerName(1, settings, language === 'ar')}</option>
+Line 2673: div=2 | <option value="drawer:2">{drawerName(2, settings, language === 'ar')}</option>
+Line 2674: div=2 | </select>
+Line 2675: div=2 | <select className="pos-input" value={summaryOrderTypeFilter} onChange={e => setSummaryOrderTypeFilter(e.target.value as any)} style={{ width: '190px' }}>
+Line 2676: div=2 | <option value="all">{language === 'ar' ? 'كل أنواع الطلب' : 'All order types'}</option>
+Line 2677: div=2 | <option value="dine_in">{language === 'ar' ? 'صالة' : 'Dine-in'}</option>
+Line 2678: div=2 | <option value="takeaway">{language === 'ar' ? 'تيك أواي' : 'Takeaway'}</option>
+Line 2679: div=2 | <option value="delivery">{language === 'ar' ? 'دليفري' : 'Delivery'}</option>
+Line 2680: div=2 | <option value="talabat">{language === 'ar' ? 'طلبات' : 'Talabat'}</option>
+Line 2681: div=2 | <option value="website">{language === 'ar' ? 'موقع' : 'Website'}</option>
+Line 2682: div=2 | </select>
+Line 2683: div=2 | <button className="pos-btn" style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} onClick={printShiftSummary}>
+Line 2684: div=2 | <PrinterIcon size={18} />
+Line 2685: div=2 | {language === 'ar' ? 'طباعة تقرير الشيفت' : 'Print Shift Report'}
+Line 2686: div=2 | </button>
+Line 2687: div=2 | <button className="pos-btn-outline" style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} onClick={() => setSummaryOpen(false)}>
+Line 2688: div=2 | <X size={18} />
+Line 2689: div=2 | </button>
+Line 2690: div=1 | </div>
+Line 2691: div=0 | </div>
+Line 2693: div=1 | <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+Line 2694: div=2 | <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(139,92,246,0.25)' }}>
+Line 2695: div=2 | <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'النطاق الحالي' : 'Current scope'}</span>
+Line 2696: div=2 | <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#8b5cf6' }}>{summaryScopeLabel()}</div>
+Line 2697: div=1 | </div>
+Line 2698: div=2 | <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(212,175,55,0.25)' }}>
+Line 2699: div=2 | <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'أوردرات اليوم' : "Today's orders"}</span>
+Line 2700: div=2 | <div style={{ fontSize: '1.7rem', fontWeight: 900, color: 'var(--gold-primary)' }}>{summaryOrders.length}</div>
+Line 2701: div=1 | </div>
+Line 2702: div=2 | <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.25)' }}>
+Line 2703: div=2 | <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'المحصل (الإجمالي)' : 'Collected (Total)'}</span>
+Line 2704: div=2 | <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#10b981' }}>{money(summaryRevenue)}</div>
+Line 2705: div=3 | <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem', lineHeight: '1.6' }}>
+Line 2706: div=4 | <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+Line 2707: div=4 | <span>{language === 'ar' ? 'قبل الضريبة:' : 'Subtotal:'}</span>
+Line 2708: div=4 | <span>{money(summarySubtotal)}</span>
+Line 2709: div=3 | </div>
+Line 2710: div=4 | <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+Line 2711: div=4 | <span>{language === 'ar' ? 'إجمالي الضريبة:' : 'Tax:'}</span>
+Line 2712: div=4 | <span>{money(summaryTaxAmount)}</span>
+Line 2713: div=3 | </div>
+Line 2714: div=2 | </div>
+Line 2715: div=1 | </div>
+Line 2716: div=2 | <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.25)' }}>
+Line 2717: div=2 | <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'لسه متحصلش من الطاولات' : 'Unpaid tables'}</span>
+Line 2718: div=2 | <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#ef4444' }}>{money(unpaidTablesTotal)}</div>
+Line 2719: div=1 | </div>
+Line 2720: div=0 | </div>
+Line 2722: div=1 | <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+Line 2723: div=2 | <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+Line 2724: div=2 | <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تقسيمة وسائل الدفع' : 'Payment Methods'}</h3>
+Line 2725: div=2 | {payMethods.map(method => (
+Line 2726: div=3 | <div key={method} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.6rem 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+Line 2727: div=4 | <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+Line 2728: div=4 | <span style={{ fontWeight: 600 }}>{payMethodLabel(method)}</span>
+Line 2729: div=4 | <b className="font-en" style={{ color: 'var(--gold-primary)' }}>{money(paymentStats[method].total)}</b>
+Line 2730: div=3 | </div>
+Line 2731: div=4 | <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+Line 2732: div=4 | <span>{language === 'ar' ? 'قبل الضريبة' : 'Subtotal'}</span>
+Line 2733: div=4 | <span className="font-en">{money(paymentStats[method].subtotal)}</span>
+Line 2734: div=3 | </div>
+Line 2735: div=4 | <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+Line 2736: div=4 | <span>{language === 'ar' ? 'الضريبة' : 'Tax'}</span>
+Line 2737: div=4 | <span className="font-en">{money(paymentStats[method].tax)}</span>
+Line 2738: div=3 | </div>
+Line 2739: div=2 | </div>
+Line 2740: div=2 | ))}
+Line 2741: div=1 | </div>
+Line 2742: div=2 | <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+Line 2743: div=2 | <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'مبالغ غير محصلة' : 'Unpaid Table Orders'}</h3>
+Line 2744: div=3 | <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+Line 2745: div=3 | {unpaidTableOrders.length === 0 ? (
+Line 2746: div=3 | <p style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'لا يوجد مبالغ غير محصلة' : 'No unpaid table orders'}</p>
+Line 2747: div=3 | ) : unpaidTableOrders.map(o => (
+Line 2748: div=4 | <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', padding: '0.55rem 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+Line 2749: div=4 | <span>{o.hall} - {language === 'ar' ? 'طاولة' : 'Table'} {o.table_number} <small style={{ color: 'var(--text-muted)' }}>#{o.id.slice(-4)}</small></span>
+Line 2750: div=4 | <b className="font-en" style={{ color: '#ef4444' }}>{money(totalForOrder(o))}</b>
+Line 2751: div=3 | </div>
+Line 2752: div=3 | ))}
+Line 2753: div=2 | </div>
+Line 2754: div=1 | </div>
+Line 2755: div=0 | </div>
+Line 2757: div=1 | <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
+Line 2758: div=1 | <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'حالة طاولات كل صالة' : 'Tables By Hall'}</h3>
+Line 2759: div=2 | <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+Line 2760: div=2 | {(settings?.halls || []).filter(h => {
+Line 2761: div=2 | if (summaryScopeFilter === 'all') return true;
+Line 2762: div=2 | if (summaryScopeFilter.startsWith('hall:')) return h.name === summaryScopeFilter.slice(5);
+Line 2763: div=2 | if (summaryScopeFilter.startsWith('drawer:')) return drawerForHall(h.name) === Number(summaryScopeFilter.slice(7));
+Line 2764: div=2 | return true;
+Line 2765: div=2 | }).map(h => (
+Line 2766: div=3 | <div key={h.name} style={{ border: `1px solid ${hallColor(h.name)}`, borderRadius: '10px', padding: '0.9rem' }}>
+Line 2767: div=3 | <h4 style={{ margin: '0 0 0.75rem', color: hallColor(h.name) }}>{h.name}</h4>
+Line 2768: div=4 | <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+Line 2769: div=4 | {(['empty', 'occupied', 'delivered', 'check'] as TableStatus[]).map(status => (
+Line 2770: div=5 | <div key={status} style={{ background: `${tableStatusColors[status]}22`, border: `1px solid ${tableStatusColors[status]}`, borderRadius: '8px', padding: '0.6rem' }}>
+Line 2771: div=5 | <span style={{ display: 'block', color: tableStatusColors[status], fontWeight: 800 }}>{tableStatusLabels[status]}</span>
+Line 2772: div=5 | <b>{Array.from({ length: 40 }, (_, i) => i + 1).filter(n => getTableStatus(h.name, n) === status).length}</b>
+Line 2773: div=4 | </div>
+Line 2774: div=4 | ))}
+Line 2775: div=3 | </div>
+Line 2776: div=2 | </div>
+Line 2777: div=2 | ))}
+Line 2778: div=1 | </div>
+Line 2779: div=0 | </div>
+Line 2781: div=1 | <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+Line 2782: div=1 | <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'أوردرات اليوم' : "Today's Orders"}</h3>
+Line 2783: div=2 | <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+Line 2784: div=2 | {summaryOrders.length === 0 ? (
+Line 2785: div=2 | <p style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'لا توجد أوردرات في هذا الفلتر' : 'No orders in this filter'}</p>
+Line 2786: div=2 | ) : summaryOrders.map(o => (
+Line 2787: div=3 | <div key={o.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.75rem', alignItems: 'center', padding: '0.65rem 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+Line 2788: div=3 | <span>
+Line 2789: div=3 | <b>#{o.id.slice(-4)}</b> {orderTypeLabel(o)} {o.hall ? `- ${o.hall}` : ''} {o.table_number && o.table_number !== '-' ? `- ${language === 'ar' ? 'طاولة' : 'Table'} ${o.table_number}` : ''}
+Line 2790: div=3 | <small style={{ display: 'block', color: 'var(--text-muted)' }}>{o.customer_name} - {new Date(o.created_at).toLocaleTimeString(language === 'ar' ? 'ar-EG' : 'en-US')}</small>
+Line 2791: div=3 | </span>
+Line 2792: div=3 | <span style={{ color: o.status === 'completed' ? '#10b981' : '#f59e0b', fontWeight: 800 }}>{o.status}</span>
+Line 2793: div=3 | <b className="font-en">{money(o.status === 'completed' ? Number(o.total_price) || 0 : totalForOrder(o))}</b>
+Line 2794: div=2 | </div>
+Line 2795: div=2 | ))}
+Line 2796: div=1 | </div>
+Line 2797: div=0 | </div>
+Line 2798: div=-1 | </div>
+Line 2799: div=-1 | </motion.div>
+Line 2800: div=-1 | </motion.div>
+Line 2801: div=-1 | )}
