@@ -775,12 +775,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
   const money = (value: number) => `${(Number(value) || 0).toFixed(2)} EGP`;
   const isToday = (date?: string) => !!date && getLocalDayStr(new Date(date)) === getLocalDayStr();
-  type PayMethod = 'cash' | 'visa' | 'wallet_cashier' | 'instapay' | 'deferred';
-  const payMethods: PayMethod[] = ['cash', 'visa', 'wallet_cashier', 'instapay', 'deferred'];
+  type PayMethod = 'cash' | 'visa' | 'wallet_restaurant' | 'instapay' | 'deferred';
+  const payMethods: PayMethod[] = ['cash', 'visa', 'wallet_restaurant', 'instapay', 'deferred'];
   const payMethodLabel = (method: string) => {
     if (method === 'cash') return language === 'ar' ? 'كاش' : 'Cash';
     if (method === 'visa') return language === 'ar' ? 'فيزا' : 'Visa';
-    if (method === 'wallet_cashier') return language === 'ar' ? 'خزنة الكاشير' : 'Cashier Wallet';
+    if (method === 'wallet_restaurant') return language === 'ar' ? 'خزنة الكاشير' : 'Cashier Wallet';
     if (method === 'instapay') return language === 'ar' ? 'إنستاباي' : 'Instapay';
     if (method === 'deferred') return language === 'ar' ? 'آجل' : 'Deferred';
     if (method === 'split') return language === 'ar' ? 'مقسم' : 'Split';
