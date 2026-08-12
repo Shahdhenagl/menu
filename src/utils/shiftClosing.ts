@@ -91,8 +91,12 @@ export const buildShiftReport = ({
 }): BuiltShiftReport => {
   const subtotal = orders.reduce((s, o) => s + orderSubtotal(o), 0);
   const collected = orders.reduce((s, o) => s + num(o.total_price), 0);
-  const tax = Math.max(0, collected - subtotal);
-  const discount = Math.max(0, subtotal - collected);
+  const tax = orders.reduce((s, o) => {
+    const base = orderSubtotal(o);
+    const percent = taxPercentForOrder(settings, o.order_type, o.hall);
+    return s + (base * (percent / 100));
+  }, 0);
+  const discount = Math.max(0, subtotal + tax - collected);
 
   // ===== تقسيم التحصيل على وسائل الدفع (مع دعم الدفع المقسم) =====
   const byMethod: Record<string, number> = {};
@@ -123,7 +127,8 @@ export const buildShiftReport = ({
   orders.forEach(o => {
     const base = orderSubtotal(o);
     const total = num(o.total_price);
-    const t = Math.max(0, total - base);
+    const percent = taxPercentForOrder(settings, o.order_type, o.hall);
+    const t = base * (percent / 100);
     const type = o.order_type || 'dine_in';
 
     const row = typeMap.get(type) || {
@@ -136,7 +141,6 @@ export const buildShiftReport = ({
     typeMap.set(type, row);
 
     // النسبة المعرّفة لنوع الطلب/الصالة — بنجمّع عليها
-    const percent = taxPercentForOrder(settings, o.order_type, o.hall);
     const key = Number(percent) || 0;
     const trow = taxMap.get(key) || { percent: key, base: 0, tax: 0, collected: 0, orders: 0 };
     trow.orders += 1;
