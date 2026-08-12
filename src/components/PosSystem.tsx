@@ -42,7 +42,7 @@ interface PosSystemProps {
   setLanguage?: (lang: 'ar' | 'en') => void;
 }
 
-type PosView = 'role_select' | 'waiter_auth' | 'customer_info' | 'order_type' | 'table_status' | 'menu' | 'checkout' | 'success' | 'waiter_dashboard' | 'waiter_order_edit';
+type PosView = 'device_hall_select' | 'role_select' | 'waiter_auth' | 'customer_info' | 'order_type' | 'table_status' | 'menu' | 'checkout' | 'success' | 'waiter_dashboard' | 'waiter_order_edit';
 
 export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLanguage }) => {
   // Global Data
@@ -69,7 +69,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [productRecipes, setProductRecipes] = useState<ProductRecipe[]>([]);
 
-  const [view, setView] = useState<PosView>('role_select');
+  const [view, setView] = useState<PosView>(() => {
+    try { return localStorage.getItem('meridien_pos_device_hall') ? 'role_select' : 'device_hall_select'; } catch { return 'device_hall_select'; }
+  });
   const [role, setRole] = useState<'waiter' | 'customer' | null>(null);
   const [mobileShowCart, setMobileShowCart] = useState(false);
   const [posDepartment, setPosDepartment] = useState<'restaurant'|'bar'>('restaurant');
@@ -97,9 +99,20 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [orderType, setOrderType] = useState<'takeaway' | 'talabat' | 'dine_in' | 'delivery' | 'website' | null>(null);
   const [tableNumber, setTableNumber] = useState('');
   const [selectedHall, setSelectedHall] = useState('');
+  const [deviceHall, setDeviceHall] = useState<string>(() => {
+    try { return localStorage.getItem('meridien_pos_device_hall') || ''; } catch { return ''; }
+  });
   const [tableStatusFilter, setTableStatusFilter] = useState<'all' | 'empty' | 'occupied' | 'delivered' | 'check'>('all');
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryOrderTypeFilter, setSummaryOrderTypeFilter] = useState<'all' | 'dine_in' | 'takeaway' | 'delivery' | 'talabat' | 'website'>('all');
+  const [summaryScopeFilter, setSummaryScopeFilter] = useState<string>(() => {
+    try {
+      const hall = localStorage.getItem('meridien_pos_device_hall') || '';
+      return hall ? `hall:${hall}` : 'all';
+    } catch {
+      return 'all';
+    }
+  });
   
   // Payment and Customers
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -687,6 +700,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
   const orderAccent = (o: Order): string =>
     o.hall ? hallColor(o.hall) : (TYPE_COLORS[o.order_type || ''] || 'var(--gold-primary)');
+  const drawerForHall = (hall?: string): 1 | 2 => {
+    if (!hall) return 1;
+    const idx = (settings?.halls || []).findIndex(h => h.name === hall);
+    if (idx === 0) return 1;
+    if (idx === 1) return 2;
+    return drawerOfHall(hall, settings);
+  };
   const orderTypeLabel = (o: Order): string => {
     if (o.order_type === 'takeaway') return language === 'ar' ? 'تيك أواي' : 'Takeaway';
     if (o.order_type === 'delivery') return language === 'ar' ? 'دليفري' : 'Delivery';
@@ -783,7 +803,23 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     return parts;
   };
   const todayOrders = allOrders.filter(o => isToday(o.created_at));
-  const summaryOrders = todayOrders.filter(o => summaryOrderTypeFilter === 'all' || o.order_type === summaryOrderTypeFilter);
+  const matchesSummaryScope = (order: Order) => {
+    if (summaryScopeFilter === 'all') return true;
+    if (summaryScopeFilter.startsWith('hall:')) return order.hall === summaryScopeFilter.slice(5);
+    if (summaryScopeFilter.startsWith('drawer:')) return (order.drawer || (order.hall ? drawerForHall(order.hall) : undefined)) === Number(summaryScopeFilter.slice(7));
+    return true;
+  };
+  const summaryScopeLabel = () => {
+    if (summaryScopeFilter === 'all') return language === 'ar' ? 'كل الصالات والخزن' : 'All halls and drawers';
+    if (summaryScopeFilter.startsWith('hall:')) return summaryScopeFilter.slice(5);
+    if (summaryScopeFilter === 'drawer:1') return drawerName(1, settings, language === 'ar');
+    if (summaryScopeFilter === 'drawer:2') return drawerName(2, settings, language === 'ar');
+    return summaryScopeFilter;
+  };
+  const summaryOrders = todayOrders.filter(o =>
+    matchesSummaryScope(o) &&
+    (summaryOrderTypeFilter === 'all' || o.order_type === summaryOrderTypeFilter)
+  );
   const todayCompletedOrders = summaryOrders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality' && o.payment_method !== 'staff');
   const paymentTotals = payMethods.reduce((acc, method) => ({ ...acc, [method]: 0 }), {} as Record<PayMethod, number>);
   todayCompletedOrders.forEach(order => {
@@ -800,13 +836,20 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const printShiftSummary = () => {
     const ar = language === 'ar';
     const typeLabel = summaryOrderTypeFilter === 'all' ? (ar ? 'كل أنواع الطلب' : 'All order types') : orderTypeLabel({ order_type: summaryOrderTypeFilter } as Order);
+    const scopeLabel = summaryScopeLabel();
     const methodRows = payMethods.map(method => `
       <tr><td>${payMethodLabel(method)}</td><td>${money(paymentTotals[method])}</td></tr>
     `).join('');
     const unpaidRows = unpaidTableOrders.map(o => `
       <tr><td>${o.hall || ''}</td><td>${o.table_number}</td><td>#${o.id.slice(-4)}</td><td>${money(totalForOrder(o))}</td></tr>
     `).join('');
-    const hallRows = (settings?.halls || []).map(h => {
+    const visibleHalls = (settings?.halls || []).filter(h => {
+      if (summaryScopeFilter === 'all') return true;
+      if (summaryScopeFilter.startsWith('hall:')) return h.name === summaryScopeFilter.slice(5);
+      if (summaryScopeFilter.startsWith('drawer:')) return drawerForHall(h.name) === Number(summaryScopeFilter.slice(7));
+      return true;
+    });
+    const hallRows = visibleHalls.map(h => {
       const counts = (['empty', 'occupied', 'delivered', 'check'] as TableStatus[])
         .map(status => `${tableStatusLabels[status]}: ${Array.from({ length: 40 }, (_, i) => i + 1).filter(n => getTableStatus(h.name, n) === status).length}`)
         .join(' | ');
@@ -826,7 +869,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       </style></head><body>
         <h1>${ar ? 'تقرير تقفيل شيفت' : 'Shift Closing Report'}</h1>
         <div>${new Date().toLocaleString(ar ? 'ar-EG' : 'en-US')}</div>
-        <div>${ar ? 'الفلتر' : 'Filter'}: ${typeLabel}</div>
+        <div>${ar ? 'النطاق' : 'Scope'}: ${scopeLabel}</div>
+        <div>${ar ? 'نوع الطلب' : 'Order type'}: ${typeLabel}</div>
         <div class="total">${ar ? 'إجمالي المحصل' : 'Collected'}: ${money(summaryRevenue)}</div>
         <div class="total">${ar ? 'لسه متحصلش من الطاولات' : 'Unpaid table total'}: ${money(unpaidTablesTotal)}</div>
         <h2>${ar ? 'تقسيمة وسائل الدفع' : 'Payment Breakdown'}</h2>
@@ -926,7 +970,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       table_number: tableNumber || '-',
       hall: orderType === 'dine_in' && selectedHall ? selectedHall : undefined,
       // طلبات الصالة بتاخد خزنة الصالة أوتوماتيك — غير كده الكاشير بيختار وقت التحصيل
-      drawer: orderType === 'dine_in' && selectedHall ? drawerOfHall(selectedHall, settings) : undefined,
+      drawer: orderType === 'dine_in' && selectedHall ? drawerForHall(selectedHall) : undefined,
       items: cart,
       // طلب الاستاف مجاني: الإجمالي صفر، والقيمة الحقيقية بتتحفظ في payment_details للتقارير
       total_price: staffOrderFor ? 0 : cartTotal,
@@ -1335,6 +1379,24 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               </button>
             )}
 
+            {deviceHall && (
+              <button
+                onClick={() => setView('device_hall_select')}
+                style={{
+                  background: 'rgba(0,0,0,0.5)',
+                  border: '1px solid var(--gold-primary)',
+                  color: 'var(--gold-primary)',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontFamily: 'inherit'
+                }}
+              >
+                {deviceHall}
+              </button>
+            )}
+
             {/* تبديل الوضع الفاتح/الداكن */}
             <button
               onClick={togglePosTheme}
@@ -1383,6 +1445,42 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         </div>
 
         <AnimatePresence mode="wait">
+          
+          {view === 'device_hall_select' && (
+            <motion.div key="device_hall" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.04 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+              <h2 style={{ fontSize: '2.2rem', color: 'var(--gold-primary)', marginBottom: '0.75rem' }}>
+                {language === 'ar' ? 'الجهاز ده على أي صالة؟' : 'Which hall is this device for?'}
+              </h2>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', textAlign: 'center' }}>
+                {language === 'ar' ? 'اختيار الصالة بيتحفظ على الجهاز، وصالة 1 على خزنة 1 وصالة 2 على خزنة 2.' : 'The hall is saved on this device. Hall 1 uses drawer 1 and Hall 2 uses drawer 2.'}
+              </p>
+              <div className="grid-options" style={{ maxWidth: '720px' }}>
+                {(settings?.halls && settings.halls.length > 0 ? settings.halls.slice(0, 2) : [{ name: 'صالة 1', tax_percent: 0 }, { name: 'صالة 2', tax_percent: 0 }]).map((h, idx) => (
+                  <motion.div
+                    key={h.name}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    className="option-card"
+                    onClick={() => {
+                      localStorage.setItem('meridien_pos_device_hall', h.name);
+                      setDeviceHall(h.name);
+                      setSummaryScopeFilter(`hall:${h.name}`);
+                      setSelectedHall('');
+                      setTableNumber('');
+                      setView('role_select');
+                    }}
+                    style={{ borderColor: HALL_COLORS[idx], background: `${HALL_COLORS[idx]}18` }}
+                  >
+                    <Utensils size={54} color={HALL_COLORS[idx]} />
+                    <h3 style={{ fontSize: '1.7rem', margin: '1rem 0 0.35rem', color: HALL_COLORS[idx] }}>{h.name}</h3>
+                    <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+                      {language === 'ar' ? `مرتبطة بـ ${drawerName((idx === 1 ? 2 : 1) as 1 | 2, settings, true)}` : `Linked to ${drawerName((idx === 1 ? 2 : 1) as 1 | 2, settings, false)}`}
+                    </p>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
           
           {view === 'role_select' && (
             <motion.div key="role_sel" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
@@ -1600,7 +1698,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 <div className={`option-card ${orderType === 'takeaway' ? 'active' : ''}`} onClick={() => { setOrderType('takeaway'); setSelectedHall(''); setTableNumber(''); }}>
                   <ShoppingBag size={48} /><h3>{t.takeaway}</h3>
                 </div>
-                <div className={`option-card ${orderType === 'dine_in' ? 'active' : ''}`} onClick={() => { setOrderType('dine_in'); setTableNumber(''); }}>
+                <div className={`option-card ${orderType === 'dine_in' ? 'active' : ''}`} onClick={() => {
+                  setOrderType('dine_in');
+                  setTableNumber('');
+                  if (deviceHall) {
+                    setSelectedHall(deviceHall);
+                    setTableStatusFilter('all');
+                    setView('table_status');
+                  }
+                }}>
                   <Utensils size={48} /><h3>{t.dineIn}</h3>
                 </div>
                 <div className={`option-card ${orderType === 'delivery' ? 'active' : ''}`} onClick={() => { setOrderType('delivery'); setSelectedHall(''); setTableNumber(''); }}>
@@ -1638,7 +1744,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
               {orderType === 'dine_in' && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ marginTop: '2rem', textAlign: 'center', width: '100%', maxWidth: '540px' }}>
-                  {(settings?.halls && settings.halls.length > 0) && (
+                  {(settings?.halls && settings.halls.length > 0 && !deviceHall) && (
                     <div style={{ marginBottom: '1.5rem' }}>
                       <h3 style={{ marginBottom: '1rem' }}>{language === 'ar' ? 'اختر الصالة' : 'Select Hall'}</h3>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'center' }}>
@@ -2155,7 +2261,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               setPayIsDeferred(false);
                               setPayCustomerId(order.customer_id || '');
                               // الصالة بتحدد خزنتها لوحدها — غير كده بنبدأ بخزنة 1 والكاشير يغيّر
-                              setPayDrawer(order.drawer || (order.hall ? drawerOfHall(order.hall, settings) : 1));
+                              setPayDrawer(order.hall ? drawerForHall(order.hall) : (order.drawer || 1));
                             }}>{language === 'ar' ? 'تحصيل الدفع' : 'Collect Payment'}</button>
                             </>
                           ) : order.status === 'prepared' ? (
@@ -2360,6 +2466,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>{new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}</p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <select className="pos-input" value={summaryScopeFilter} onChange={e => setSummaryScopeFilter(e.target.value)} style={{ width: '220px' }}>
+                      <option value="all">{language === 'ar' ? 'كل الصالات والخزن' : 'All halls and drawers'}</option>
+                      {(settings?.halls || []).map(h => (
+                        <option key={`hall:${h.name}`} value={`hall:${h.name}`}>{h.name}</option>
+                      ))}
+                      <option value="drawer:1">{drawerName(1, settings, language === 'ar')}</option>
+                      <option value="drawer:2">{drawerName(2, settings, language === 'ar')}</option>
+                    </select>
                     <select className="pos-input" value={summaryOrderTypeFilter} onChange={e => setSummaryOrderTypeFilter(e.target.value as any)} style={{ width: '190px' }}>
                       <option value="all">{language === 'ar' ? 'كل أنواع الطلب' : 'All order types'}</option>
                       <option value="dine_in">{language === 'ar' ? 'صالة' : 'Dine-in'}</option>
@@ -2379,6 +2493,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(139,92,246,0.25)' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'النطاق الحالي' : 'Current scope'}</span>
+                    <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#8b5cf6' }}>{summaryScopeLabel()}</div>
+                  </div>
                   <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(212,175,55,0.25)' }}>
                     <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'أوردرات اليوم' : "Today's orders"}</span>
                     <div style={{ fontSize: '1.7rem', fontWeight: 900, color: 'var(--gold-primary)' }}>{summaryOrders.length}</div>
@@ -2421,7 +2539,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
                   <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'حالة طاولات كل صالة' : 'Tables By Hall'}</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
-                    {(settings?.halls || []).map(h => (
+                    {(settings?.halls || []).filter(h => {
+                      if (summaryScopeFilter === 'all') return true;
+                      if (summaryScopeFilter.startsWith('hall:')) return h.name === summaryScopeFilter.slice(5);
+                      if (summaryScopeFilter.startsWith('drawer:')) return drawerForHall(h.name) === Number(summaryScopeFilter.slice(7));
+                      return true;
+                    }).map(h => (
                       <div key={h.name} style={{ border: `1px solid ${hallColor(h.name)}`, borderRadius: '10px', padding: '0.9rem' }}>
                         <h4 style={{ margin: '0 0 0.75rem', color: hallColor(h.name) }}>{h.name}</h4>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
@@ -2552,9 +2675,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <button
                         key={d}
                         type="button"
-                        onClick={() => { playClickSound(); setPayDrawer(d); }}
+                        onClick={() => {
+                          if (collectPaymentOrder.hall) return;
+                          playClickSound();
+                          setPayDrawer(d);
+                        }}
                         style={{
-                          flex: 1, padding: '0.9rem', borderRadius: '12px', cursor: 'pointer',
+                          flex: 1, padding: '0.9rem', borderRadius: '12px', cursor: collectPaymentOrder.hall ? 'not-allowed' : 'pointer',
                           fontWeight: 'bold', fontSize: '1rem', transition: 'all 0.2s',
                           border: payDrawer === d ? '2px solid var(--gold-primary)' : '2px solid #3f3f46',
                           background: payDrawer === d ? 'linear-gradient(45deg, var(--gold-dark), var(--gold-primary))' : 'var(--bg-card)',
