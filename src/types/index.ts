@@ -68,6 +68,7 @@ export interface Order {
   payment_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'split' | 'deferred' | 'hospitality' | 'petty_cash' | 'staff';
   payment_details?: any; // JSON representation of split payments
   inventory_deducted?: boolean;
+  operating_day?: string; // يوم التشغيل المحاسبي، مستقل عن التاريخ الميلادي بعد الإغلاق
   created_at: string;
 }
 
@@ -125,6 +126,7 @@ export interface Expense {
   payment_method: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'petty_cash';
   partner_id?: string;
   expense_date: string;
+  drawer?: DrawerId;
   created_at?: string;
   notes?: string;
   employee_id?: string;
@@ -350,6 +352,14 @@ export interface DailyClosing {
   total_difference: number;
   orders_count: number;
   expenses_count: number;
+  drawer_1_closed?: boolean;
+  drawer_2_closed?: boolean;
+  drawer_1_methods?: DailyClosingMethod[];
+  drawer_2_methods?: DailyClosingMethod[];
+  drawer_1_total_expected?: number;
+  drawer_2_total_expected?: number;
+  drawer_1_total_counted?: number;
+  drawer_2_total_counted?: number;
   notes?: string;
   closed_by?: string;
   closed_at?: string;

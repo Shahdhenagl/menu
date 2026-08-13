@@ -1,10 +1,9 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Printer, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, Wallet, ArrowRightLeft, Lock, Unlock, CheckCircle2, AlertTriangle } from 'lucide-react';
-import type { Order, Expense, RestaurantSettings, DailyClosing, DailyClosingMethod, PaymentMethodKey, Category, Product } from '../types';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Lock, Printer, Wallet } from 'lucide-react';
+import type { Category, DailyClosing, DailyClosingMethod, Expense, Order, PaymentMethodKey, Product, RestaurantSettings, DrawerId } from '../types';
 import { db } from '../lib/supabase';
-import ShiftClosingView from './ShiftClosingView';
 
-interface DailyClosingViewProps {
+interface Props {
   orders: Order[];
   expenses: Expense[];
   categories?: Category[];
@@ -12,767 +11,173 @@ interface DailyClosingViewProps {
   financialTransactions?: any[];
   settings?: RestaurantSettings;
   language: 'ar' | 'en';
-  /** اسم اللي بيقفل — بيتسجّل على التقفيل */
   userName?: string;
-  /** لو 'admin' يقدر يفتح يوم مقفول تاني */
   userRole?: string;
 }
 
-// وسائل الدفع المعروضة في التقفيل
-const METHODS = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred', 'petty_cash'] as const;
-type Method = typeof METHODS[number];
+const METHODS: PaymentMethodKey[] = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred', 'petty_cash'];
+const n = (value: unknown) => Number(value) || 0;
+const localDate = (value: string | number | Date) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 10);
+};
+const today = () => localDate(new Date());
 
-const num = (v: any): number => Number(v) || 0;
-
-export default function DailyClosingView({
-  orders,
-  expenses,
-  categories = [],
-  products = [],
-  financialTransactions = [],
-  settings,
-  language,
-  userName,
-  userRole,
-}: DailyClosingViewProps) {
+export default function DailyClosingView({ orders, expenses, language, userName }: Props) {
   const ar = language === 'ar';
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [activeDrawer, setActiveDrawer] = useState<DrawerId>(1);
+  const [closing, setClosing] = useState<DailyClosing | null>(null);
+  const [counted, setCounted] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // اليوم المختار (افتراضيًا النهارده) بصيغة YYYY-MM-DD بالتوقيت المحلي
-  const todayStr = (() => {
-    const d = new Date();
-    const off = d.getTimezoneOffset();
-    return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
-  })();
-  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const dayOrders = useMemo(() => orders.filter(order =>
+    order.status === 'completed' && order.payment_method !== 'hospitality' && order.payment_method !== 'staff' && (order.operating_day || localDate(order.created_at)) === selectedDate
+  ), [orders, selectedDate]);
+  const dayExpenses = useMemo(() => expenses.filter(expense => localDate(expense.expense_date || expense.created_at || '') === selectedDate), [expenses, selectedDate]);
+  const openTableOrders = useMemo(() => orders.filter(order =>
+    (order.operating_day || localDate(order.created_at)) === selectedDate &&
+    !['completed', 'cancelled'].includes(order.status) &&
+    order.table_number && order.table_number !== '-'
+  ), [orders, selectedDate]);
 
-  const sameDay = (dateStr: string | number | undefined) => {
-    if (!dateStr) return false;
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return false;
-    const off = d.getTimezoneOffset();
-    const local = new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
-    return local === selectedDate;
-  };
+  const drawerOrders = useMemo(() => dayOrders.filter(order => (order.drawer || 1) === activeDrawer), [dayOrders, activeDrawer]);
+  const drawerExpenses = useMemo(() => dayExpenses.filter(expense => (expense.drawer || 1) === activeDrawer), [dayExpenses, activeDrawer]);
 
-  const shiftDay = (delta: number) => {
-    const d = new Date(selectedDate + 'T12:00:00');
-    d.setDate(d.getDate() + delta);
-    setSelectedDate(d.toISOString().slice(0, 10));
-  };
-
-  const label = (m: string) => {
-    switch (m) {
-      case 'cash': return ar ? 'كاش' : 'Cash';
-      case 'visa': return ar ? 'فيزا' : 'Visa';
-      case 'wallet_restaurant': return ar ? 'محفظة المطعم' : 'Restaurant Wallet';
-      case 'wallet_cafe': return ar ? 'محفظة الكافيه' : 'Cafe Wallet';
-      case 'instapay': return ar ? 'إنستاباي' : 'Instapay';
-      case 'deferred': return ar ? 'آجل (مديونية)' : 'Deferred';
-      case 'petty_cash': return ar ? 'عهدة الشريك' : 'Petty Cash';
-      default: return m;
-    }
-  };
-  const color = (m: string) => {
-    switch (m) {
-      case 'cash': return '#10b981';
-      case 'visa': return '#3b82f6';
-      case 'wallet_restaurant': return '#06b6d4';
-      case 'instapay': return '#f59e0b';
-      case 'deferred': return '#ef4444';
-      case 'petty_cash': return '#14b8a6';
-      default: return '#6b7280';
-    }
-  };
-  const fmt = (n: number) => (num(n)).toLocaleString('en-US') + (ar ? ' ج.م' : ' EGP');
-
-  // فلترة بيانات اليوم المختار
-  const dayOrders = useMemo(
-    // الضيافة وفواتير الاستاف مجانية → مش مبيعات
-    () => orders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality' && o.payment_method !== 'staff' && sameDay(o.created_at)),
-    [orders, selectedDate]
-  );
-  const dayHospitality = useMemo(
-    () => orders.filter(o => o.status === 'completed' && o.payment_method === 'hospitality' && sameDay(o.created_at)),
-    [orders, selectedDate]
-  );
-  const dayExpenses = useMemo(
-    () => expenses.filter(e => sameDay(e.expense_date || e.created_at)),
-    [expenses, selectedDate]
-  );
-  const dayTransfers = useMemo(
-    () => financialTransactions.filter(t => sameDay(t.created_at)),
-    [financialTransactions, selectedDate]
-  );
-
-  // وارد لكل وسيلة (مع دعم الدفع المقسم)
-  const incomingByMethod = useMemo(() => {
-    const map: Record<string, number> = {};
-    METHODS.forEach(m => (map[m] = 0));
-    dayOrders.forEach(o => {
-      if (o.payment_method === 'split' && o.payment_details) {
-        map.cash += num(o.payment_details.cash);
-        map.visa += num(o.payment_details.visa);
-        map.wallet_restaurant += num(o.payment_details.wallet_restaurant);
-        map.instapay += num(o.payment_details.instapay);
-        map.deferred += num(o.payment_details.deferred);
+  const incoming = useMemo(() => {
+    const result = Object.fromEntries(METHODS.map(method => [method, 0])) as Record<PaymentMethodKey, number>;
+    drawerOrders.forEach(order => {
+      if (order.payment_method === 'split' && order.payment_details) {
+        METHODS.forEach(method => {
+          const cashierWallet = method === 'wallet_restaurant' ? n(order.payment_details?.wallet_cashier) : 0;
+          result[method] += n(order.payment_details?.[method]) + cashierWallet;
+        });
       } else {
-        const m = (o.payment_method || 'cash') as Method;
-        if (map[m] !== undefined) map[m] += num(o.total_price);
-        else map.cash += num(o.total_price);
+        const method = order.payment_method as PaymentMethodKey;
+        result[method] = (result[method] || 0) + n(order.total_price);
       }
     });
-    return map;
-  }, [dayOrders]);
-
-  // صادر لكل وسيلة (المصروفات)
-  const outgoingByMethod = useMemo(() => {
-    const map: Record<string, number> = {};
-    METHODS.forEach(m => (map[m] = 0));
-    dayExpenses.forEach(e => {
-      const m = (e.payment_method || 'cash') as Method;
-      if (map[m] !== undefined) map[m] += num(e.amount);
-      else map.cash += num(e.amount);
+    return result;
+  }, [drawerOrders]);
+  const outgoing = useMemo(() => {
+    const result = Object.fromEntries(METHODS.map(method => [method, 0])) as Record<PaymentMethodKey, number>;
+    drawerExpenses.forEach(expense => {
+      const method = expense.payment_method;
+      result[method] = (result[method] || 0) + n(expense.amount);
     });
-    return map;
-  }, [dayExpenses]);
+    return result;
+  }, [drawerExpenses]);
+  const expected = useMemo(() => Object.fromEntries(METHODS.map(method => [method, incoming[method] - outgoing[method]])) as Record<PaymentMethodKey, number>, [incoming, outgoing]);
+  const activeMethods = useMemo(() => METHODS.filter(method => incoming[method] !== 0 || outgoing[method] !== 0 || (closing?.[`drawer_${activeDrawer}_methods` as 'drawer_1_methods'] || []).some(row => row.method === method)), [incoming, outgoing, closing, activeDrawer]);
+  const totalIncoming = activeMethods.reduce((sum, method) => sum + incoming[method], 0);
+  const totalOutgoing = activeMethods.reduce((sum, method) => sum + outgoing[method], 0);
+  const totalExpected = activeMethods.reduce((sum, method) => sum + expected[method], 0);
+  const totalCounted = activeMethods.reduce((sum, method) => sum + n(counted[method]), 0);
+  const difference = totalCounted - totalExpected;
+  const drawerClosed = activeDrawer === 1 ? Boolean(closing?.drawer_1_closed) : Boolean(closing?.drawer_2_closed);
+  const bothClosed = Boolean(closing?.drawer_1_closed && closing?.drawer_2_closed);
 
-  const totalIncoming = METHODS.reduce((s, m) => s + incomingByMethod[m], 0);
-  const totalOutgoing = METHODS.reduce((s, m) => s + outgoingByMethod[m], 0);
-  const net = totalIncoming - totalOutgoing;
+  const methodLabel = (method: PaymentMethodKey) => ({
+    cash: ar ? 'كاش' : 'Cash', visa: ar ? 'فيزا' : 'Visa', wallet_restaurant: ar ? 'محفظة المطعم' : 'Restaurant Wallet',
+    wallet_cafe: ar ? 'محفظة الكافيه' : 'Cafe Wallet', instapay: ar ? 'إنستاباي' : 'Instapay', deferred: ar ? 'آجل' : 'Deferred', petty_cash: ar ? 'عهدة' : 'Petty Cash'
+  }[method]);
+  const fmt = (value: number) => `${n(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ar ? 'ج.م' : 'EGP'}`;
 
-  // ===== التقفيل: المفروض / المعدود / الفرق لكل وسيلة =====
-  // المفروض في كل وسيلة = وارد اليوم - صادر اليوم منها
-  const expectedByMethod = useMemo(() => {
-    const map: Record<string, number> = {};
-    METHODS.forEach(m => (map[m] = incomingByMethod[m] - outgoingByMethod[m]));
-    return map;
-  }, [incomingByMethod, outgoingByMethod]);
-
-  const [closing, setClosing] = useState<DailyClosing | null>(null);
-  const [loadingClosing, setLoadingClosing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  // المعدود اللي بيكتبه الكاشير لكل وسيلة (نص عشان الحقل يفضل يقبل الفراغ)
-  const [counted, setCounted] = useState<Record<string, string>>({});
-  const [methodNotes, setMethodNotes] = useState<Record<string, string>>({});
-  const [closingNotes, setClosingNotes] = useState('');
-
-  const isClosed = closing?.status === 'closed';
-
-  // نجيب تقفيل اليوم المختار (لو موجود) ونملّي بيه الحقول
   useEffect(() => {
     let cancelled = false;
-    setLoadingClosing(true);
-    db.getDailyClosing(selectedDate)
-      .then(found => {
-        if (cancelled) return;
-        setClosing(found);
-        const c: Record<string, string> = {};
-        const n: Record<string, string> = {};
-        (found?.methods || []).forEach(m => {
-          c[m.method] = String(num(m.counted));
-          if (m.note) n[m.method] = m.note;
-        });
-        setCounted(c);
-        setMethodNotes(n);
-        setClosingNotes(found?.notes || '');
-      })
-      .catch(() => { if (!cancelled) setClosing(null); })
-      .finally(() => { if (!cancelled) setLoadingClosing(false); });
+    setLoading(true);
+    db.getDailyClosing(selectedDate).then(found => {
+      if (cancelled) return;
+      setClosing(found);
+      const rows = activeDrawer === 1 ? found?.drawer_1_methods || found?.methods || [] : found?.drawer_2_methods || [];
+      setCounted(Object.fromEntries(rows.map(row => [row.method, String(row.counted)])));
+      setNotes(found?.notes || '');
+    }).catch(() => !cancelled && setClosing(null)).finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [selectedDate]);
+  }, [selectedDate, activeDrawer]);
 
-  // الوسائل اللي ليها حركة النهارده + أي وسيلة اتقفلت قبل كده (عشان متختفيش)
-  const closableMethods = useMemo(() => {
-    const previouslyClosed = new Set((closing?.methods || []).map(m => m.method));
-    return METHODS.filter(m =>
-      incomingByMethod[m] !== 0 || outgoingByMethod[m] !== 0 || previouslyClosed.has(m)
-    );
-  }, [incomingByMethod, outgoingByMethod, closing]);
-
-  const countedOf = (m: Method) => (counted[m] === '' || counted[m] === undefined ? 0 : num(counted[m]));
-  const diffOf = (m: Method) => countedOf(m) - expectedByMethod[m];
-  // وسيلة تعتبر متقفّلة لما الكاشير يكتب فيها رقم (حتى لو صفر)
-  const isMethodFilled = (m: Method) => counted[m] !== undefined && counted[m] !== '';
-
-  const totalExpected = closableMethods.reduce((s, m) => s + expectedByMethod[m], 0);
-  const totalCounted = closableMethods.reduce((s, m) => s + countedOf(m), 0);
-  const totalDifference = totalCounted - totalExpected;
-  const allFilled = closableMethods.length > 0 && closableMethods.every(isMethodFilled);
-
-  const buildMethodRows = (): DailyClosingMethod[] =>
-    closableMethods.map(m => ({
-      method: m as PaymentMethodKey,
-      incoming: incomingByMethod[m],
-      outgoing: outgoingByMethod[m],
-      expected: expectedByMethod[m],
-      counted: countedOf(m),
-      difference: diffOf(m),
-      note: methodNotes[m] || '',
-    }));
-
-  // اختصار: يحط المفروض في خانة المعدود (مفيد للفيزا/إنستاباي/الآجل اللي رقمها معروف)
-  const fillWithExpected = (m: Method) =>
-    setCounted(prev => ({ ...prev, [m]: String(Number(expectedByMethod[m].toFixed(2))) }));
-  const fillAllWithExpected = () =>
-    setCounted(closableMethods.reduce((acc, m) => {
-      acc[m] = String(Number(expectedByMethod[m].toFixed(2)));
-      return acc;
-    }, { ...counted } as Record<string, string>));
-
-  const handleSaveClosing = async () => {
-    if (!allFilled) {
-      alert(ar ? 'اكتب المبلغ المعدود في كل وسيلة الأول.' : 'Enter the counted amount for every method first.');
+  const closeDrawer = async () => {
+    if (openTableOrders.length) {
+      alert(ar ? `لا يمكن التقفيل: يوجد ${openTableOrders.length} طاولة عليها طلبات مفتوحة.` : `Cannot close: ${openTableOrders.length} tables still have open orders.`);
       return;
     }
-    const bigDiff = closableMethods.filter(m => Math.abs(diffOf(m)) > 0.009);
-    if (bigDiff.length) {
-      const details = bigDiff.map(m => `• ${label(m)}: ${diffOf(m) > 0 ? '+' : ''}${fmt(diffOf(m))}`).join('\n');
-      const ok = window.confirm(
-        (ar ? `في فروقات في التقفيل:\n\n${details}\n\nتحب تكمّل وتقفل اليوم؟` : `There are differences:\n\n${details}\n\nClose the day anyway?`)
-      );
-      if (!ok) return;
+    if (!activeMethods.length) {
+      alert(ar ? 'لا توجد حركة مالية لهذه الخزنة في اليوم.' : 'There is no financial movement for this drawer today.');
+      return;
     }
+    const rows: DailyClosingMethod[] = activeMethods.map(method => ({ method, incoming: incoming[method], outgoing: outgoing[method], expected: expected[method], counted: n(counted[method]), difference: n(counted[method]) - expected[method], note: '' }));
+    const previous = closing;
+    const drawer1Rows = activeDrawer === 1 ? rows : previous?.drawer_1_methods || previous?.methods || [];
+    const drawer2Rows = activeDrawer === 2 ? rows : previous?.drawer_2_methods || [];
+    const drawer1Expected = drawer1Rows.reduce((sum, row) => sum + n(row.expected), 0);
+    const drawer2Expected = drawer2Rows.reduce((sum, row) => sum + n(row.expected), 0);
+    const drawer1Counted = drawer1Rows.reduce((sum, row) => sum + n(row.counted), 0);
+    const drawer2Counted = drawer2Rows.reduce((sum, row) => sum + n(row.counted), 0);
     setSaving(true);
     try {
       const saved = await db.saveDailyClosing({
         closing_date: selectedDate,
-        status: 'closed',
-        methods: buildMethodRows(),
-        total_expected: totalExpected,
-        total_counted: totalCounted,
-        total_difference: totalDifference,
+        status: activeDrawer === 2 && previous?.drawer_1_closed ? 'closed' : 'reopened',
+        methods: [...drawer1Rows, ...drawer2Rows],
+        total_expected: drawer1Expected + drawer2Expected,
+        total_counted: drawer1Counted + drawer2Counted,
+        total_difference: drawer1Counted + drawer2Counted - drawer1Expected - drawer2Expected,
         orders_count: dayOrders.length,
         expenses_count: dayExpenses.length,
-        notes: closingNotes,
+        notes,
         closed_by: userName || '-',
+        drawer_1_closed: activeDrawer === 1 ? true : Boolean(previous?.drawer_1_closed),
+        drawer_2_closed: activeDrawer === 2 ? true : Boolean(previous?.drawer_2_closed),
+        drawer_1_methods: drawer1Rows,
+        drawer_2_methods: drawer2Rows,
+        drawer_1_total_expected: drawer1Expected,
+        drawer_2_total_expected: drawer2Expected,
+        drawer_1_total_counted: drawer1Counted,
+        drawer_2_total_counted: drawer2Counted,
       });
       setClosing(saved);
-      alert(ar ? 'تم تقفيل اليوم بنجاح.' : 'Day closed successfully.');
-    } catch (err) {
-      console.error(err);
-      alert(ar ? 'حصل خطأ أثناء حفظ التقفيل.' : 'Failed to save the closing.');
-    } finally {
-      setSaving(false);
-    }
+      if (saved.drawer_1_closed && saved.drawer_2_closed) await db.startNextOperatingDay(selectedDate);
+      alert(saved.drawer_1_closed && saved.drawer_2_closed ? (ar ? 'تم إغلاق الخزنتين وانتهى يوم التشغيل. بدأ يوم جديد تلقائيًا.' : 'Both drawers are closed. The operating day is complete and a new day has started.') : (ar ? `تم إغلاق الخزنة ${activeDrawer}. أغلق الخزنة الأخرى لطباعة التقرير.` : `Drawer ${activeDrawer} closed. Close the other drawer to print the report.`));
+    } catch (error) {
+      console.error(error);
+      alert(ar ? 'حدث خطأ أثناء حفظ تقفيل الخزنة.' : 'Failed to close the drawer.');
+    } finally { setSaving(false); }
   };
 
-  const handleReopen = async () => {
-    if (!window.confirm(ar ? 'تأكيد إعادة فتح تقفيل اليوم ده؟' : 'Reopen this day for editing?')) return;
-    setSaving(true);
-    try {
-      await db.reopenDailyClosing(selectedDate, userName);
-      setClosing(prev => (prev ? { ...prev, status: 'reopened' } : prev));
-    } finally {
-      setSaving(false);
-    }
+  const printReport = () => {
+    if (!bothClosed) { alert(ar ? 'لا يمكن الطباعة قبل إغلاق الخزنتين.' : 'Close both drawers before printing.'); return; }
+    const drawerRows = (drawer: DrawerId) => (drawer === 1 ? closing?.drawer_1_methods : closing?.drawer_2_methods) || [];
+    const section = (drawer: DrawerId) => `<h2>${ar ? `تقفيل خزنة ${drawer}` : `Drawer ${drawer} Closing`}</h2><table><tr><th>${ar ? 'وسيلة الدفع' : 'Method'}</th><th>${ar ? 'المحصل' : 'Collected'}</th><th>${ar ? 'الصادر' : 'Out'}</th><th>${ar ? 'المفروض' : 'Expected'}</th><th>${ar ? 'المعدود' : 'Counted'}</th><th>${ar ? 'الفرق' : 'Difference'}</th></tr>${drawerRows(drawer).map(row => `<tr><td>${methodLabel(row.method)}</td><td>${fmt(row.incoming)}</td><td>${fmt(row.outgoing)}</td><td>${fmt(row.expected)}</td><td>${fmt(row.counted)}</td><td>${fmt(row.difference)}</td></tr>`).join('')}</table>`;
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(`<html dir="${ar ? 'rtl' : 'ltr'}"><head><title>${ar ? 'تقرير تقفيل اليوم' : 'Daily Closing Report'}</title><style>body{font-family:Arial;padding:28px;color:#111}h1{text-align:center;border-bottom:2px solid #111;padding-bottom:12px}h2{margin-top:28px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #bbb;padding:8px;text-align:center}th{background:#eee}.summary{display:flex;gap:20px;margin:20px 0}.card{border:1px solid #bbb;padding:12px;flex:1;text-align:center}</style></head><body><h1>${ar ? 'تقرير تقفيل اليوم' : 'Daily Closing Report'} - ${selectedDate}</h1><div class="summary"><div class="card">${ar ? 'إجمالي المحصل' : 'Total Collected'}<br><b>${fmt(dayOrders.reduce((sum, order) => sum + n(order.total_price), 0))}</b></div><div class="card">${ar ? 'عدد الطلبات' : 'Orders'}<br><b>${dayOrders.length}</b></div></div>${section(1)}${section(2)}<script>window.print()</script></body></html>`);
+    win.document.close();
   };
 
-  const restaurantName = ar
-    ? (settings?.restaurant_name_ar || 'مريديان')
-    : (settings?.restaurant_name_en || 'Meridien');
-
-  const dayLabel = new Date(selectedDate + 'T12:00:00').toLocaleDateString(ar ? 'ar-EG' : 'en-GB', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  });
-
-  // ===== توليد PDF (نافذة طباعة نظيفة A4) =====
-  const handlePrint = () => {
-    const rows = METHODS
-      .filter(m => incomingByMethod[m] !== 0 || outgoingByMethod[m] !== 0)
-      .map(m => `
-        <tr>
-          <td class="lbl"><span class="dot" style="background:${color(m)}"></span>${label(m)}</td>
-          <td class="in">${fmt(incomingByMethod[m])}</td>
-          <td class="out">${outgoingByMethod[m] ? '- ' + fmt(outgoingByMethod[m]) : '—'}</td>
-          <td class="net">${fmt(incomingByMethod[m] - outgoingByMethod[m])}</td>
-        </tr>`).join('');
-
-    const orderRows = dayOrders.map(o => `
-      <tr>
-        <td>#${String(o.id).slice(-5)}</td>
-        <td>${new Date(o.created_at).toLocaleTimeString(ar ? 'ar-EG' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}</td>
-        <td>${label(o.payment_method || 'cash')}</td>
-        <td class="ta-end">${fmt(num(o.total_price))}</td>
-      </tr>`).join('') || `<tr><td colspan="4" class="empty">${ar ? 'لا يوجد' : 'None'}</td></tr>`;
-
-    const expenseRows = dayExpenses.map(e => `
-      <tr>
-        <td>${e.name || '-'}</td>
-        <td>${e.type || '-'}</td>
-        <td>${label(e.payment_method || 'cash')}</td>
-        <td class="ta-end">- ${fmt(num(e.amount))}</td>
-      </tr>`).join('') || `<tr><td colspan="4" class="empty">${ar ? 'لا يوجد' : 'None'}</td></tr>`;
-
-    // صفوف التقفيل (المفروض / المعدود / الفرق لكل وسيلة)
-    const closingRows = closableMethods.map(m => {
-      const d = diffOf(m);
-      const filled = isMethodFilled(m);
-      return `
-      <tr>
-        <td class="lbl"><span class="dot" style="background:${color(m)}"></span>${label(m)}</td>
-        <td class="ta-end">${fmt(expectedByMethod[m])}</td>
-        <td class="ta-end">${filled ? fmt(countedOf(m)) : '—'}</td>
-        <td class="ta-end" style="color:${!filled ? '#999' : Math.abs(d) < 0.01 ? '#059669' : d > 0 ? '#2563eb' : '#dc2626'}">
-          ${filled ? (d > 0 ? '+' : '') + fmt(d) + (Math.abs(d) >= 0.01 ? ` (${d > 0 ? (ar ? 'زيادة' : 'Over') : (ar ? 'عجز' : 'Short')})` : '') : '—'}
-        </td>
-        <td>${methodNotes[m] || '-'}</td>
-      </tr>`;
-    }).join('') || `<tr><td colspan="5" class="empty">${ar ? 'لا توجد وسائل للتقفيل' : 'Nothing to close'}</td></tr>`;
-
-    const closedLine = isClosed
-      ? `${ar ? 'تم التقفيل بواسطة' : 'Closed by'}: ${closing?.closed_by || '-'} — ${closing?.closed_at ? new Date(closing.closed_at).toLocaleString(ar ? 'ar-EG' : 'en-GB') : ''}`
-      : `${ar ? 'اليوم لسه مش مقفول رسميًا' : 'This day is not officially closed yet'}`;
-
-    const transferRows = dayTransfers.map(t => `
-      <tr>
-        <td>${label(t.from_method || '-')}</td>
-        <td>${label(t.to_method || '-')}</td>
-        <td class="ta-end">${fmt(num(t.amount))}</td>
-      </tr>`).join('') || `<tr><td colspan="3" class="empty">${ar ? 'لا يوجد' : 'None'}</td></tr>`;
-
-    const html = `<!DOCTYPE html><html dir="${ar ? 'rtl' : 'ltr'}" lang="${ar ? 'ar' : 'en'}"><head><meta charset="utf-8"><title>${ar ? 'تقفيل يومي' : 'Daily Closing'} - ${dayLabel}</title>
-    <style>
-      * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',Tahoma,Arial,sans-serif; }
-      body { color:#111; padding:24px; font-size:13px; }
-      .head { text-align:center; border-bottom:3px solid #111; padding-bottom:14px; margin-bottom:18px; }
-      .head h1 { font-size:22px; letter-spacing:1px; }
-      .head .sub { color:#555; margin-top:4px; font-size:14px; }
-      .head .date { margin-top:8px; font-weight:700; font-size:15px; }
-      .cards { display:flex; gap:12px; margin-bottom:20px; }
-      .card { flex:1; border:1px solid #ddd; border-radius:10px; padding:12px; text-align:center; }
-      .card .t { font-size:12px; color:#666; }
-      .card .v { font-size:19px; font-weight:800; margin-top:4px; }
-      .in-c { border-top:4px solid #10b981; } .in-c .v { color:#059669; }
-      .out-c { border-top:4px solid #ef4444; } .out-c .v { color:#dc2626; }
-      .net-c { border-top:4px solid #111; } .net-c .v { color:#111; }
-      h2 { font-size:15px; margin:18px 0 8px; padding-bottom:5px; border-bottom:2px solid #ddd; }
-      table { width:100%; border-collapse:collapse; margin-bottom:6px; }
-      th,td { padding:7px 9px; border-bottom:1px solid #eee; text-align:${ar ? 'right' : 'left'}; }
-      th { background:#f5f5f5; font-size:12px; color:#333; }
-      .ta-end { text-align:${ar ? 'left' : 'right'}; font-variant-numeric:tabular-nums; font-weight:700; }
-      .pm td { font-size:13px; }
-      .pm .in { color:#059669; font-weight:700; }
-      .pm .out { color:#dc2626; }
-      .pm .net { font-weight:800; }
-      .pm .lbl { font-weight:600; }
-      .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-inline-end:6px; vertical-align:middle; }
-      tfoot td { font-weight:800; background:#111; color:#fff; }
-      .empty { text-align:center; color:#999; padding:14px; }
-      .sign { margin:8px 0 4px; font-size:12px; color:#333; font-weight:600; }
-      .foot { margin-top:22px; text-align:center; color:#888; font-size:11px; border-top:1px solid #ddd; padding-top:10px; }
-      @media print { body { padding:0; } @page { margin:14mm; } }
-    </style></head><body>
-      <div class="head">
-        <h1>${restaurantName}</h1>
-        <div class="sub">${ar ? 'تقرير التقفيل اليومي' : 'Daily Closing Report'}</div>
-        <div class="date">${dayLabel}</div>
-      </div>
-
-      <div class="cards">
-        <div class="card in-c"><div class="t">${ar ? 'إجمالي الوارد' : 'Total Incoming'}</div><div class="v">${fmt(totalIncoming)}</div></div>
-        <div class="card out-c"><div class="t">${ar ? 'إجمالي الصادر' : 'Total Outgoing'}</div><div class="v">${fmt(totalOutgoing)}</div></div>
-        <div class="card net-c"><div class="t">${ar ? 'الصافي' : 'Net'}</div><div class="v">${fmt(net)}</div></div>
-        <div class="card"><div class="t">${ar ? 'عدد الأوردرات' : 'Orders'}</div><div class="v">${dayOrders.length}</div></div>
-      </div>
-
-      <h2>${ar ? 'الحركة حسب وسيلة الدفع' : 'Movement by Payment Method'}</h2>
-      <table class="pm">
-        <thead><tr><th>${ar ? 'الوسيلة' : 'Method'}</th><th>${ar ? 'وارد' : 'In'}</th><th>${ar ? 'صادر' : 'Out'}</th><th>${ar ? 'الصافي' : 'Net'}</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="4" class="empty">${ar ? 'لا توجد حركة' : 'No movement'}</td></tr>`}</tbody>
-        <tfoot><tr><td>${ar ? 'الإجمالي' : 'Total'}</td><td>${fmt(totalIncoming)}</td><td>- ${fmt(totalOutgoing)}</td><td>${fmt(net)}</td></tr></tfoot>
-      </table>
-
-      <h2>${ar ? 'التقفيل — المفروض مقابل المعدود' : 'Closing — Expected vs Counted'}</h2>
-      <table class="pm">
-        <thead><tr>
-          <th>${ar ? 'الوسيلة' : 'Method'}</th>
-          <th>${ar ? 'المفروض' : 'Expected'}</th>
-          <th>${ar ? 'المعدود' : 'Counted'}</th>
-          <th>${ar ? 'الفرق' : 'Difference'}</th>
-          <th>${ar ? 'ملاحظة' : 'Note'}</th>
-        </tr></thead>
-        <tbody>${closingRows}</tbody>
-        <tfoot><tr>
-          <td>${ar ? 'الإجمالي' : 'Total'}</td>
-          <td>${fmt(totalExpected)}</td>
-          <td>${fmt(totalCounted)}</td>
-          <td>${(totalDifference > 0 ? '+' : '') + fmt(totalDifference)}</td>
-          <td></td>
-        </tr></tfoot>
-      </table>
-      <p class="sign">${closedLine}</p>
-      ${closingNotes ? `<p class="sign">${ar ? 'ملاحظات:' : 'Notes:'} ${closingNotes}</p>` : ''}
-
-      <h2>${ar ? 'الوارد — الأوردرات' : 'Incoming — Orders'} (${dayOrders.length})</h2>
-      <table>
-        <thead><tr><th>${ar ? 'رقم' : '#'}</th><th>${ar ? 'الوقت' : 'Time'}</th><th>${ar ? 'الدفع' : 'Payment'}</th><th class="ta-end">${ar ? 'المبلغ' : 'Amount'}</th></tr></thead>
-        <tbody>${orderRows}</tbody>
-      </table>
-
-      <h2>${ar ? 'الصادر — المصروفات' : 'Outgoing — Expenses'} (${dayExpenses.length})</h2>
-      <table>
-        <thead><tr><th>${ar ? 'البند' : 'Item'}</th><th>${ar ? 'النوع' : 'Type'}</th><th>${ar ? 'الدفع' : 'Payment'}</th><th class="ta-end">${ar ? 'المبلغ' : 'Amount'}</th></tr></thead>
-        <tbody>${expenseRows}</tbody>
-      </table>
-
-      <h2>${ar ? 'تحويلات بين الأرصدة' : 'Fund Transfers'} (${dayTransfers.length})</h2>
-      <table>
-        <thead><tr><th>${ar ? 'من' : 'From'}</th><th>${ar ? 'إلى' : 'To'}</th><th class="ta-end">${ar ? 'المبلغ' : 'Amount'}</th></tr></thead>
-        <tbody>${transferRows}</tbody>
-      </table>
-
-      ${dayHospitality.length ? `<h2>${ar ? 'ضيافة (بدون تحصيل)' : 'Hospitality (No Charge)'}</h2><p style="color:#666;font-size:12px">${dayHospitality.length} ${ar ? 'أوردر ضيافة' : 'hospitality orders'}</p>` : ''}
-
-      <div class="foot">${ar ? 'تم إنشاء التقرير في' : 'Generated on'} ${new Date().toLocaleString(ar ? 'ar-EG' : 'en-GB')}</div>
-      <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
-    </body></html>`;
-
-    const w = window.open('', '_blank', 'width=900,height=1000');
-    if (!w) { alert(ar ? 'اسمح بالنوافذ المنبثقة للطباعة' : 'Allow pop-ups to print'); return; }
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-  };
-
-  return (
-    <div className="admin-content-section fade-in">
-      <div className="section-header" style={{ flexWrap: 'wrap', gap: '1rem' }}>
-        <h2>{ar ? 'التقفيل اليومي' : 'Daily Closing'}</h2>
-        <div className="action-buttons" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          {/* منتقي اليوم */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <button className="btn-gold outline" style={{ padding: '0.5rem' }} onClick={() => shiftDay(-1)} title={ar ? 'اليوم السابق' : 'Previous day'}>
-              {ar ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-            </button>
-            <input
-              type="date"
-              className="input-gold"
-              value={selectedDate}
-              max={todayStr}
-              onChange={e => setSelectedDate(e.target.value)}
-              style={{ padding: '0.5rem 0.75rem', borderRadius: '8px' }}
-            />
-            <button className="btn-gold outline" style={{ padding: '0.5rem' }} onClick={() => shiftDay(1)} disabled={selectedDate >= todayStr} title={ar ? 'اليوم التالي' : 'Next day'}>
-              {ar ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
-            </button>
-            {selectedDate !== todayStr && (
-              <button className="btn-gold outline" style={{ padding: '0.5rem 0.75rem' }} onClick={() => setSelectedDate(todayStr)}>
-                {ar ? 'النهارده' : 'Today'}
-              </button>
-            )}
-          </div>
-          <button className="btn-gold" onClick={handlePrint}>
-            <Printer size={16} /> {ar ? 'طباعة / PDF' : 'Print / PDF'}
-          </button>
-        </div>
-      </div>
-
-      <div style={{ color: 'var(--text-gray)', marginBottom: '1.5rem', fontSize: '1rem' }}>{dayLabel}</div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        {/* بطاقات ملخص */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
-          <SummaryCard title={ar ? 'إجمالي الوارد' : 'Total Incoming'} value={fmt(totalIncoming)} c="#10b981" icon={<TrendingUp size={24} color="#10b981" />} />
-          <SummaryCard title={ar ? 'إجمالي الصادر' : 'Total Outgoing'} value={fmt(totalOutgoing)} c="#ef4444" icon={<TrendingDown size={24} color="#ef4444" />} />
-          <SummaryCard title={ar ? 'الصافي' : 'Net'} value={fmt(net)} c={net >= 0 ? '#3b82f6' : '#ef4444'} icon={<Wallet size={24} color={net >= 0 ? '#3b82f6' : '#ef4444'} />} />
-          <SummaryCard title={ar ? 'عدد الأوردرات' : 'Orders'} value={String(dayOrders.length)} c="var(--gold-primary)" icon={<ArrowRightLeft size={24} color="var(--gold-primary)" />} />
-        </div>
-
-        {/* جدول وسائل الدفع */}
-        <div style={{ background: 'var(--bg-darker)', borderRadius: '12px', padding: '1.5rem', border: '1px solid var(--border-color)' }}>
-          <h3 style={{ marginTop: 0, marginBottom: '1rem', color: 'var(--text-light)' }}>{ar ? 'الحركة حسب وسيلة الدفع' : 'Movement by Payment Method'}</h3>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '520px' }}>
-              <thead>
-                <tr style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>
-                  <th style={thStyle(ar)}>{ar ? 'الوسيلة' : 'Method'}</th>
-                  <th style={thStyle(ar, 'end')}>{ar ? 'وارد' : 'Incoming'}</th>
-                  <th style={thStyle(ar, 'end')}>{ar ? 'صادر' : 'Outgoing'}</th>
-                  <th style={thStyle(ar, 'end')}>{ar ? 'الصافي' : 'Net'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {METHODS.filter(m => incomingByMethod[m] !== 0 || outgoingByMethod[m] !== 0).map(m => (
-                  <tr key={m} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                    <td style={tdStyle(ar)}>
-                      <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: color(m), marginInlineEnd: '8px' }} />
-                      {label(m)}
-                    </td>
-                    <td style={{ ...tdStyle(ar, 'end'), color: '#10b981', fontWeight: 700 }}>{fmt(incomingByMethod[m])}</td>
-                    <td style={{ ...tdStyle(ar, 'end'), color: outgoingByMethod[m] ? '#ef4444' : 'var(--text-gray)' }}>{outgoingByMethod[m] ? '- ' + fmt(outgoingByMethod[m]) : '—'}</td>
-                    <td style={{ ...tdStyle(ar, 'end'), fontWeight: 800 }}>{fmt(incomingByMethod[m] - outgoingByMethod[m])}</td>
-                  </tr>
-                ))}
-                {METHODS.every(m => incomingByMethod[m] === 0 && outgoingByMethod[m] === 0) && (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-gray)' }}>{ar ? 'لا توجد حركة في هذا اليوم' : 'No movement on this day'}</td></tr>
-                )}
-              </tbody>
-              <tfoot>
-                <tr style={{ borderTop: '2px solid var(--gold-primary)' }}>
-                  <td style={{ ...tdStyle(ar), fontWeight: 800 }}>{ar ? 'الإجمالي' : 'Total'}</td>
-                  <td style={{ ...tdStyle(ar, 'end'), color: '#10b981', fontWeight: 800 }}>{fmt(totalIncoming)}</td>
-                  <td style={{ ...tdStyle(ar, 'end'), color: '#ef4444', fontWeight: 800 }}>- {fmt(totalOutgoing)}</td>
-                  <td style={{ ...tdStyle(ar, 'end'), fontWeight: 900, color: 'var(--gold-primary)' }}>{fmt(net)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-
-        {/* ===== تقفيل شفت لكل صالة (من آخر تقفيل لحد دلوقتي) ===== */}
-        <ShiftClosingView
-          orders={orders}
-          categories={categories}
-          products={products}
-          settings={settings}
-          language={language}
-          userName={userName}
-        />
-
-        {/* ===== تقفيل كل وسيلة ===== */}
-        <div style={{ background: 'var(--bg-darker)', borderRadius: '12px', padding: '1.5rem', border: `1px solid ${isClosed ? '#10b981' : 'var(--border-color)'}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
-            <h3 style={{ margin: 0, color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              {isClosed ? <Lock size={18} color="#10b981" /> : <Unlock size={18} color="var(--gold-primary)" />}
-              {ar ? 'تقفيل الوسائل' : 'Close by Method'}
-            </h3>
-            {isClosed && (
-              <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', padding: '0.4rem 0.9rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 700 }}>
-                {ar ? 'مقفول' : 'Closed'} · {closing?.closed_by || '-'} · {closing?.closed_at ? new Date(closing.closed_at).toLocaleString(ar ? 'ar-EG' : 'en-GB') : ''}
-              </span>
-            )}
-            {closing?.status === 'reopened' && (
-              <span style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', padding: '0.4rem 0.9rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 700 }}>
-                {ar ? 'مفتوح للتعديل' : 'Reopened'}
-              </span>
-            )}
-            {!isClosed && closableMethods.length > 0 && (
-              <button className="btn-gold outline" style={{ padding: '0.45rem 0.9rem', fontSize: '0.85rem' }} onClick={fillAllWithExpected}>
-                {ar ? 'ملء الكل بالمفروض' : 'Fill all with expected'}
-              </button>
-            )}
-          </div>
-
-          {loadingClosing ? (
-            <p style={{ color: 'var(--text-gray)', padding: '1rem 0' }}>{ar ? 'جاري التحميل…' : 'Loading…'}</p>
-          ) : closableMethods.length === 0 ? (
-            <p style={{ color: 'var(--text-gray)', textAlign: 'center', padding: '2rem' }}>
-              {ar ? 'مفيش حركة في اليوم ده تتقفل' : 'No movement to close on this day'}
-            </p>
-          ) : (
-            <>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '720px' }}>
-                  <thead>
-                    <tr style={{ color: 'var(--text-gray)', fontSize: '0.85rem' }}>
-                      <th style={thStyle(ar)}>{ar ? 'الوسيلة' : 'Method'}</th>
-                      <th style={thStyle(ar, 'end')}>{ar ? 'وارد' : 'In'}</th>
-                      <th style={thStyle(ar, 'end')}>{ar ? 'صادر' : 'Out'}</th>
-                      <th style={thStyle(ar, 'end')}>{ar ? 'المفروض' : 'Expected'}</th>
-                      <th style={thStyle(ar, 'end')}>{ar ? 'المعدود فعليًا' : 'Counted'}</th>
-                      <th style={thStyle(ar, 'end')}>{ar ? 'الفرق' : 'Difference'}</th>
-                      <th style={thStyle(ar)}>{ar ? 'ملاحظة' : 'Note'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {closableMethods.map(m => {
-                      const d = diffOf(m);
-                      const filled = isMethodFilled(m);
-                      const dColor = !filled ? 'var(--text-gray)' : Math.abs(d) < 0.01 ? '#10b981' : d > 0 ? '#3b82f6' : '#ef4444';
-                      return (
-                        <tr key={m} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                          <td style={tdStyle(ar)}>
-                            <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: color(m), marginInlineEnd: '8px' }} />
-                            {label(m)}
-                          </td>
-                          <td style={{ ...tdStyle(ar, 'end'), color: '#10b981' }}>{fmt(incomingByMethod[m])}</td>
-                          <td style={{ ...tdStyle(ar, 'end'), color: outgoingByMethod[m] ? '#ef4444' : 'var(--text-gray)' }}>{outgoingByMethod[m] ? '- ' + fmt(outgoingByMethod[m]) : '—'}</td>
-                          <td style={{ ...tdStyle(ar, 'end'), fontWeight: 800 }}>{fmt(expectedByMethod[m])}</td>
-                          <td style={{ ...tdStyle(ar, 'end'), width: '190px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', justifyContent: ar ? 'flex-start' : 'flex-end' }}>
-                              <input
-                                type="number"
-                                step="0.01"
-                                className="input-gold"
-                                disabled={isClosed}
-                                placeholder={ar ? 'المبلغ' : 'Amount'}
-                                value={counted[m] ?? ''}
-                                onChange={e => setCounted(prev => ({ ...prev, [m]: e.target.value }))}
-                                style={{ width: '130px', padding: '0.5rem', borderRadius: '8px', textAlign: 'center', opacity: isClosed ? 0.6 : 1 }}
-                              />
-                              {!isClosed && (
-                                <button
-                                  type="button"
-                                  onClick={() => fillWithExpected(m)}
-                                  title={ar ? 'مطابق للمفروض' : 'Same as expected'}
-                                  style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--gold-primary)', borderRadius: '6px', padding: '0.35rem 0.5rem', cursor: 'pointer', fontWeight: 700 }}
-                                >=</button>
-                              )}
-                            </div>
-                          </td>
-                          <td style={{ ...tdStyle(ar, 'end'), color: dColor, fontWeight: 800 }}>
-                            {!filled ? '—' : (d > 0 ? '+' : '') + fmt(d)}
-                            {filled && Math.abs(d) >= 0.01 && (
-                              <div style={{ fontSize: '0.7rem', fontWeight: 600 }}>{d > 0 ? (ar ? 'زيادة' : 'Over') : (ar ? 'عجز' : 'Short')}</div>
-                            )}
-                          </td>
-                          <td style={tdStyle(ar)}>
-                            <input
-                              type="text"
-                              className="input-gold"
-                              disabled={isClosed}
-                              placeholder={ar ? 'سبب الفرق…' : 'Reason…'}
-                              value={methodNotes[m] ?? ''}
-                              onChange={e => setMethodNotes(prev => ({ ...prev, [m]: e.target.value }))}
-                              style={{ width: '100%', minWidth: '130px', padding: '0.5rem', borderRadius: '8px', opacity: isClosed ? 0.6 : 1 }}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: '2px solid var(--gold-primary)' }}>
-                      <td style={{ ...tdStyle(ar), fontWeight: 800 }}>{ar ? 'الإجمالي' : 'Total'}</td>
-                      <td style={{ ...tdStyle(ar, 'end'), color: '#10b981', fontWeight: 800 }}>{fmt(totalIncoming)}</td>
-                      <td style={{ ...tdStyle(ar, 'end'), color: '#ef4444', fontWeight: 800 }}>- {fmt(totalOutgoing)}</td>
-                      <td style={{ ...tdStyle(ar, 'end'), fontWeight: 900 }}>{fmt(totalExpected)}</td>
-                      <td style={{ ...tdStyle(ar, 'end'), fontWeight: 900, color: 'var(--gold-primary)' }}>{fmt(totalCounted)}</td>
-                      <td style={{ ...tdStyle(ar, 'end'), fontWeight: 900, color: Math.abs(totalDifference) < 0.01 ? '#10b981' : totalDifference > 0 ? '#3b82f6' : '#ef4444' }}>
-                        {(totalDifference > 0 ? '+' : '') + fmt(totalDifference)}
-                      </td>
-                      <td style={tdStyle(ar)} />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <label style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>{ar ? 'ملاحظات التقفيل' : 'Closing notes'}</label>
-                <textarea
-                  className="input-gold"
-                  disabled={isClosed}
-                  rows={2}
-                  value={closingNotes}
-                  onChange={e => setClosingNotes(e.target.value)}
-                  placeholder={ar ? 'أي ملاحظات على تقفيل اليوم…' : 'Any notes about this closing…'}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', resize: 'vertical', opacity: isClosed ? 0.6 : 1 }}
-                />
-              </div>
-
-              <div style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                {isClosed ? (
-                  <>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981', fontWeight: 700 }}>
-                      <CheckCircle2 size={18} /> {ar ? 'اليوم مقفول' : 'Day is closed'}
-                    </span>
-                    {userRole?.includes('admin') && (
-                      <button className="btn-gold outline" disabled={saving} onClick={handleReopen}>
-                        <Unlock size={16} /> {ar ? 'إعادة فتح اليوم' : 'Reopen day'}
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <button className="btn-gold" disabled={saving || !allFilled} onClick={handleSaveClosing} style={{ opacity: allFilled ? 1 : 0.5 }}>
-                      <Lock size={16} /> {saving ? (ar ? 'جاري الحفظ…' : 'Saving…') : (ar ? 'تقفيل اليوم' : 'Close the day')}
-                    </button>
-                    {!allFilled && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b', fontSize: '0.9rem' }}>
-                        <AlertTriangle size={16} /> {ar ? 'اكتب المعدود في كل وسيلة عشان تقدر تقفل' : 'Enter the counted amount for every method'}
-                      </span>
-                    )}
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* التفاصيل: أوردرات + مصروفات */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem' }}>
-          <DetailPanel title={`${ar ? 'الوارد — الأوردرات' : 'Incoming — Orders'} (${dayOrders.length})`} c="#10b981">
-            {dayOrders.length === 0 ? <Empty ar={ar} /> : dayOrders.map(o => (
-              <Row key={o.id}
-                left={<><b style={{ color: 'var(--text-light)' }}>#{String(o.id).slice(-5)}</b> <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', background: `${color(o.payment_method || 'cash')}20`, color: color(o.payment_method || 'cash') }}>{label(o.payment_method || 'cash')}</span></>}
-                sub={new Date(o.created_at).toLocaleTimeString(ar ? 'ar-EG' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}
-                right={<span style={{ color: '#10b981', fontWeight: 700 }}>+{fmt(num(o.total_price))}</span>}
-              />
-            ))}
-          </DetailPanel>
-
-          <DetailPanel title={`${ar ? 'الصادر — المصروفات' : 'Outgoing — Expenses'} (${dayExpenses.length})`} c="#ef4444">
-            {dayExpenses.length === 0 ? <Empty ar={ar} /> : dayExpenses.map(e => (
-              <Row key={e.id}
-                left={<><b style={{ color: 'var(--text-light)' }}>{e.name}</b> <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', background: `${color(e.payment_method || 'cash')}20`, color: color(e.payment_method || 'cash') }}>{label(e.payment_method || 'cash')}</span></>}
-                sub={e.type || ''}
-                right={<span style={{ color: '#ef4444', fontWeight: 700 }}>-{fmt(num(e.amount))}</span>}
-              />
-            ))}
-          </DetailPanel>
-        </div>
-
-        {/* تحويلات */}
-        {dayTransfers.length > 0 && (
-          <DetailPanel title={`${ar ? 'تحويلات بين الأرصدة' : 'Fund Transfers'} (${dayTransfers.length})`} c="#f59e0b">
-            {dayTransfers.map(t => (
-              <Row key={t.id}
-                left={<span>{label(t.from_method || '-')} → {label(t.to_method || '-')}</span>}
-                sub={t.description || ''}
-                right={<span style={{ color: '#f59e0b', fontWeight: 700 }}>{fmt(num(t.amount))}</span>}
-              />
-            ))}
-          </DetailPanel>
-        )}
-      </div>
+  return <div className="admin-content-section fade-in" dir={ar ? 'rtl' : 'ltr'}>
+    <div className="section-header" style={{ flexWrap: 'wrap', gap: '1rem' }}>
+      <div><h2>{ar ? 'تقفيل اليوم' : 'Daily Closing'}</h2><p style={{ color: 'var(--text-gray)', margin: 0 }}>{ar ? 'إغلاق الخزنتين = نهاية يوم التشغيل وبداية يوم جديد' : 'Closing both drawers ends the operating day and starts a new one.'}</p></div>
+      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}><input type="date" className="input-gold" value={selectedDate} max={today()} onChange={e => setSelectedDate(e.target.value)} /><button className="btn-gold" disabled={!bothClosed} onClick={printReport}><Printer size={16} /> {ar ? 'طباعة التقرير' : 'Print Report'}</button></div>
     </div>
-  );
-}
-
-// ===== عناصر مساعدة =====
-function SummaryCard({ title, value, c, icon }: { title: string; value: string; c: string; icon: React.ReactNode }) {
-  return (
-    <div className="stat-card" style={{ background: 'var(--bg-darker)', border: '1px solid var(--border-color)', borderTop: `4px solid ${c}`, position: 'relative' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-        <h3 style={{ color: 'var(--text-gray)', fontSize: '1rem', margin: 0 }}>{title}</h3>
-        {icon}
-      </div>
-      <p style={{ fontSize: '1.7rem', fontWeight: 'bold', color: c, margin: 0 }}>{value}</p>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '1rem', margin: '1.2rem 0' }}>
+      <Summary title={ar ? 'إجمالي المحصل من أول اليوم' : 'Total collected today'} value={fmt(dayOrders.reduce((sum, order) => sum + n(order.total_price), 0))} />
+      <Summary title={ar ? 'الخزنة 1' : 'Drawer 1'} value={closing?.drawer_1_closed ? (ar ? 'مقفولة' : 'Closed') : (ar ? 'مفتوحة' : 'Open')} />
+      <Summary title={ar ? 'الخزنة 2' : 'Drawer 2'} value={closing?.drawer_2_closed ? (ar ? 'مقفولة' : 'Closed') : (ar ? 'مفتوحة' : 'Open')} />
+      <Summary title={ar ? 'الطلبات' : 'Orders'} value={String(dayOrders.length)} />
     </div>
-  );
-}
-
-function DetailPanel({ title, c, children }: { title: string; c: string; children: React.ReactNode }) {
-  return (
-    <div style={{ background: 'var(--bg-darker)', borderRadius: '12px', padding: '1.25rem', border: '1px solid var(--border-color)' }}>
-      <h3 style={{ margin: '0 0 1rem', color: c, borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>{title}</h3>
-      <div style={{ maxHeight: '420px', overflowY: 'auto', paddingInlineEnd: '0.5rem' }} className="custom-scrollbar">{children}</div>
+    {openTableOrders.length > 0 && <div style={{ padding: '1rem', border: '1px solid #ef4444', color: '#fecaca', background: 'rgba(239,68,68,.1)', borderRadius: 10, marginBottom: '1rem' }}><AlertTriangle size={18} /> {ar ? `لا يمكن إغلاق اليوم حاليًا: ${openTableOrders.length} طاولة عليها طلبات مفتوحة (${openTableOrders.map(order => order.table_number).join('، ')}).` : `Cannot close: ${openTableOrders.length} tables have open orders.`}</div>}
+    <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
+      {[1, 2].map(drawer => <button key={drawer} className={activeDrawer === drawer ? 'btn-gold' : 'btn-gold outline'} onClick={() => setActiveDrawer(drawer as DrawerId)}><Wallet size={17} /> {ar ? `تقفيل خزنة ${drawer}` : `Drawer ${drawer}`} {(drawer === 1 ? closing?.drawer_1_closed : closing?.drawer_2_closed) && <CheckCircle2 size={16} />}</button>)}
     </div>
-  );
-}
-
-function Row({ left, sub, right }: { left: React.ReactNode; sub?: string; right: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0.25rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>{left}</div>
-        {sub ? <span style={{ fontSize: '0.78rem', color: 'var(--text-gray)' }}>{sub}</span> : null}
-      </div>
-      <div>{right}</div>
+    <div style={{ background: 'var(--bg-darker)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '1.2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}><h3 style={{ margin: 0 }}>{ar ? `ملخص خزنة ${activeDrawer}` : `Drawer ${activeDrawer} Summary`}</h3><span style={{ color: drawerClosed ? '#10b981' : 'var(--gold-primary)', fontWeight: 700 }}>{drawerClosed ? <><Lock size={16} /> {ar ? 'مقفولة' : 'Closed'}</> : (ar ? 'مفتوحة' : 'Open')}</span></div>
+      {loading ? <p>{ar ? 'جاري التحميل…' : 'Loading…'}</p> : <><div style={{ overflowX: 'auto', marginTop: '1rem' }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}><thead><tr><th>وسيلة الدفع</th><th>المحصل</th><th>الصادر</th><th>المفروض</th><th>المعدود</th><th>الفرق</th></tr></thead><tbody>{activeMethods.map(method => <tr key={method}><td>{methodLabel(method)}</td><td>{fmt(incoming[method])}</td><td>{fmt(outgoing[method])}</td><td>{fmt(expected[method])}</td><td><input className="input-gold" type="number" step="0.01" disabled={drawerClosed} value={counted[method] || ''} onChange={e => setCounted(prev => ({ ...prev, [method]: e.target.value }))} style={{ width: 120 }} /></td><td>{fmt(n(counted[method]) - expected[method])}</td></tr>)}<tr><td><b>{ar ? 'الإجمالي' : 'Total'}</b></td><td><b>{fmt(totalIncoming)}</b></td><td><b>{fmt(totalOutgoing)}</b></td><td><b>{fmt(totalExpected)}</b></td><td><b>{fmt(totalCounted)}</b></td><td><b>{fmt(difference)}</b></td></tr></tbody></table></div><textarea className="input-gold" disabled={drawerClosed} value={notes} onChange={e => setNotes(e.target.value)} placeholder={ar ? 'ملاحظات التقفيل…' : 'Closing notes…'} style={{ width: '100%', marginTop: '1rem', minHeight: 70 }} /><div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}><button className="btn-gold" disabled={saving || drawerClosed || Boolean(openTableOrders.length)} onClick={closeDrawer}>{drawerClosed ? <><Lock size={16} /> {ar ? 'الخزنة مقفولة' : 'Drawer closed'}</> : <>{ar ? `إغلاق خزنة ${activeDrawer}` : `Close Drawer ${activeDrawer}`}</>}</button></div></>}
     </div>
-  );
+  </div>;
 }
 
-function Empty({ ar }: { ar: boolean }) {
-  return <p style={{ color: 'var(--text-gray)', textAlign: 'center', padding: '2rem' }}>{ar ? 'لا يوجد' : 'None'}</p>;
-}
-
-const thStyle = (ar: boolean, align: 'start' | 'end' = 'start'): React.CSSProperties => ({
-  textAlign: align === 'end' ? (ar ? 'left' : 'right') : (ar ? 'right' : 'left'),
-  padding: '0.6rem 0.5rem', fontWeight: 600,
-});
-const tdStyle = (ar: boolean, align: 'start' | 'end' = 'start'): React.CSSProperties => ({
-  textAlign: align === 'end' ? (ar ? 'left' : 'right') : (ar ? 'right' : 'left'),
-  padding: '0.7rem 0.5rem', color: 'var(--text-light)', fontVariantNumeric: 'tabular-nums',
-});
-
+function Summary({ title, value }: { title: string; value: string }) { return <div style={{ background: 'var(--bg-darker)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '1rem' }}><div style={{ color: 'var(--text-gray)', fontSize: '.85rem' }}>{title}</div><strong style={{ display: 'block', color: 'var(--gold-primary)', fontSize: '1.25rem', marginTop: '.4rem' }}>{value}</strong></div>; }

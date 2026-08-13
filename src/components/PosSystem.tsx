@@ -94,6 +94,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
   const [employeesList, setEmployeesList] = useState<Employee[]>([]);
   const [attendanceLogsList, setAttendanceLogsList] = useState<AttendanceLog[]>([]);
+  // يمنع الضغط المتكرر لنفس الموظف أثناء انتظار الكاميرا أو الشبكة
+  const [attendanceActionInFlight, setAttendanceActionInFlight] = useState<Record<string, boolean>>({});
   const [searchEmployeeQuery, setSearchEmployeeQuery] = useState('');
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState('');
@@ -438,8 +440,16 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   }, [attendanceModalOpen]);
 
   const handleAttendanceAction = async (employee: Employee, isCheckIn: boolean) => {
+    const actionKey = `${employee.id}:${isCheckIn ? 'check-in' : 'check-out'}`;
+    if (attendanceActionInFlight[actionKey]) return;
+    setAttendanceActionInFlight(prev => ({ ...prev, [actionKey]: true }));
     if (!canvasRef.current || !videoRef.current) {
       alert(language === 'ar' ? 'الكاميرا غير جاهزة!' : 'Camera not ready!');
+      setAttendanceActionInFlight(prev => {
+        const next = { ...prev };
+        delete next[actionKey];
+        return next;
+      });
       return;
     }
 
@@ -559,12 +569,17 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       const updatedLogs = await db.getAttendanceLogs();
       setAttendanceLogsList(updatedLogs);
       alert(language === 'ar' ? 'تم تسجيل العملية بنجاح!' : 'Successfully recorded!');
-    } catch (e) {
+        } catch (e) {
       console.error(e);
       alert(language === 'ar' ? 'حدث خطأ أثناء حفظ العملية!' : 'An error occurred during operation!');
+    } finally {
+      setAttendanceActionInFlight(prev => {
+        const next = { ...prev };
+        delete next[actionKey];
+        return next;
+      });
     }
   };
-
   const handleClose = async () => {
     if (view === 'role_select') {
       onClose();
@@ -3850,10 +3865,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 {activeLog ? (
                                   <button 
                                     className="pos-btn"
-                                    style={{ background: '#ef4444', borderColor: '#ef4444', color: 'var(--text-white)', padding: '0.5rem 1rem', fontSize: '0.9rem', borderRadius: '8px' }}
+                                    disabled={Boolean(attendanceActionInFlight[`${emp.id}:check-out`])}
                                     onClick={() => handleAttendanceAction(emp, false)}
+                                    style={{ background: '#ef4444', borderColor: '#ef4444', color: 'var(--text-white)', padding: '0.5rem 1rem', fontSize: '0.9rem', borderRadius: '8px', opacity: attendanceActionInFlight[`${emp.id}:check-out`] ? 0.6 : 1, cursor: attendanceActionInFlight[`${emp.id}:check-out`] ? 'wait' : 'pointer' }}
                                   >
-                                    {language === 'ar' ? 'تسجيل انصراف 🔴' : 'Check Out 🔴'}
+                                    {attendanceActionInFlight[`${emp.id}:check-out`] ? (language === 'ar' ? 'جاري التسجيل…' : 'Saving…') : (language === 'ar' ? 'تسجيل انصراف 🔴' : 'Check Out 🔴')}
                                   </button>
                                 ) : completedLog ? (
                                   <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '0.9rem', background: 'rgba(34,197,94,0.1)', padding: '6px 12px', borderRadius: '8px' }}>
@@ -3862,10 +3878,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 ) : (
                                   <button 
                                     className="pos-btn"
-                                    style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', borderRadius: '8px' }}
+                                    disabled={Boolean(attendanceActionInFlight[`${emp.id}:check-in`])}
                                     onClick={() => handleAttendanceAction(emp, true)}
+                                    style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', borderRadius: '8px', opacity: attendanceActionInFlight[`${emp.id}:check-in`] ? 0.6 : 1, cursor: attendanceActionInFlight[`${emp.id}:check-in`] ? 'wait' : 'pointer' }}
                                   >
-                                    {language === 'ar' ? 'تسجيل حضور 🟢' : 'Check In 🟢'}
+                                    {attendanceActionInFlight[`${emp.id}:check-in`] ? (language === 'ar' ? 'جاري التسجيل…' : 'Saving…') : (language === 'ar' ? 'تسجيل حضور 🟢' : 'Check In 🟢')}
                                   </button>
                                 )}
                               </div>

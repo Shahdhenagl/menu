@@ -378,9 +378,43 @@ export const db = {
     return getLocalData('meridien_orders', initialOrders).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   },
 
+  async getCurrentOperatingDay(): Promise<{ date: string; open: boolean }> {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const calendarDate = new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10);
+    const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('meridien_operating_day') : null;
+    if (stored) {
+      try {
+        const state = JSON.parse(stored) as { date?: string; open?: boolean };
+        if (state.date) return { date: state.date, open: state.open !== false };
+      } catch { /* fallback to calendar date */ }
+    }
+    if (supabase) {
+      try {
+        const { data } = await (supabase as any).from('operating_day_state').select('operating_date,is_open').eq('id', 'current').maybeSingle();
+        if (data?.operating_date) return { date: data.operating_date, open: data.is_open !== false };
+      } catch { /* migration may not be installed yet */ }
+    }
+    return { date: calendarDate, open: true };
+  },
+  async startNextOperatingDay(closedDate: string): Promise<{ date: string; open: boolean }> {
+    const next = new Date(`${closedDate}T12:00:00`);
+    next.setDate(next.getDate() + 1);
+    const offset = next.getTimezoneOffset();
+    const date = new Date(next.getTime() - offset * 60000).toISOString().slice(0, 10);
+    const state = { date, open: true };
+    if (typeof localStorage !== 'undefined') localStorage.setItem('meridien_operating_day', JSON.stringify(state));
+    if (supabase) {
+      try { await (supabase as any).from('operating_day_state').upsert([{ id: 'current', operating_date: date, is_open: true }], { onConflict: 'id' }); } catch (error) { console.warn('Failed to persist operating day state', error); }
+    }
+    return state;
+  },
   async addOrder(order: Omit<Order, 'id' | 'created_at'>): Promise<Order> {
+    const operatingDay = await this.getCurrentOperatingDay();
+    if (!operatingDay.open) throw new Error('OPERATING_DAY_CLOSED');
     const newOrder: Order = {
       ...order,
+      operating_day: operatingDay.date,
       id: crypto.randomUUID(),
       created_at: new Date().toISOString()
     };
@@ -2395,6 +2429,27 @@ export const db = {
   },
 
   async addAttendanceLog(log: Omit<AttendanceLog, 'id' | 'created_at'>): Promise<AttendanceLog> {
+    const operatingDay = await this.getCurrentOperatingDay();
+    if (!operatingDay.open) throw new Error('OPERATING_DAY_CLOSED');
+    if (supabase) {
+      try {
+        const { data: activeLog, error } = await supabase
+          .from('attendance_logs')
+          .select('id')
+          .eq('employee_id', log.employee_id)
+          .eq('date', log.date)
+          .is('check_out_time', null)
+          .maybeSingle();
+        if (!error && activeLog) throw new Error('ATTENDANCE_ALREADY_OPEN');
+      } catch (error) {
+        if (error instanceof Error && error.message === 'ATTENDANCE_ALREADY_OPEN') throw error;
+        console.warn('Attendance duplicate check failed', error);
+      }
+    } else {
+      const localLogs = getLocalData('meridien_attendance_logs', [] as AttendanceLog[]);
+      const activeLog = localLogs.find(item => item.employee_id === log.employee_id && item.date === log.date && !item.check_out_time);
+      if (activeLog) throw new Error('ATTENDANCE_ALREADY_OPEN');
+    }
     const newLog: AttendanceLog = {
       ...log,
       id: crypto.randomUUID(),
