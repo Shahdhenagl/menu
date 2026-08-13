@@ -17,7 +17,7 @@ import {
   Bell, Sun, Moon, BarChart3, Wallet, Receipt
 } from 'lucide-react';
 import { db } from '../lib/supabase';
-import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe, PaymentMethodKey } from '../types';
+import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe, PaymentMethodKey, Partner, Expense, CustomerPayment } from '../types';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import { taxPercentForOrder } from '../utils/tax';
 import { drawerOfHall, drawerName } from '../utils/shiftClosing';
@@ -127,6 +127,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   
   // Payment and Customers
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [partners, setPartners] = useState<Partner[]>([]);
 
   // Menu & Cart
   const [activeCategory, setActiveCategory] = useState<string>('');
@@ -363,7 +364,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   }, [view]);
 
   const loadData = async () => {
-    const [cats, prods, users, ords, prnts, sets, custs, emps, atts, invItems, prodRecipes] = await Promise.all([
+    const [cats, prods, users, ords, prnts, sets, custs, emps, atts, invItems, prodRecipes, pts] = await Promise.all([
       db.getCategories(),
       db.getProducts(),
       db.getSystemUsers(),
@@ -374,7 +375,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       db.getEmployees(),
       db.getAttendanceLogs(),
       db.getInventoryItems(),
-      db.getProductRecipes()
+      db.getProductRecipes(),
+      db.getPartners()
     ]);
     setCategories(cats.sort((a, b) => {
       const aBar = a.department === 'bar';
@@ -390,6 +392,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     setPrinters(prnts);
     setSettings(sets);
     setCustomers(custs);
+    setPartners((pts || []) as Partner[]);
     setEmployeesList(emps);
     setAttendanceLogsList(atts);
     setInventoryItems(invItems || []);
@@ -733,22 +736,32 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
 
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const partnerForTable = (table?: string | null): Partner | undefined => {
+    const key = String(table || '').trim().toLowerCase();
+    if (!key || key === '-') return undefined;
+    return partners.find(p => (p.table_names || []).some(name => String(name).trim().toLowerCase() === key));
+  };
+  const selectedPartner = orderType === 'dine_in' ? partnerForTable(tableNumber) : undefined;
+  const partnerForOrder = (order: Partial<Order>): Partner | undefined =>
+    order.partner_id ? partners.find(p => p.id === order.partner_id) : partnerForTable(order.table_number);
   const totalForItems = (
     items: OrderItem[],
     type?: Order['order_type'] | null,
     hall?: string | null,
-    freeOrder = false
+    freeOrder = false,
+    partnerOrder = false
   ) => {
     const subtotal = items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
     if (freeOrder) return 0;
+    if (partnerOrder) return subtotal * 0.70;
     const taxPercent = taxPercentForOrder(settings, type, hall);
     return subtotal + (subtotal * taxPercent / 100);
   };
   const totalForOrder = (order: Order) =>
-    totalForItems(order.items, order.order_type, order.hall, order.payment_method === 'staff');
-  const hallTaxPercent = staffOrderFor ? 0 : taxPercentForOrder(settings, orderType, selectedHall);
+    totalForItems(order.items, order.order_type, order.hall, order.payment_method === 'staff', !!partnerForOrder(order));
+  const hallTaxPercent = staffOrderFor || selectedPartner ? 0 : taxPercentForOrder(settings, orderType, selectedHall);
   const cartTaxAmount = cartSubtotal * (hallTaxPercent / 100);
-  const cartTotal = totalForItems(cart, orderType, selectedHall, !!staffOrderFor);
+  const cartTotal = totalForItems(cart, orderType, selectedHall, !!staffOrderFor, !!selectedPartner);
 
   // ===== ألوان وفلاتر لوحة الطلبات (بالصالة / نوع الطلب) =====
   const hallColor = (hall?: string): string => {
@@ -813,8 +826,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       o.table_number !== '-' &&
       ['pending', 'preparing', 'prepared', 'delivered'].includes(o.status)
     );
-  const getTableOrder = (hall: string, tableNo: number) =>
-    dineInOrdersForHall(hall).find(o => String(o.table_number) === String(tableNo));
+  const partnerTableNames = Array.from(new Set(partners.flatMap(p => p.table_names || []).map(name => String(name).trim()).filter(Boolean)));
+  const getTableOrder = (hall: string, tableNo: string | number) =>
+    dineInOrdersForHall(hall).find(o => String(o.table_number).trim().toLowerCase() === String(tableNo).trim().toLowerCase());
   const checkPrintedKey = (orderId: string) => `meridien_check_printed_${orderId}`;
   const isCheckPrinted = (orderId?: string) => {
     if (!orderId) return false;
@@ -823,7 +837,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const markCheckPrinted = (orderId: string) => {
     try { localStorage.setItem(checkPrintedKey(orderId), '1'); } catch {}
   };
-  const getTableStatus = (hall: string, tableNo: number): TableStatus => {
+  const getTableStatus = (hall: string, tableNo: string | number): TableStatus => {
     const order = getTableOrder(hall, tableNo);
     if (!order) return 'empty';
     if (isCheckPrinted(order.id)) return 'check';
@@ -832,7 +846,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
   const tableStatusCount = (status: TableStatus | 'all') => {
     if (!selectedHall) return 0;
-    return Array.from({ length: 40 }, (_, i) => i + 1)
+    return [...Array.from({ length: 40 }, (_, i) => String(i + 1)), ...partnerTableNames]
       .filter(n => status === 'all' || getTableStatus(selectedHall, n) === status)
       .length;
   };
@@ -998,8 +1012,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           cart,
           orderType || editingOrder.order_type,
           (orderType || editingOrder.order_type) === 'dine_in' ? (selectedHall || editingOrder.hall) : undefined,
-          editingOrder.payment_method === 'staff'
+          editingOrder.payment_method === 'staff',
+          !!partnerForOrder({ ...editingOrder, table_number: tableNumber, order_type: orderType || editingOrder.order_type })
         ),
+        partner_id: partnerForOrder({ ...editingOrder, table_number: tableNumber, order_type: orderType || editingOrder.order_type })?.id,
+        partner_discount_percent: partnerForOrder({ ...editingOrder, table_number: tableNumber, order_type: orderType || editingOrder.order_type }) ? 30 : undefined,
+        partner_subtotal: partnerForOrder({ ...editingOrder, table_number: tableNumber, order_type: orderType || editingOrder.order_type }) ? cartSubtotal : undefined,
+        partner_amount_due: partnerForOrder({ ...editingOrder, table_number: tableNumber, order_type: orderType || editingOrder.order_type }) ? totalForItems(cart, orderType || editingOrder.order_type, (orderType || editingOrder.order_type) === 'dine_in' ? (selectedHall || editingOrder.hall) : undefined, false, true) : undefined,
         customer_name: customerName,
         customer_phone: customerPhone,
         table_number: tableNumber,
@@ -1056,6 +1075,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       order_type: orderType || 'takeaway',
       waiter_id: assignedWaiterId,
       waiter_name: assignedWaiterName,
+      ...(selectedPartner ? {
+        partner_id: selectedPartner.id,
+        partner_discount_percent: 30,
+        partner_subtotal: cartSubtotal,
+        partner_amount_due: cartTotal,
+        payment_method: 'partner' as const,
+        payment_details: { type: 'partner', partner_id: selectedPartner.id, partner_name: selectedPartner.name, cash_collected: 0 }
+      } : {}),
       ...(staffOrderFor ? {
         payment_method: 'staff' as const,
         payment_details: {
@@ -1293,7 +1320,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       await db.addCustomerPayment({
         customer_id: customer.id,
         amount,
-        payment_method: depositPaymentMethod,
+        payment_method: depositPaymentMethod as CustomerPayment['payment_method'],
         notes: depositNotes || 'إيداع/تحصيل من حساب العميل',
         employee_id: selectedWaiter?.id,
         employee_name: selectedWaiter?.name,
@@ -1325,7 +1352,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         name: expenseName.trim(),
         type: 'مصروف غير مصنف',
         amount,
-        payment_method: expensePaymentMethod,
+        payment_method: expensePaymentMethod as Expense['payment_method'],
         expense_date: getLocalDayStr(),
         notes: expenseNotes.trim() || undefined,
         employee_id: selectedEmp.id,
@@ -2058,7 +2085,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.9rem' }}>
-                  {Array.from({ length: 40 }, (_, i) => i + 1).map(tableNo => {
+                  {[...Array.from({ length: 40 }, (_, i) => String(i + 1)), ...partnerTableNames].map(tableNo => {
                     const status = getTableStatus(selectedHall, tableNo);
                     const order = getTableOrder(selectedHall, tableNo);
                     if (tableStatusFilter !== 'all' && tableStatusFilter !== status) return null;
@@ -2083,7 +2110,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
                         }}
                       >
-                        <span style={{ fontSize: '1.8rem', fontWeight: 900, color }}>{tableNo}</span>
+                          <span style={{ fontSize: '1.15rem', fontWeight: 900, color }}>{tableNo}</span>
+                          {partnerForTable(String(tableNo)) ? <span style={{ fontSize: '0.7rem', color: '#fbbf24' }}>{language === 'ar' ? `شريك: ${partnerForTable(String(tableNo))?.name}` : `Partner: ${partnerForTable(String(tableNo))?.name}`}</span> : null}
                         <span style={{ fontSize: '0.85rem', fontWeight: 800 }}>{tableStatusLabels[status]}</span>
                         {order ? <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>#{order.id.slice(-4)}</span> : null}
                       </button>
@@ -2485,7 +2513,28 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                             setView('waiter_order_edit');
                           }}>{language === 'ar' ? 'تعديل' : 'Edit'}</button>
                           
-                          {order.status === 'delivered' && order.payment_method === 'staff' ? (
+                          {order.status === 'delivered' && order.payment_method === 'partner' ? (
+                            /* طلب شريك: لا تحصيل نقدي — يسجل كمديونية في كشف الشريك */
+                            <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#f59e0b', color: '#000' }} onClick={async () => {
+                              playClickSound();
+                              try {
+                                const partnerOrder = await db.updateOrder(order.id, {
+                                  status: 'completed',
+                                  payment_method: 'partner',
+                                  total_price: Number(order.partner_amount_due ?? order.total_price) || 0,
+                                  drawer: undefined,
+                                  payment_details: { ...(order.payment_details || {}), type: 'partner', cash_collected: 0 }
+                                }, selectedWaiter?.name);
+                                printCustomerReceipt(partnerOrder || order, language, settings);
+                                loadData();
+                              } catch (err) {
+                                console.error(err);
+                                alert(language === 'ar' ? 'فشل إنهاء طلب الشريك' : 'Failed to close partner order');
+                              }
+                            }}>
+                              {language === 'ar' ? 'إنهاء طلب الشريك (بدون تحصيل)' : 'Close Partner Order (No Cash)'}
+                            </button>
+                          ) : order.status === 'delivered' && order.payment_method === 'staff' ? (
                             /* طلب استاف: مفيش تحصيل — إنهاء مباشر (بيخصم المخزون) */
                             <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#38bdf8', color: '#000' }} onClick={async () => {
                               playClickSound();
@@ -2826,7 +2875,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           {(['empty', 'occupied', 'delivered', 'check'] as TableStatus[]).map(status => (
                             <div key={status} style={{ background: `${tableStatusColors[status]}22`, border: `1px solid ${tableStatusColors[status]}`, borderRadius: '8px', padding: '0.6rem' }}>
                               <span style={{ display: 'block', color: tableStatusColors[status], fontWeight: 800 }}>{tableStatusLabels[status]}</span>
-                              <b>{Array.from({ length: 40 }, (_, i) => i + 1).filter(n => getTableStatus(h.name, n) === status).length}</b>
+                              <b>{[...Array.from({ length: 40 }, (_, i) => String(i + 1)), ...partnerTableNames].filter(n => getTableStatus(h.name, n) === status).length}</b>
                             </div>
                           ))}
                         </div>

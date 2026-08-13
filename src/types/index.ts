@@ -56,6 +56,10 @@ export interface Order {
   table_number: string;
   hall?: string;            // اسم الصالة (لطلبات الصالة)
   drawer?: DrawerId;        // الخزنة اللي اتحصّل فيها (من الصالة أو باختيار الكاشير)
+  partner_id?: string;       // أوردر على طاولة شريك/أونر
+  partner_discount_percent?: number;
+  partner_subtotal?: number;
+  partner_amount_due?: number; // قيمة كشف الشريك بعد الخصم
   promo_code?: string | null;
   items: OrderItem[];
   total_price: number;
@@ -65,7 +69,7 @@ export interface Order {
   waiter_id?: string;
   waiter_name?: string;
   // 'staff' = طلب استاف مجاني (بيتسجل بالاسم وبيخصم من المخزون بس مبيتحسبش مبيعات)
-  payment_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'split' | 'deferred' | 'hospitality' | 'petty_cash' | 'staff';
+  payment_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'split' | 'deferred' | 'hospitality' | 'petty_cash' | 'staff' | 'partner';
   payment_details?: any; // JSON representation of split payments
   inventory_deducted?: boolean;
   operating_day?: string; // يوم التشغيل المحاسبي، مستقل عن التاريخ الميلادي بعد الإغلاق
@@ -347,7 +351,7 @@ export interface FinancialTransaction {
 }
 
 // ===== التقفيل اليومي =====
-export type PaymentMethodKey = 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'deferred' | 'petty_cash';
+export type PaymentMethodKey = 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'deferred' | 'petty_cash' | 'partner';
 
 /** تقفيل وسيلة دفع واحدة داخل تقفيل اليوم */
 export interface DailyClosingMethod {
@@ -435,6 +439,7 @@ export interface Partner {
   name: string;
   phone?: string;
   opening_balance: number; // For example: positive means partner invested this much.
+  table_names?: string[];
   created_at?: string;
 }
 
@@ -444,6 +449,9 @@ export interface PartnerTransaction {
   type: 'credit' | 'debit'; // credit: additions to partner (داين), debit: deductions from partner (مدين)
   amount: number;
   description?: string;
+  order_id?: string;
+  hall?: string;
+  table_number?: string;
   created_at?: string;
 }
 

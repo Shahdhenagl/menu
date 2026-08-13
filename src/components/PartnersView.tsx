@@ -25,6 +25,7 @@ export default function PartnersView({ language }: PartnersViewProps) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [openingBalance, setOpeningBalance] = useState('');
+  const [tableNames, setTableNames] = useState('');
 
   const [txType, setTxType] = useState<'credit' | 'debit'>('credit');
   const [txAmount, setTxAmount] = useState('');
@@ -52,9 +53,9 @@ export default function PartnersView({ language }: PartnersViewProps) {
     if (!name.trim()) return;
     try {
       if (editPartnerId) {
-        await db.updatePartner(editPartnerId, { name, phone, opening_balance: Number(openingBalance) || 0 });
+        await db.updatePartner(editPartnerId, { name, phone, opening_balance: Number(openingBalance) || 0, table_names: tableNames.split(',').map(v => v.trim()).filter(Boolean) });
       } else {
-        await db.addPartner({ name, phone, opening_balance: Number(openingBalance) || 0 });
+        await db.addPartner({ name, phone, opening_balance: Number(openingBalance) || 0, table_names: tableNames.split(',').map(v => v.trim()).filter(Boolean) });
       }
       setShowPartnerModal(false);
       fetchData();
@@ -107,6 +108,7 @@ export default function PartnersView({ language }: PartnersViewProps) {
           setName('');
           setPhone('');
           setOpeningBalance('0');
+          setTableNames('');
           setShowPartnerModal(true);
         }}>
           <PlusCircle size={16} />
@@ -130,6 +132,9 @@ export default function PartnersView({ language }: PartnersViewProps) {
                         {p.name}
                       </h3>
                       <div style={{ color: 'var(--text-gray)', fontSize: '0.9rem' }}>{p.phone || '-'}</div>
+                      <div style={{ color: '#fbbf24', fontSize: '0.82rem', marginTop: '0.35rem' }}>
+                        {language === 'ar' ? 'الطاولات: ' : 'Tables: '}{(p.table_names || []).join(', ') || '-'}
+                      </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '0.8rem' }}>
@@ -141,6 +146,7 @@ export default function PartnersView({ language }: PartnersViewProps) {
                         setName(p.name);
                         setPhone(p.phone || '');
                         setOpeningBalance(String(p.opening_balance));
+                        setTableNames((p.table_names || []).join(', '));
                         setShowPartnerModal(true);
                       }}
                     >
@@ -238,6 +244,11 @@ export default function PartnersView({ language }: PartnersViewProps) {
               <div className="form-group">
                 <label>{language === 'ar' ? 'الرصيد الافتتاحي' : 'Opening Balance'}</label>
                 <input type="number" className="input-gold" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>{language === 'ar' ? 'أسماء الطاولات (افصل بينها بفاصلة)' : 'Table names (comma separated)'}</label>
+                <input type="text" className="input-gold" value={tableNames} onChange={e => setTableNames(e.target.value)} placeholder={language === 'ar' ? 'Owner 1, Partner A' : 'Owner 1, Partner A'} />
+                <small style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'تظهر هذه الطاولات في الصالتين وتُطبّق عليها خصم 30% دون ضريبة.' : 'These tables appear in both halls with 30% discount and no tax.'}</small>
               </div>
               <button className="btn-gold" onClick={handleSavePartner} style={{ width: '100%', marginTop: '1rem', padding: '1rem', justifyContent: 'center' }}>
                 {language === 'ar' ? 'حفظ البيانات' : 'Save'}

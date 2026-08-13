@@ -15,7 +15,7 @@ interface Props {
   userRole?: string;
 }
 
-const METHODS: PaymentMethodKey[] = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred', 'petty_cash'];
+const METHODS: PaymentMethodKey[] = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred', 'petty_cash', 'partner'];
 const n = (value: unknown) => Number(value) || 0;
 const localDate = (value: string | number | Date) => {
   const date = new Date(value);
@@ -58,7 +58,7 @@ export default function DailyClosingView({ orders, expenses, language, userName 
         });
       } else {
         const method = order.payment_method as PaymentMethodKey;
-        result[method] = (result[method] || 0) + n(order.total_price);
+        result[method] = (result[method] || 0) + n(method === 'partner' ? (order.partner_amount_due ?? order.total_price) : order.total_price);
       }
     });
     return result;
@@ -71,19 +71,19 @@ export default function DailyClosingView({ orders, expenses, language, userName 
     });
     return result;
   }, [drawerExpenses]);
-  const expected = useMemo(() => Object.fromEntries(METHODS.map(method => [method, incoming[method] - outgoing[method]])) as Record<PaymentMethodKey, number>, [incoming, outgoing]);
+  const expected = useMemo(() => Object.fromEntries(METHODS.map(method => [method, method === 'partner' ? 0 : incoming[method] - outgoing[method]])) as Record<PaymentMethodKey, number>, [incoming, outgoing]);
   const activeMethods = useMemo(() => METHODS.filter(method => incoming[method] !== 0 || outgoing[method] !== 0 || (closing?.[`drawer_${activeDrawer}_methods` as 'drawer_1_methods'] || []).some(row => row.method === method)), [incoming, outgoing, closing, activeDrawer]);
   const totalIncoming = activeMethods.reduce((sum, method) => sum + incoming[method], 0);
   const totalOutgoing = activeMethods.reduce((sum, method) => sum + outgoing[method], 0);
   const totalExpected = activeMethods.reduce((sum, method) => sum + expected[method], 0);
-  const totalCounted = activeMethods.reduce((sum, method) => sum + n(counted[method]), 0);
+  const totalCounted = activeMethods.reduce((sum, method) => sum + (method === 'partner' ? 0 : n(counted[method])), 0);
   const difference = totalCounted - totalExpected;
   const drawerClosed = activeDrawer === 1 ? Boolean(closing?.drawer_1_closed) : Boolean(closing?.drawer_2_closed);
   const bothClosed = Boolean(closing?.drawer_1_closed && closing?.drawer_2_closed);
 
   const methodLabel = (method: PaymentMethodKey) => ({
     cash: ar ? 'كاش' : 'Cash', visa: ar ? 'فيزا' : 'Visa', wallet_restaurant: ar ? 'محفظة المطعم' : 'Restaurant Wallet',
-    wallet_cafe: ar ? 'محفظة الكافيه' : 'Cafe Wallet', instapay: ar ? 'إنستاباي' : 'Instapay', deferred: ar ? 'آجل' : 'Deferred', petty_cash: ar ? 'عهدة' : 'Petty Cash'
+    wallet_cafe: ar ? 'محفظة الكافيه' : 'Cafe Wallet', instapay: ar ? 'إنستاباي' : 'Instapay', deferred: ar ? 'آجل' : 'Deferred', petty_cash: ar ? 'عهدة' : 'Petty Cash', partner: ar ? 'مديونية شريك' : 'Partner Debt'
   }[method]);
   const fmt = (value: number) => `${n(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ar ? 'ج.م' : 'EGP'}`;
 
@@ -186,7 +186,7 @@ export default function DailyClosingView({ orders, expenses, language, userName 
     </div>
     <div style={{ background: 'var(--bg-darker)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '1.2rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}><h3 style={{ margin: 0 }}>{ar ? `ملخص خزنة ${activeDrawer}` : `Drawer ${activeDrawer} Summary`}</h3><span style={{ color: drawerClosed ? '#10b981' : 'var(--gold-primary)', fontWeight: 700 }}>{drawerClosed ? <><Lock size={16} /> {ar ? 'مقفولة' : 'Closed'}</> : (ar ? 'مفتوحة' : 'Open')}</span></div>
-      {loading ? <p>{ar ? 'جاري التحميل…' : 'Loading…'}</p> : <><div style={{ overflowX: 'auto', marginTop: '1rem' }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}><thead><tr><th>وسيلة الدفع</th><th>المحصل</th><th>الصادر</th><th>المفروض</th><th>المعدود</th><th>الفرق</th></tr></thead><tbody>{activeMethods.map(method => <tr key={method}><td>{methodLabel(method)}</td><td>{fmt(incoming[method])}</td><td>{fmt(outgoing[method])}</td><td>{fmt(expected[method])}</td><td><input className="input-gold" type="number" step="0.01" disabled={drawerClosed} value={counted[method] || ''} onChange={e => setCounted(prev => ({ ...prev, [method]: e.target.value }))} style={{ width: 120 }} /></td><td>{fmt(n(counted[method]) - expected[method])}</td></tr>)}<tr><td><b>{ar ? 'الإجمالي' : 'Total'}</b></td><td><b>{fmt(totalIncoming)}</b></td><td><b>{fmt(totalOutgoing)}</b></td><td><b>{fmt(totalExpected)}</b></td><td><b>{fmt(totalCounted)}</b></td><td><b>{fmt(difference)}</b></td></tr></tbody></table></div><textarea className="input-gold" disabled={drawerClosed} value={notes} onChange={e => setNotes(e.target.value)} placeholder={ar ? 'ملاحظات التقفيل…' : 'Closing notes…'} style={{ width: '100%', marginTop: '1rem', minHeight: 70 }} /><div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}><button className="btn-gold" disabled={saving || drawerClosed || Boolean(openTableOrders.length)} onClick={closeDrawer}>{drawerClosed ? <><Lock size={16} /> {ar ? 'الخزنة مقفولة' : 'Drawer closed'}</> : <>{ar ? `إغلاق خزنة ${activeDrawer}` : `Close Drawer ${activeDrawer}`}</>}</button></div></>}
+      {loading ? <p>{ar ? 'جاري التحميل…' : 'Loading…'}</p> : <><div style={{ overflowX: 'auto', marginTop: '1rem' }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}><thead><tr><th>وسيلة الدفع</th><th>المحصل</th><th>الصادر</th><th>المفروض</th><th>المعدود</th><th>الفرق</th></tr></thead><tbody>{activeMethods.map(method => <tr key={method}><td>{methodLabel(method)}</td><td>{fmt(incoming[method])}</td><td>{fmt(outgoing[method])}</td><td>{fmt(expected[method])}</td><td><input className="input-gold" type="number" step="0.01" disabled={drawerClosed || method === 'partner'} value={method === 'partner' ? '' : (counted[method] || '')} onChange={e => setCounted(prev => ({ ...prev, [method]: e.target.value }))} style={{ width: 120 }} /></td><td>{fmt(method === 'partner' ? 0 : n(counted[method]) - expected[method])}</td></tr>)}<tr><td><b>{ar ? 'الإجمالي' : 'Total'}</b></td><td><b>{fmt(totalIncoming)}</b></td><td><b>{fmt(totalOutgoing)}</b></td><td><b>{fmt(totalExpected)}</b></td><td><b>{fmt(totalCounted)}</b></td><td><b>{fmt(difference)}</b></td></tr></tbody></table></div><textarea className="input-gold" disabled={drawerClosed} value={notes} onChange={e => setNotes(e.target.value)} placeholder={ar ? 'ملاحظات التقفيل…' : 'Closing notes…'} style={{ width: '100%', marginTop: '1rem', minHeight: 70 }} /><div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}><button className="btn-gold" disabled={saving || drawerClosed || Boolean(openTableOrders.length)} onClick={closeDrawer}>{drawerClosed ? <><Lock size={16} /> {ar ? 'الخزنة مقفولة' : 'Drawer closed'}</> : <>{ar ? `إغلاق خزنة ${activeDrawer}` : `Close Drawer ${activeDrawer}`}</>}</button></div></>}
     </div>
   </div>;
 }

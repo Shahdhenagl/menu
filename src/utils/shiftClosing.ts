@@ -6,7 +6,7 @@ import type { ShiftClosingReport } from './printUtils';
 import { taxPercentForOrder } from './tax';
 
 // وسائل الدفع اللي بتظهر في تقفيل الشفت
-export const METHOD_KEYS = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred', 'petty_cash'] as const;
+export const METHOD_KEYS = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred', 'petty_cash', 'partner'] as const;
 
 const num = (v: any): number => Number(v) || 0;
 
@@ -59,6 +59,7 @@ export const methodLabel = (m: string, ar: boolean): string => {
     case 'instapay': return ar ? 'إنستاباي' : 'Instapay';
     case 'deferred': return ar ? 'آجل (مديونية)' : 'Deferred';
     case 'petty_cash': return ar ? 'عهدة الشريك' : 'Petty Cash';
+    case 'partner': return ar ? 'مديونية شريك' : 'Partner Debt';
     default: return m;
   }
 };
@@ -95,7 +96,10 @@ export const buildShiftReport = ({
 }): BuiltShiftReport => {
   const subtotal = orders.reduce((s, o) => s + orderSubtotal(o), 0);
   const collected = orders.reduce((s, o) => s + num(o.total_price), 0);
+  const partnerDebt = orders.filter(o => o.payment_method === 'partner').reduce((s, o) => s + num(o.partner_amount_due ?? o.total_price), 0);
+  const cashCollected = collected - partnerDebt;
   const tax = orders.reduce((s, o) => {
+    if (o.payment_method === 'partner' || o.partner_id) return s;
     const base = orderSubtotal(o);
     const percent = taxPercentForOrder(settings, o.order_type, o.hall);
     return s + (base * (percent / 100));
@@ -103,7 +107,7 @@ export const buildShiftReport = ({
   const discount = Math.max(0, subtotal + tax - collected);
   const deposits = customerPayments.reduce((s, p) => s + num(p.amount), 0);
   const expensesTotal = expenses.reduce((s, e) => s + num(e.amount), 0);
-  const expectedBalance = collected + deposits - expensesTotal;
+  const expectedBalance = cashCollected + deposits - expensesTotal;
 
   // ===== تقسيم التحصيل على وسائل الدفع (مع دعم الدفع المقسم) =====
   const byMethod: Record<string, number> = {};
@@ -118,7 +122,7 @@ export const buildShiftReport = ({
       byMethod.deferred += num(o.payment_details.deferred);
     } else {
       const m = o.payment_method || 'cash';
-      if (byMethod[m] !== undefined) byMethod[m] += num(o.total_price);
+      if (byMethod[m] !== undefined) byMethod[m] += num(o.payment_method === 'partner' ? (o.partner_amount_due ?? o.total_price) : o.total_price);
       else byMethod.cash += num(o.total_price);
     }
   });
