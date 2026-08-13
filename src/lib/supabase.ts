@@ -402,18 +402,30 @@ export const db = {
     const now = new Date();
     const offset = now.getTimezoneOffset();
     const calendarDate = new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10);
+
+    // Supabase is the shared source of truth. Do not let a stale browser-local
+    // value reopen yesterday's closed day after another cashier has advanced it.
+    if (supabase) {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('operating_day_state')
+          .select('operating_date,is_open')
+          .eq('id', 'current')
+          .maybeSingle();
+        if (!error && data?.operating_date) {
+          const state = { date: data.operating_date, open: data.is_open !== false };
+          if (typeof localStorage !== 'undefined') localStorage.setItem('meridien_operating_day', JSON.stringify(state));
+          return state;
+        }
+      } catch { /* migration may not be installed yet; use local fallback */ }
+    }
+
     const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('meridien_operating_day') : null;
     if (stored) {
       try {
         const state = JSON.parse(stored) as { date?: string; open?: boolean };
         if (state.date) return { date: state.date, open: state.open !== false };
       } catch { /* fallback to calendar date */ }
-    }
-    if (supabase) {
-      try {
-        const { data } = await (supabase as any).from('operating_day_state').select('operating_date,is_open').eq('id', 'current').maybeSingle();
-        if (data?.operating_date) return { date: data.operating_date, open: data.is_open !== false };
-      } catch { /* migration may not be installed yet */ }
     }
     return { date: calendarDate, open: true };
   },
@@ -423,10 +435,18 @@ export const db = {
     const offset = next.getTimezoneOffset();
     const date = new Date(next.getTime() - offset * 60000).toISOString().slice(0, 10);
     const state = { date, open: true };
-    if (typeof localStorage !== 'undefined') localStorage.setItem('meridien_operating_day', JSON.stringify(state));
     if (supabase) {
-      try { await (supabase as any).from('operating_day_state').upsert([{ id: 'current', operating_date: date, is_open: true }], { onConflict: 'id' }); } catch (error) { console.warn('Failed to persist operating day state', error); }
+      try {
+        const { error } = await (supabase as any)
+          .from('operating_day_state')
+          .upsert([{ id: 'current', operating_date: date, is_open: true }], { onConflict: 'id' });
+        if (error) throw error;
+      } catch (error) {
+        console.warn('Failed to persist operating day state.', error);
+        throw error;
+      }
     }
+    if (typeof localStorage !== 'undefined') localStorage.setItem('meridien_operating_day', JSON.stringify(state));
     return state;
   },
   async addOrder(order: Omit<Order, 'id' | 'created_at'>): Promise<Order> {
