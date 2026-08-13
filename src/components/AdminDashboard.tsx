@@ -309,6 +309,18 @@ export default function AdminDashboard({
   const [expPaymentMethod, setExpPaymentMethod] = useState<'cash' | 'visa' | 'wallet_restaurant' | 'instapay' | 'petty_cash'>('cash');
   const [expPartnerId, setExpPartnerId] = useState<string>('');
   
+  // Expense Classification states
+  const [classifyModalOpen, setClassifyModalOpen] = useState(false);
+  const [classifyExpenseId, setClassifyExpenseId] = useState<string>('');
+  const [classifyType, setClassifyType] = useState<'general' | 'inventory_purchase'>('general');
+  // If inventory purchase:
+  const [classifySupplierId, setClassifySupplierId] = useState<string>('');
+  const [classifySupplierName, setClassifySupplierName] = useState<string>('');
+  const [classifyItemId, setClassifyItemId] = useState<string>('');
+  const [classifyItemName, setClassifyItemName] = useState<string>('');
+  const [classifyQty, setClassifyQty] = useState<number>(0);
+  const [classifyPrice, setClassifyPrice] = useState<number>(0);
+  
 
   // Expenses filtering states
   const [expFilterType, setExpFilterType] = useState<'all' | 'day' | 'month' | 'year'>('all');
@@ -1446,7 +1458,75 @@ export default function AdminDashboard({
       alert(language === 'ar' ? 'تم تسجيل المصروف بنجاح!' : 'Expense recorded successfully!');
     } catch (err) {
       console.error(err);
-      alert("حدث خطأ أثناء حفظ المصروف.");
+      alert(language === 'ar' ? 'خطأ أثناء تسجيل المصروف' : 'Error saving expense');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClassifyExpenseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!classifyExpenseId) return;
+    setLoading(true);
+    try {
+      if (classifyType === 'general') {
+        await db.updateExpense(classifyExpenseId, {
+          classification_status: 'general',
+          type: 'مصروفات عامة'
+        });
+      } else if (classifyType === 'inventory_purchase') {
+        if (!classifySupplierId || !classifyItemId || classifyQty <= 0 || classifyPrice <= 0) {
+          alert(language === 'ar' ? 'يرجى إدخال بيانات الشراء كاملة وصحيحة' : 'Please enter valid purchase details');
+          setLoading(false);
+          return;
+        }
+        
+        // Add Purchase Invoice
+        const inv = await db.addPurchaseInvoice({
+          supplier_id: classifySupplierId,
+          supplier_name: classifySupplierName,
+          invoice_date: getLocalDayStr(),
+          items: [{
+            item_id: classifyItemId,
+            item_name: classifyItemName,
+            quantity: classifyQty,
+            unit_price: classifyPrice / classifyQty,
+            total_price: classifyPrice
+          }],
+          total_amount: classifyPrice,
+          paid_cash: classifyPrice // assuming it's paid since it's an expense
+        });
+        
+        // Add Inventory Movement
+        await db.addInventoryMovement({
+          item_id: classifyItemId,
+          warehouse: 'main',
+          type: 'in',
+          quantity: classifyQty,
+          unit_price: classifyPrice / classifyQty,
+          total_price: classifyPrice,
+          description: `فاتورة شراء من مصروفات POS`
+        });
+        
+        // Update Expense
+        await db.updateExpense(classifyExpenseId, {
+          classification_status: 'inventory_purchase',
+          type: 'بضائع وخامات',
+          purchase_invoice_id: inv.id
+        });
+      }
+      await fetchExpenses();
+      await fetchInventoryData();
+      setClassifyModalOpen(false);
+      setClassifyExpenseId('');
+      setClassifySupplierId('');
+      setClassifyItemId('');
+      setClassifyQty(0);
+      setClassifyPrice(0);
+      alert(language === 'ar' ? 'تم تصنيف المصروف بنجاح!' : 'Expense classified successfully!');
+    } catch (err) {
+      console.error(err);
+      alert(language === 'ar' ? 'خطأ أثناء التصنيف' : 'Error classifying expense');
     } finally {
       setLoading(false);
     }
@@ -5621,7 +5701,19 @@ export default function AdminDashboard({
                             </span>
                           </td>
                           <td className="font-en" style={{ fontSize: '0.85rem' }}>{exp.expense_date}</td>
-                          <td>
+                          <td style={{ display: 'flex', gap: '0.5rem' }}>
+                            {exp.classification_status === 'pending' && (
+                              <button
+                                className="btn-outline-gold"
+                                style={{ padding: '0.35rem 0.5rem', borderRadius: '8px', minWidth: 'auto', flex: 1 }}
+                                onClick={() => {
+                                  setClassifyExpenseId(exp.id!);
+                                  setClassifyModalOpen(true);
+                                }}
+                              >
+                                {language === 'ar' ? 'تصنيف' : 'Classify'}
+                              </button>
+                            )}
                             <button 
                               className="btn-outline-gold" 
                               style={{ padding: '0.35rem 0.5rem', borderRadius: '8px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)', minWidth: 'auto' }}
@@ -8160,6 +8252,72 @@ export default function AdminDashboard({
           </div>
         </div>
       )}
+
+      {classifyModalOpen && (
+        <div className="admin-modal-overlay" style={{ zIndex: 1100 }} onClick={() => setClassifyModalOpen(false)}>
+          <div className="admin-modal" style={{ maxWidth: '600px', border: '1px solid var(--gold-primary)' }} onClick={e => e.stopPropagation()}>
+            <div className="admin-modal-header" style={{ borderBottom: '1px solid rgba(212, 175, 55, 0.2)' }}>
+              <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تصنيف المصروف (الذي تم سحبه من POS)' : 'Classify POS Expense'}</h2>
+              <button className="btn-close" onClick={() => setClassifyModalOpen(false)}><X size={20} /></button>
+            </div>
+            <form onSubmit={handleClassifyExpenseSubmit}>
+              <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '2rem' }}>
+                <div className="form-group">
+                  <label>{language === 'ar' ? 'نوع المصروف' : 'Expense Type'}</label>
+                  <select className="admin-input" value={classifyType} onChange={(e) => setClassifyType(e.target.value as any)}>
+                    <option value="general">{language === 'ar' ? 'مصروفات عامة' : 'General Expense'}</option>
+                    <option value="inventory_purchase">{language === 'ar' ? 'فاتورة شراء مخزون' : 'Inventory Purchase'}</option>
+                  </select>
+                </div>
+
+                {classifyType === 'inventory_purchase' && (
+                  <>
+                    <div className="form-group">
+                      <label>{language === 'ar' ? 'المورد' : 'Supplier'}</label>
+                      <select className="admin-input" required value={classifySupplierId} onChange={(e) => {
+                        setClassifySupplierId(e.target.value);
+                        const sup = suppliers.find(s => s.id === e.target.value);
+                        if (sup) setClassifySupplierName(sup.name);
+                      }}>
+                        <option value="">{language === 'ar' ? 'اختر المورد...' : 'Select Supplier...'}</option>
+                        {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>{language === 'ar' ? 'صنف المخزون' : 'Inventory Item'}</label>
+                      <select className="admin-input" required value={classifyItemId} onChange={(e) => {
+                        setClassifyItemId(e.target.value);
+                        const item = inventoryItems.find(i => i.id === e.target.value);
+                        if (item) setClassifyItemName(item.name);
+                      }}>
+                        <option value="">{language === 'ar' ? 'اختر الصنف...' : 'Select Item...'}</option>
+                        {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>{language === 'ar' ? 'الكمية' : 'Quantity'}</label>
+                      <input type="number" step="any" className="admin-input" required value={classifyQty} onChange={(e) => setClassifyQty(Number(e.target.value))} />
+                    </div>
+                    <div className="form-group">
+                      <label>{language === 'ar' ? 'إجمالي المدفوع' : 'Total Paid'}</label>
+                      <input type="number" step="0.01" className="admin-input" required value={classifyPrice} onChange={(e) => setClassifyPrice(Number(e.target.value))} />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="admin-modal-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                <button type="button" className="btn-outline-gold" onClick={() => setClassifyModalOpen(false)}>
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button type="submit" className="btn-gold" disabled={loading} style={{ padding: '0.5rem 1.5rem', borderRadius: '10px' }}>
+                  {language === 'ar' ? 'حفظ وتصنيف' : 'Save Classification'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
 
       {/* --- CUSTOMER PROFILE & TIMELINE MODAL --- */}
       {selectedCustPhone && (() => {

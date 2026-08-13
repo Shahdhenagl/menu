@@ -17,7 +17,7 @@ import {
   Bell, Sun, Moon, BarChart3
 } from 'lucide-react';
 import { db } from '../lib/supabase';
-import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe } from '../types';
+import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe, PaymentMethodKey } from '../types';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import { taxPercentForOrder } from '../utils/tax';
 import { drawerOfHall, drawerName } from '../utils/shiftClosing';
@@ -279,7 +279,20 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [mergeTargetOrderId, setMergeTargetOrderId] = useState<string>('');
   const [transferQty, setTransferQty] = useState<number>(1);
+  const [debtModalOpen, setDebtModalOpen] = useState(false);
+  const [debtCustomerId, setDebtCustomerId] = useState<string>('');
+  const [debtAmount, setDebtAmount] = useState<string>('');
+  const [debtPaymentMethod, setDebtPaymentMethod] = useState<PaymentMethodKey>('cash');
+  const [debtNotes, setDebtNotes] = useState<string>('');
   
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [expenseName, setExpenseName] = useState<string>('');
+  const [expenseAmount, setExpenseAmount] = useState<string>('');
+  const [expensePaymentMethod, setExpensePaymentMethod] = useState<Exclude<PaymentMethodKey, 'deferred'>>('cash');
+  const [expenseEmployeeId, setExpenseEmployeeId] = useState<string>('');
+  const [expenseNotes, setExpenseNotes] = useState<string>('');
+  
+
   const previousPendingCount = useRef(0);
   const previousWebsiteOrdersCount = useRef(0);
 
@@ -1184,6 +1197,67 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       loadData();
     } catch (err) {
       alert(language === 'ar' ? 'فشل دمج الطاولات، يرجى المحاولة مرة أخرى' : 'Failed to merge tables, please try again.');
+    }
+  };
+
+  const handleDebtSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!debtCustomerId || !debtAmount || isNaN(Number(debtAmount))) {
+      alert(language === 'ar' ? 'الرجاء إدخال العميل والمبلغ بشكل صحيح' : 'Please enter customer and valid amount');
+      return;
+    }
+    try {
+      await db.addFinancialTransaction({
+        type: 'debt_settlement',
+        amount: Number(debtAmount),
+        to_method: debtPaymentMethod,
+        customer_id: debtCustomerId,
+        description: debtNotes || 'تسديد مديونية من نقطة البيع'
+      });
+      alert(language === 'ar' ? 'تم تسجيل السداد بنجاح!' : 'Debt settlement recorded!');
+      setDebtModalOpen(false);
+      setDebtCustomerId('');
+      setDebtAmount('');
+      setDebtNotes('');
+      setDebtPaymentMethod('cash');
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert(language === 'ar' ? 'فشل تسجيل السداد' : 'Failed to record settlement');
+    }
+  };
+
+  const handleExpenseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!expenseName || !expenseAmount || isNaN(Number(expenseAmount))) {
+      alert(language === 'ar' ? 'الرجاء إدخال اسم وقيمة المصروف' : 'Please enter expense name and amount');
+      return;
+    }
+    try {
+      const selectedEmp = employeesList.find(emp => emp.id === expenseEmployeeId);
+      await db.addExpense({
+        name: expenseName,
+        type: 'مصروفات عامة', // default, can be reclassified in Admin
+        amount: Number(expenseAmount),
+        payment_method: expensePaymentMethod,
+        expense_date: getLocalDayStr(),
+        notes: expenseNotes,
+        employee_id: expenseEmployeeId,
+        employee_name: selectedEmp?.name,
+        source: 'pos',
+        classification_status: 'pending'
+      });
+      alert(language === 'ar' ? 'تم تسجيل المصروف بنجاح!' : 'Expense recorded!');
+      setExpenseModalOpen(false);
+      setExpenseName('');
+      setExpenseAmount('');
+      setExpenseNotes('');
+      setExpenseEmployeeId('');
+      setExpensePaymentMethod('cash');
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert(language === 'ar' ? 'فشل تسجيل المصروف' : 'Failed to record expense');
     }
   };
 
@@ -3544,6 +3618,106 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </button>
                 </div>
               </motion.div>
+            </motion.div>
+          )}
+
+          {/* Debt Settlement Modal */}
+          {debtModalOpen && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '1rem' }}>
+              <div style={{ background: 'var(--bg-dark)', padding: '2rem', borderRadius: '16px', border: '1px solid var(--gold-primary)', width: '100%', maxWidth: '400px' }}>
+                <h3 style={{ color: 'var(--gold-primary)', marginBottom: '1.5rem', textAlign: 'center' }}>
+                  {language === 'ar' ? 'سداد مديونية عميل' : 'Customer Debt Settlement'}
+                </h3>
+                <form onSubmit={handleDebtSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'العميل' : 'Customer'}</label>
+                    <select required className="pos-input" value={debtCustomerId} onChange={(e) => setDebtCustomerId(e.target.value)} style={{ width: '100%', padding: '0.75rem' }}>
+                      <option value="">{language === 'ar' ? 'اختر العميل...' : 'Select Customer...'}</option>
+                      {customers.map(c => (
+                        <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'المبلغ' : 'Amount'}</label>
+                    <input required type="number" step="0.01" className="pos-input" value={debtAmount} onChange={(e) => setDebtAmount(e.target.value)} style={{ width: '100%', padding: '0.75rem' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</label>
+                    <select required className="pos-input" value={debtPaymentMethod} onChange={(e) => setDebtPaymentMethod(e.target.value as any)} style={{ width: '100%', padding: '0.75rem' }}>
+                      <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
+                      <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
+                      <option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option>
+                      <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
+                      <option value="instapay">{language === 'ar' ? 'انستاباي' : 'Instapay'}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'ملاحظات' : 'Notes'}</label>
+                    <textarea className="pos-input" value={debtNotes} onChange={(e) => setDebtNotes(e.target.value)} style={{ width: '100%', padding: '0.75rem', minHeight: '80px' }}></textarea>
+                  </div>
+                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                    <button type="submit" className="pos-btn" style={{ flex: 1, padding: '1rem' }}>
+                      {language === 'ar' ? 'تأكيد السداد' : 'Confirm Settlement'}
+                    </button>
+                    <button type="button" className="pos-btn-outline" style={{ flex: 1, padding: '1rem' }} onClick={() => setDebtModalOpen(false)}>
+                      {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Expense Withdrawal Modal */}
+          {expenseModalOpen && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '1rem' }}>
+              <div style={{ background: 'var(--bg-dark)', padding: '2rem', borderRadius: '16px', border: '1px solid var(--gold-primary)', width: '100%', maxWidth: '400px' }}>
+                <h3 style={{ color: 'var(--gold-primary)', marginBottom: '1.5rem', textAlign: 'center' }}>
+                  {language === 'ar' ? 'سحب مصروف' : 'Withdraw Expense'}
+                </h3>
+                <form onSubmit={handleExpenseSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'اسم المصروف' : 'Expense Name'}</label>
+                    <input required type="text" className="pos-input" value={expenseName} onChange={(e) => setExpenseName(e.target.value)} style={{ width: '100%', padding: '0.75rem' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'المبلغ' : 'Amount'}</label>
+                    <input required type="number" step="0.01" className="pos-input" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} style={{ width: '100%', padding: '0.75rem' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'طريقة الدفع (الخزنة)' : 'Payment Method'}</label>
+                    <select required className="pos-input" value={expensePaymentMethod} onChange={(e) => setExpensePaymentMethod(e.target.value as any)} style={{ width: '100%', padding: '0.75rem' }}>
+                      <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
+                      <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
+                      <option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option>
+                      <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
+                      <option value="petty_cash">{language === 'ar' ? 'عهدة نقدية' : 'Petty Cash'}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'الموظف المسؤول' : 'Responsible Employee'}</label>
+                    <select className="pos-input" value={expenseEmployeeId} onChange={(e) => setExpenseEmployeeId(e.target.value)} style={{ width: '100%', padding: '0.75rem' }}>
+                      <option value="">{language === 'ar' ? 'اختر الموظف...' : 'Select Employee...'}</option>
+                      {employeesList.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'ملاحظات' : 'Notes'}</label>
+                    <textarea className="pos-input" value={expenseNotes} onChange={(e) => setExpenseNotes(e.target.value)} style={{ width: '100%', padding: '0.75rem', minHeight: '80px' }}></textarea>
+                  </div>
+                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                    <button type="submit" className="pos-btn" style={{ flex: 1, padding: '1rem' }}>
+                      {language === 'ar' ? 'تسجيل المصروف' : 'Record Expense'}
+                    </button>
+                    <button type="button" className="pos-btn-outline" style={{ flex: 1, padding: '1rem' }} onClick={() => setExpenseModalOpen(false)}>
+                      {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </motion.div>
           )}
 

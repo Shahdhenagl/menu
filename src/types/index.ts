@@ -126,6 +126,12 @@ export interface Expense {
   partner_id?: string;
   expense_date: string;
   created_at?: string;
+  notes?: string;
+  employee_id?: string;
+  employee_name?: string;
+  source?: 'pos' | 'admin';
+  classification_status?: 'pending' | 'general' | 'inventory_purchase';
+  purchase_invoice_id?: string;
 }
 
 export interface SystemUser {

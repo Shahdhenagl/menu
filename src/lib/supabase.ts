@@ -779,6 +779,29 @@ export const db = {
     return newExpense;
   },
 
+  async updateExpense(id: string, updates: Partial<Expense>): Promise<boolean> {
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('expenses')
+          .update(updates)
+          .eq('id', id);
+        if (!error) return true;
+        console.warn("Supabase update expense error, falling back to local storage:", error.message);
+      } catch (err) {
+        console.warn("Supabase update expense failed, falling back to local storage.", err);
+      }
+    }
+    let expenses = getLocalData('meridien_expenses', [] as Expense[]);
+    const idx = expenses.findIndex((e: Expense) => e.id === id);
+    if (idx !== -1) {
+      expenses[idx] = { ...expenses[idx], ...updates };
+      saveLocalData('meridien_expenses', expenses);
+      return true;
+    }
+    return false;
+  },
+
   async deleteExpense(id: string): Promise<boolean> {
     void triggerTelegramLog('حذف مصروف', 'Delete Expense', `تم حذف مصروف (ID: ${id})`);
     if (supabase) {
