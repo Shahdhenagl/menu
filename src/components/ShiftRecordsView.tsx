@@ -44,17 +44,64 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
   const load = async () => {
     setLoading(true);
     try {
-      const [shiftRows, dailyRows, allOrders, allExpenses, allPayments] = await Promise.all([
+      const [shiftRows, dailyRows, allOrders, allExpenses, allPayments, products, categories] = await Promise.all([
         db.getShiftClosings(),
         db.getDailyClosings(),
         db.getOrders(),
         db.getExpenses(),
         db.getCustomerPayments(),
+        db.getProducts(),
+        db.getCategories(),
       ]);
 
       // شاشة السجلات كانت تقرأ shift_closings فقط، بينما تقفيل الخزنتين
       // يُحفظ في daily_closings. نعرض النوعين في نفس الشاشة.
       const dailyAsRecords: ShiftClosing[] = (dailyRows || []).map((d: DailyClosing) => {
+        const dayOrders = (allOrders || []).filter(o =>
+          o.status === 'completed' &&
+          o.payment_method !== 'staff' &&
+          o.payment_method !== 'hospitality' &&
+          (o.operating_day || localDay(o.created_at)) === d.closing_date
+        );
+        const dayExpenses = (allExpenses || []).filter(e => localDay(e.expense_date || e.created_at) === d.closing_date);
+        const dayPayments = (allPayments || []).filter(p => localDay(p.payment_date || p.created_at) === d.closing_date);
+        const daySubtotal = dayOrders.reduce((s, o) => s + orderSubtotal(o), 0);
+        const dayCollected = dayOrders.reduce((s, o) => s + num(o.total_price), 0);
+        const dayPartnerDebt = dayOrders.filter(o => o.payment_method === 'partner' || o.partner_id)
+          .reduce((s, o) => s + num(o.partner_amount_due ?? o.total_price), 0);
+        const dayTax = dayOrders.reduce((s, o) => {
+          if (o.payment_method === 'partner' || o.partner_id) return s;
+          return s + orderSubtotal(o) * taxPercentForOrder(settings, o.order_type, o.hall) / 100;
+        }, 0);
+        const categoryMap = new Map<string, { sort: number; lines: Map<string, { name: string; qty: number; total: number }> }>();
+        dayOrders.forEach(o => (o.items || []).forEach((item: any) => {
+          const product = (products || []).find((p: any) => p.name_ar === item.name_ar || p.name_en === item.name_en || p.name === item.name);
+          const category = product ? (categories || []).find((c: any) => c.id === product.category_id) : undefined;
+          const categoryName = category ? (ar ? category.name_ar : category.name_en) : (ar ? 'غير مصنّف' : 'Uncategorised');
+          const categorySort = category ? num(category.sort_order) : 9999;
+          if (!categoryMap.has(categoryName)) categoryMap.set(categoryName, { sort: categorySort, lines: new Map() });
+          const group = categoryMap.get(categoryName)!;
+          const itemName = ar ? (item.name_ar || item.name_en || item.name) : (item.name_en || item.name_ar || item.name);
+          const line = group.lines.get(itemName) || { name: itemName, qty: 0, total: 0 };
+          line.qty += num(item.quantity);
+          line.total += num(item.price) * num(item.quantity);
+          group.lines.set(itemName, line);
+        }));
+        const dayCategories = [...categoryMap.entries()].sort((a, b) => a[1].sort - b[1].sort).map(([name, group]) => {
+          const lines = [...group.lines.values()].sort((a, b) => b.total - a.total);
+          return { name, lines, qty: lines.reduce((s, line) => s + line.qty, 0), total: lines.reduce((s, line) => s + line.total, 0) };
+        });
+        const dayTaxMap = new Map<number, { percent: number; base: number; tax: number; collected: number; orders: number }>();
+        dayOrders.forEach(o => {
+          const percent = o.payment_method === 'partner' || o.partner_id ? 0 : taxPercentForOrder(settings, o.order_type, o.hall);
+          const base = orderSubtotal(o);
+          const row = dayTaxMap.get(percent) || { percent, base: 0, tax: 0, collected: 0, orders: 0 };
+          row.base += base;
+          row.tax += percent ? base * percent / 100 : 0;
+          row.collected += num(o.total_price);
+          row.orders += 1;
+          dayTaxMap.set(percent, row);
+        });
         const drawerMethods = [
           ...(d.drawer_1_methods || []).map(m => ({ ...m, drawer: 1 })),
           ...(d.drawer_2_methods || []).map(m => ({ ...m, drawer: 2 })),
@@ -65,9 +112,8 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           amount: num(m.expected),
         }));
         const closedAt = d.closed_at || d.created_at || `${d.closing_date}T23:59:59`;
-        const expected = num(d.total_expected);
         const drawerBreakdown = ([1, 2] as const).map(drawer => {
-          const orders = (allOrders || []).filter(o => o.status === 'completed' && o.payment_method !== 'staff' && o.payment_method !== 'hospitality' && (o.operating_day || localDay(o.created_at)) === d.closing_date && (o.drawer || (o.hall ? drawerOfHall(o.hall, settings) : 1)) === drawer);
+          const orders = dayOrders.filter(o => (o.drawer || (o.hall ? drawerOfHall(o.hall, settings) : 1)) === drawer);
           const expenses = (allExpenses || []).filter(e => localDay(e.expense_date || e.created_at) === d.closing_date && (e.drawer || 1) === drawer);
           const payments = (allPayments || []).filter(p => localDay(p.payment_date || p.created_at) === d.closing_date && (p.drawer || 1) === drawer);
           const subtotal = orders.reduce((s, o) => s + orderSubtotal(o), 0);
@@ -90,24 +136,24 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           bucket_label: `تقفيل اليوم — ${d.closing_date}`,
           from_at: `${d.closing_date}T00:00:00`,
           to_at: closedAt,
-          orders_count: num(d.orders_count),
-          items_count: 0,
-          subtotal: expected,
-          tax: 0,
-          discount: 0,
-          collected: expected,
+          orders_count: dayOrders.length,
+          items_count: dayCategories.reduce((s, c) => s + c.qty, 0),
+          subtotal: daySubtotal,
+          tax: dayTax,
+          discount: Math.max(0, daySubtotal + dayTax - dayCollected),
+          collected: dayCollected,
           methods,
           order_types: [],
-          tax_groups: [],
-          categories: [],
-          order_ids: [],
+          tax_groups: [...dayTaxMap.values()].sort((a, b) => b.percent - a.percent),
+          categories: dayCategories,
+          order_ids: dayOrders.map(o => o.id),
           closed_by: d.closed_by,
           created_at: d.created_at || closedAt,
-          deposits: 0,
-          expenses: num(d.total_expected) - num(d.total_counted),
-          expectedBalance: expected,
-          depositsByMethod: [],
-          expensesByMethod: [],
+          deposits: dayPayments.reduce((s, p) => s + num(p.amount), 0),
+          expenses: dayExpenses.reduce((s, e) => s + num(e.amount), 0),
+          expectedBalance: dayCollected - dayPartnerDebt + dayPayments.reduce((s, p) => s + num(p.amount), 0) - dayExpenses.reduce((s, e) => s + num(e.amount), 0),
+          depositsByMethod: Object.entries(dayPayments.reduce((acc: Record<string, number>, p) => { const key = p.payment_method || 'cash'; acc[key] = (acc[key] || 0) + num(p.amount); return acc; }, {})).map(([method, amount]) => ({ method, label: methodLabel(method, ar), amount })),
+          expensesByMethod: Object.entries(dayExpenses.reduce((acc: Record<string, number>, e) => { const key = e.payment_method || 'cash'; acc[key] = (acc[key] || 0) + num(e.amount); return acc; }, {})).map(([method, amount]) => ({ method, label: methodLabel(method, ar), amount })),
           drawerBreakdown,
         };
       });
