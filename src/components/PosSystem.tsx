@@ -70,14 +70,23 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [productRecipes, setProductRecipes] = useState<ProductRecipe[]>([]);
 
   const [view, setView] = useState<PosView>(() => {
-    try { return localStorage.getItem('meridien_pos_device_hall') ? 'role_select' : 'device_hall_select'; } catch { return 'device_hall_select'; }
+    try { 
+      if (!localStorage.getItem('meridien_pos_device_hall')) return 'device_hall_select';
+      if (localStorage.getItem('meridien_active_pos_waiter')) return 'waiter_dashboard';
+      return 'role_select';
+    } catch { return 'device_hall_select'; }
   });
-  const [role, setRole] = useState<'waiter' | 'customer' | null>(null);
+  const [role, setRole] = useState<'waiter' | 'customer' | null>(() => {
+    return localStorage.getItem('meridien_active_pos_waiter') ? 'waiter' : null;
+  });
   const [mobileShowCart, setMobileShowCart] = useState(false);
   const [posDepartment, setPosDepartment] = useState<'restaurant'|'bar'>('restaurant');
   
   // Waiter Auth & Dashboard
-  const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(null);
+  const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(() => {
+    const saved = localStorage.getItem('meridien_active_pos_waiter');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [waiterPasscode, setWaiterPasscode] = useState('');
   const [viewAllOrders, setViewAllOrders] = useState(false);
 
@@ -127,6 +136,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [payCash, setPayCash] = useState<number | ''>('');
   const [payVisa, setPayVisa] = useState<number | ''>('');
   const [payWalletCashier, setPayWalletCashier] = useState<number | ''>('');
+  const [payWalletCafe, setPayWalletCafe] = useState<number | ''>('');
   
   const [payInstapay, setPayInstapay] = useState<number | ''>('');
   const [payIsDeferred, setPayIsDeferred] = useState(false);
@@ -266,6 +276,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   // Item transfer state
   const [transferItem, setTransferItem] = useState<OrderItem | null>(null);
   const [transferTargetOrderId, setTransferTargetOrderId] = useState<string>('');
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [mergeTargetOrderId, setMergeTargetOrderId] = useState<string>('');
   const [transferQty, setTransferQty] = useState<number>(1);
   
   const previousPendingCount = useRef(0);
@@ -604,10 +616,20 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     newOrder: language === 'ar' ? 'طلب جديد' : 'New Order',
   };
 
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+
   const getVisibleProducts = () => {
     return products.filter(p => {
       if (!p.is_available) return false;
-      if (p.category_id !== activeCategory) return false;
+      if (productSearchQuery.trim()) {
+        const query = productSearchQuery.toLowerCase();
+        if (!p.name_ar.toLowerCase().includes(query) && !p.name_en.toLowerCase().includes(query)) {
+          return false;
+        }
+        // If searching, ignore category filter so it searches across all categories
+      } else {
+        if (p.category_id !== activeCategory) return false;
+      }
       if (orderType === 'talabat' && (p.talabat_price === undefined || p.talabat_price === null)) return false;
       return true;
     });
@@ -775,12 +797,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
   const money = (value: number) => `${(Number(value) || 0).toFixed(2)} EGP`;
   const isToday = (date?: string) => !!date && getLocalDayStr(new Date(date)) === getLocalDayStr();
-  type PayMethod = 'cash' | 'visa' | 'wallet_restaurant' | 'instapay' | 'deferred';
-  const payMethods: PayMethod[] = ['cash', 'visa', 'wallet_restaurant', 'instapay', 'deferred'];
+  type PayMethod = 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'deferred';
+  const payMethods: PayMethod[] = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred'];
   const payMethodLabel = (method: string) => {
     if (method === 'cash') return language === 'ar' ? 'كاش' : 'Cash';
     if (method === 'visa') return language === 'ar' ? 'فيزا' : 'Visa';
-    if (method === 'wallet_restaurant') return language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet';
+    if (method === 'wallet_restaurant') return language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet';
+    if (method === 'wallet_cafe') return language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet';
     if (method === 'instapay') return language === 'ar' ? 'إنستاباي' : 'Instapay';
     if (method === 'deferred') return language === 'ar' ? 'آجل' : 'Deferred';
     if (method === 'split') return language === 'ar' ? 'مقسم' : 'Split';
@@ -1108,6 +1131,59 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       loadData();
     } catch (err) {
       alert(language === 'ar' ? 'فشل نقل الصنف، يرجى المحاولة مرة أخرى' : 'Failed to transfer item, please try again.');
+    }
+  };
+
+  const handleMergeSubmit = async () => {
+    if (!mergeTargetOrderId || !editingOrder) return;
+    try {
+      const targetOrder = activeOrders.find(o => o.id === mergeTargetOrderId);
+      if (!targetOrder) return;
+
+      const combinedItems = [...editingOrder.items];
+      targetOrder.items.forEach(targetItem => {
+        const existing = combinedItems.find(i => i.id === targetItem.id && i.note === targetItem.note);
+        if (existing) {
+          existing.quantity += targetItem.quantity;
+        } else {
+          combinedItems.push({ ...targetItem });
+        }
+      });
+
+      const combinedTotal = totalForItems(combinedItems, editingOrder.order_type, editingOrder.hall, editingOrder.payment_method === 'staff');
+
+      // Update the main order
+      await db.updateOrder(editingOrder.id, {
+        items: combinedItems,
+        total_price: combinedTotal,
+      }, selectedWaiter?.name);
+
+      // Delete the target order since it's merged
+      await db.deleteOrder(targetOrder.id, selectedWaiter?.name);
+
+      // Send telegram log
+      if (settings?.telegram_bot_token && settings?.telegram_chat_id) {
+        const text = `🔄 <b>دمج طاولات (Merge Tables)</b>\n\n` +
+          `• <b>الكابتن:</b> ${selectedWaiter?.name || 'غير معروف'}\n` +
+          `• <b>الطلب الرئيسي:</b> <code>#${editingOrder.id.slice(0, 6)}</code> (${editingOrder.customer_name})\n` +
+          `• <b>تم دمج وإلغاء الطلب:</b> <code>#${targetOrder.id.slice(0, 6)}</code> (${targetOrder.customer_name})\n`;
+
+        import('../utils/telegramUtils').then(({ sendTelegramMessage }) => {
+          sendTelegramMessage(settings?.telegram_bot_token, settings?.telegram_chat_id, text);
+        });
+      }
+
+      setMergeModalOpen(false);
+      setMergeTargetOrderId('');
+      setEditingOrder({
+        ...editingOrder,
+        items: combinedItems,
+        total_price: combinedTotal
+      });
+
+      loadData();
+    } catch (err) {
+      alert(language === 'ar' ? 'فشل دمج الطاولات، يرجى المحاولة مرة أخرى' : 'Failed to merge tables, please try again.');
     }
   };
 
@@ -1884,7 +1960,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
                 ))}
               </div>
-              <div className="pos-products">
+              <div className="pos-products" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '0 1rem 1rem 1rem' }}>
+                  <input
+                    type="text"
+                    className="pos-input"
+                    style={{ width: '100%', maxWidth: '400px', fontSize: '1rem', padding: '0.8rem 1rem' }}
+                    placeholder={language === 'ar' ? 'بحث عن منتج...' : 'Search for a product...'}
+                    value={productSearchQuery}
+                    onChange={(e) => setProductSearchQuery(e.target.value)}
+                  />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', padding: '0 1rem' }}>
                 {getVisibleProducts().map(p => {
                   const stockStatus = getStockStatus(p);
                   return (
@@ -1915,6 +2002,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </motion.div>
                   );
                 })}
+                </div>
               </div>
               <div className="pos-cart-panel">
                 <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2438,6 +2526,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   {language === 'ar' ? 'حفظ التعديلات' : 'Save Changes'}
                 </button>
 
+                <button className="pos-btn-outline" style={{ width: '100%', padding: '1rem', marginBottom: '1rem', borderColor: 'var(--gold-primary)', color: 'var(--gold-primary)' }} onClick={() => {
+                  const otherOrders = activeOrders.filter(o => o.id !== editingOrder.id);
+                  if (otherOrders.length === 0) {
+                    alert(language === 'ar' ? 'لا توجد طلبات أخرى للدمج معها' : 'No other orders to merge with');
+                    return;
+                  }
+                  setMergeTargetOrderId(otherOrders[0]?.id || '');
+                  setMergeModalOpen(true);
+                }}>
+                  {language === 'ar' ? 'دمج مع طلب آخر' : 'Merge with Another Order'}
+                </button>
+
                 <button className="pos-btn-outline" style={{ width: '100%', padding: '1rem', borderColor: '#ef4444', color: '#ef4444' }} onClick={() => {
                   triggerOtpProtectedAction('حذف الطلب نهائياً', 'Delete Order permanently', async () => {
                     await db.deleteOrder(editingOrder.id, selectedWaiter?.name);
@@ -2759,8 +2859,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      📱 {language === 'ar' ? 'محفظة الكافيه:' : 'Cafe Wallet:'}
-
+                      📱 {language === 'ar' ? 'محفظة الكاشير:' : 'Cashier Wallet:'}
                     </label>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                       <input 
@@ -2771,11 +2870,37 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                         value={payWalletCashier}
                         onChange={(e) => setPayWalletCashier(e.target.value === '' ? '' : parseFloat(e.target.value))}
                         min="0"
+                        disabled={payIsDeferred && Math.abs(totalForOrder(collectPaymentOrder) - ((Number(payCash) || 0) + (Number(payVisa) || 0) + (Number(payWalletCafe) || 0) + (Number(payInstapay) || 0))) < 0.01}
                       />
                       <button
                         type="button"
                         style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid var(--gold-primary)', background: 'rgba(212,175,55,0.1)', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
                         onClick={() => { playClickSound(); setPayWalletCashier(totalForOrder(collectPaymentOrder)); }}
+                      >
+                        {language === 'ar' ? 'كامل' : 'Full'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      📱 {language === 'ar' ? 'محفظة الكافيه:' : 'Cafe Wallet:'}
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input 
+                        type="number"
+                        className="pos-input"
+                        style={{ flex: 1 }}
+                        placeholder="0.00"
+                        value={payWalletCafe}
+                        onChange={(e) => setPayWalletCafe(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                        min="0"
+                        disabled={payIsDeferred && Math.abs(totalForOrder(collectPaymentOrder) - ((Number(payCash) || 0) + (Number(payVisa) || 0) + (Number(payWalletCashier) || 0) + (Number(payInstapay) || 0))) < 0.01}
+                      />
+                      <button
+                        type="button"
+                        style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid var(--gold-primary)', background: 'rgba(212,175,55,0.1)', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        onClick={() => { playClickSound(); setPayWalletCafe(totalForOrder(collectPaymentOrder)); }}
                       >
                         {language === 'ar' ? 'كامل' : 'Full'}
                       </button>
@@ -2941,8 +3066,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   const cashVal = Number(payCash) || 0;
                   const visaVal = Number(payVisa) || 0;
                   const walletCashierVal = Number(payWalletCashier) || 0;
+                  const walletCafeVal = Number(payWalletCafe) || 0;
                   const instapayVal = Number(payInstapay) || 0;
-                  const totalPaid = cashVal + visaVal + walletCashierVal + instapayVal;
+                  const totalPaid = cashVal + visaVal + walletCashierVal + walletCafeVal + instapayVal;
 
                   const payableTotal = totalForOrder(collectPaymentOrder);
                   const remaining = payableTotal - totalPaid;
@@ -3326,6 +3452,101 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
             </motion.div>
           )}
 
+          {/* Merge Table Modal */}
+          {mergeModalOpen && editingOrder && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.85)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 100000,
+                backdropFilter: 'blur(8px)',
+                direction: language === 'ar' ? 'rtl' : 'ltr'
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '2px solid var(--gold-primary)',
+                  borderRadius: '20px',
+                  width: '90%',
+                  maxWidth: '500px',
+                  padding: '2rem',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+                }}
+              >
+                <h3 style={{ color: 'var(--gold-primary)', fontSize: '1.4rem', marginTop: 0, marginBottom: '1.5rem', textAlign: 'center' }}>
+                  {language === 'ar' ? 'دمج مع طلب آخر' : 'Merge with Another Order'}
+                </h3>
+                
+                <p style={{ color: 'var(--text-white)', textAlign: 'center', marginBottom: '1.5rem' }}>
+                  {language === 'ar' 
+                    ? 'سيتم نقل جميع الأصناف من الطلب المختار إلى الطلب الحالي، وسيتم إلغاء الطلب المختار بالكامل.' 
+                    : 'All items from the selected order will be moved to the current order, and the selected order will be cancelled.'}
+                </p>
+
+                <div style={{ marginBottom: '2rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    {language === 'ar' ? 'اختر الطلب المُراد سحب أصنافه:' : 'Select order to pull items from:'}
+                  </label>
+                  {activeOrders.filter(o => o.id !== editingOrder.id).length === 0 ? (
+                    <div style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                      {language === 'ar' ? 'لا توجد طلبات نشطة أخرى للدمج معها!' : 'No other active orders to merge with!'}
+                    </div>
+                  ) : (
+                    <select
+                      className="pos-input"
+                      value={mergeTargetOrderId}
+                      onChange={(e) => setMergeTargetOrderId(e.target.value)}
+                    >
+                      {activeOrders.filter(o => o.id !== editingOrder.id).map(o => (
+                        <option key={o.id} value={o.id}>
+                          #{o.id.slice(0, 6)} - {o.customer_name} {o.table_number && o.table_number !== '-' ? `(Table ${o.table_number})` : ''} - {o.total_price.toFixed(2)} EGP
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <button 
+                    className="pos-btn" 
+                    style={{ flex: 1, padding: '1rem' }} 
+                    disabled={activeOrders.filter(o => o.id !== editingOrder.id).length === 0 || !mergeTargetOrderId}
+                    onClick={() => {
+                      const msg = language === 'ar' ? 'هل أنت متأكد من دمج الطلب المختار مع الطلب الحالي؟' : 'Are you sure you want to merge the selected order into the current one?';
+                      if (window.confirm(msg)) {
+                        handleMergeSubmit();
+                      }
+                    }}
+                  >
+                    {language === 'ar' ? 'تأكيد الدمج' : 'Confirm Merge'}
+                  </button>
+
+                  <button 
+                    className="pos-btn-outline" 
+                    style={{ flex: 1, padding: '1rem' }} 
+                    onClick={() => setMergeModalOpen(false)}
+                  >
+                    {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
           {/* Attendance Modal */}
           {attendanceModalOpen && (
             <motion.div 
@@ -3620,4 +3841,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     </div>
   );
 };
+
+
+
 

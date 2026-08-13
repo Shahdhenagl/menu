@@ -2641,7 +2641,7 @@ export default function AdminDashboard({
           <tbody>
             ${(Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).map(m => {
               const stats = paymentMethodsStats[m];
-              const name = m === 'cash' ? '💵 كاش (نقدي)' : m === 'visa' ? '💳 فيزا' : m === 'wallet_restaurant' ? '📱 محفظة الكاشير' : m === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
+              const name = m === 'cash' ? '💵 كاش (نقدي)' : m === 'visa' ? '💳 فيزا' : m === 'wallet_restaurant' ? '📱 محفظة المطعم' : m === 'wallet_cafe' ? '📱 محفظة الكافيه' : m === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
 
               return `
                 <tr>
@@ -2741,7 +2741,7 @@ export default function AdminDashboard({
           </thead>
           <tbody>
             ${filteredExpenses.map(e => {
-              const p = e.payment_method === 'cash' ? '💵 كاش' : e.payment_method === 'visa' ? '💳 فيزا' : e.payment_method === 'wallet_restaurant' ? '📱 محفظة الكاشير' : e.payment_method === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
+              const p = e.payment_method === 'cash' ? '💵 كاش' : e.payment_method === 'visa' ? '💳 فيزا' : e.payment_method === 'wallet_restaurant' ? '📱 محفظة المطعم' : e.payment_method === 'wallet_cafe' ? '📱 محفظة الكافيه' : e.payment_method === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
 
               return `
                 <tr>
@@ -3698,7 +3698,7 @@ export default function AdminDashboard({
                   <tbody>
                     {(Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).map((method) => {
                       const stats = paymentMethodsStats[method];
-                      const methodNameAr = method === 'cash' ? '💵 كاش (نقدي)' : method === 'visa' ? '💳 فيزا (بطاقة)' : method === 'wallet_restaurant' ? '📱 محفظة الكاشير' : method === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
+                      const methodNameAr = method === 'cash' ? '💵 كاش (نقدي)' : method === 'visa' ? '💳 فيزا (بطاقة)' : method === 'wallet_restaurant' ? '📱 محفظة المطعم' : method === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
                       const methodNameEn = method === 'cash' ? 'Cash' : method === 'visa' ? 'Visa / Card' : method === 'wallet_restaurant' ? 'Cafe Wallet' : method === 'petty_cash' ? 'Petty Cash' : 'InstaPay';
 
                       return (
@@ -4821,7 +4821,7 @@ export default function AdminDashboard({
                           {filteredInvoices.map(inv => {
                             const cost = inv.total_cost || 0;
                             const profit = inv.total_price - cost;
-                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet_restaurant' ? '📱 محفظة الكاشير' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : inv.payment_method === 'staff' ? '👨‍🍳 فواتير استاف' : inv.payment_method === 'petty_cash' ? '💼 عهدة' : '💵 كاش';
+                            const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet_restaurant' ? '📱 محفظة المطعم' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : inv.payment_method === 'staff' ? '👨‍🍳 فواتير استاف' : inv.payment_method === 'petty_cash' ? '💼 عهدة' : '💵 كاش';
 
                             const typeLabel = inv.order_type === 'dine_in' ? '🍽️' : inv.order_type === 'takeaway' ? '🥡' : inv.order_type === 'delivery' ? '🚗' : inv.order_type === 'talabat' ? '📱' : '—';
                             return (
@@ -5616,7 +5616,7 @@ export default function AdminDashboard({
                           </td>
                           <td>
                             <span style={{ fontWeight: '600' }}>
-                              {exp.payment_method === 'cash' ? '💵 كاش' : exp.payment_method === 'visa' ? '💳 فيزا' : exp.payment_method === 'wallet_restaurant' ? '📱 محفظة الكاشير' : exp.payment_method === 'petty_cash' ? '💼 عهدة' : '⚡ انستا باي'}
+                              {exp.payment_method === 'cash' ? '💵 كاش' : exp.payment_method === 'visa' ? '💳 فيزا' : exp.payment_method === 'wallet_restaurant' ? '📱 محفظة المطعم' : exp.payment_method === 'petty_cash' ? '💼 عهدة' : '⚡ انستا باي'}
 
                             </span>
                           </td>
@@ -8085,7 +8085,7 @@ export default function AdminDashboard({
                       }}
                     >
                       <span>📱</span>
-                      <span>{language === 'ar' ? 'محفظة الكاشير' : 'Cafe Wallet'}</span>
+                      <span>{language === 'ar' ? 'محفظة المطعم' : 'Cafe Wallet'}</span>
                     </button>
 
                     {/* Instapay Option */}

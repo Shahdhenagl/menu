@@ -138,7 +138,8 @@ export default function FinancialsView({
       case 'cash': return language === 'ar' ? 'كاش' : 'Cash';
       case 'visa': return language === 'ar' ? 'فيزا' : 'Visa';
       case 'wallet': return language === 'ar' ? 'محفظة (قديم)' : 'Wallet (Old)';
-      case 'wallet_restaurant': return language === 'ar' ? 'محفظة الكاشير' : 'Cafe Wallet';
+      case 'wallet_restaurant': return language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet';
+      case 'wallet_cafe': return language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet';
       case 'instapay': return language === 'ar' ? 'إنستاباي' : 'Instapay';
       case 'deferred': return language === 'ar' ? 'آجل (مديونية)' : 'Deferred (Debt)';
       case 'split': return language === 'ar' ? 'دفع مقسم' : 'Split Payment';
@@ -407,7 +408,8 @@ export default function FinancialsView({
                 <select className="input-gold" value={transferFrom} onChange={e => setTransferFrom(e.target.value)} style={{ width: '100%' }}>
                   <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
                   <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
-                  <option value="wallet_restaurant">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
+                  <option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option>
+                  <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
 
                   <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
                   {userRole === 'admin' && (
@@ -423,7 +425,8 @@ export default function FinancialsView({
                 <select className="input-gold" value={transferTo} onChange={e => setTransferTo(e.target.value)} style={{ width: '100%' }}>
                   <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
                   <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
-                  <option value="wallet_restaurant">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
+                  <option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option>
+                  <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
 
                   <option value="instapay">{language === 'ar' ? 'إنستاباي' : 'Instapay'}</option>
                   {userRole === 'admin' && (

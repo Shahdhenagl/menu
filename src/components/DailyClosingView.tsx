@@ -19,7 +19,7 @@ interface DailyClosingViewProps {
 }
 
 // وسائل الدفع المعروضة في التقفيل
-const METHODS = ['cash', 'visa', 'wallet_restaurant', 'instapay', 'deferred', 'petty_cash'] as const;
+const METHODS = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred', 'petty_cash'] as const;
 type Method = typeof METHODS[number];
 
 const num = (v: any): number => Number(v) || 0;
@@ -64,7 +64,8 @@ export default function DailyClosingView({
     switch (m) {
       case 'cash': return ar ? 'كاش' : 'Cash';
       case 'visa': return ar ? 'فيزا' : 'Visa';
-      case 'wallet_restaurant': return ar ? 'محفظة الكاشير' : 'Cafe Wallet';
+      case 'wallet_restaurant': return ar ? 'محفظة المطعم' : 'Restaurant Wallet';
+      case 'wallet_cafe': return ar ? 'محفظة الكافيه' : 'Cafe Wallet';
       case 'instapay': return ar ? 'إنستاباي' : 'Instapay';
       case 'deferred': return ar ? 'آجل (مديونية)' : 'Deferred';
       case 'petty_cash': return ar ? 'عهدة الشريك' : 'Petty Cash';

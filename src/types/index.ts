@@ -65,7 +65,7 @@ export interface Order {
   waiter_id?: string;
   waiter_name?: string;
   // 'staff' = طلب استاف مجاني (بيتسجل بالاسم وبيخصم من المخزون بس مبيتحسبش مبيعات)
-  payment_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'instapay' | 'split' | 'deferred' | 'hospitality' | 'petty_cash' | 'staff';
+  payment_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'split' | 'deferred' | 'hospitality' | 'petty_cash' | 'staff';
   payment_details?: any; // JSON representation of split payments
   inventory_deducted?: boolean;
   created_at: string;
@@ -122,7 +122,7 @@ export interface Expense {
   name: string;
   type: string; // classification e.g. 'بضائع', 'مرتبات', etc.
   amount: number;
-  payment_method: 'cash' | 'visa' | 'wallet_restaurant' | 'instapay' | 'petty_cash';
+  payment_method: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'petty_cash';
   partner_id?: string;
   expense_date: string;
   created_at?: string;
@@ -312,8 +312,8 @@ export interface FinancialTransaction {
   id: string;
   type: 'fund_transfer' | 'debt_settlement';
   amount: number;
-  from_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'instapay' | 'deferred' | 'petty_cash'; // e.g. from cash drawer
-  to_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'instapay' | 'deferred' | 'petty_cash';   // e.g. to visa
+  from_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'deferred' | 'petty_cash'; // e.g. from cash drawer
+  to_method?: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'deferred' | 'petty_cash';   // e.g. to visa
   partner_id?: string; // used when from_method or to_method is 'petty_cash'
   description?: string;
   customer_id?: string; // used when type === 'debt_settlement'
@@ -321,7 +321,7 @@ export interface FinancialTransaction {
 }
 
 // ===== التقفيل اليومي =====
-export type PaymentMethodKey = 'cash' | 'visa' | 'wallet_restaurant' | 'instapay' | 'deferred' | 'petty_cash';
+export type PaymentMethodKey = 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'deferred' | 'petty_cash';
 
 /** تقفيل وسيلة دفع واحدة داخل تقفيل اليوم */
 export interface DailyClosingMethod {
@@ -447,4 +447,5 @@ export interface EmployeeTransaction {
   notes?: string;
   created_at: string;
 }
+
 
