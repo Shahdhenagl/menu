@@ -1382,7 +1382,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     <div className="pos-fullscreen">
       <style>{`
         .pos-fullscreen {
-          position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+          position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh;
           background: var(--bg-dark); color: var(--text-white); z-index: 99999;
           display: flex; flex-direction: column;
           font-family: 'Cairo', 'Inter', sans-serif;
@@ -1394,7 +1394,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           align-items: center;
         }
         .pos-content {
-          flex: 1; display: flex; position: relative; overflow: hidden;
+          flex: 1; min-height: 0; min-width: 0; display: flex; position: relative; overflow: hidden;
+          overscroll-behavior: contain;
         }
         .pos-btn {
           background: linear-gradient(45deg, var(--gold-dark), var(--gold-primary));
@@ -1443,7 +1444,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           background: var(--gold-primary); color: #000;
         }
         .pos-products {
-          flex: 1; padding: 2rem; overflow-y: auto;
+          flex: 1; min-width: 0; min-height: 0; padding: 2rem; overflow-y: auto; overflow-x: hidden;
+          -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
           display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5rem; align-content: start;
         }
         .pos-product-card {
@@ -1454,8 +1456,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         .pos-product-card:active { transform: scale(0.95); }
         .pos-product-img { width: 100%; height: 160px; object-fit: cover; }
         .pos-cart-panel {
-          width: 350px; background: var(--bg-card); border-left: 1px solid var(--border-color);
-          display: flex; flex-direction: column;
+          width: 350px; min-width: 0; min-height: 0; background: var(--bg-card); border-left: 1px solid var(--border-color);
+          display: flex; flex-direction: column; overflow: hidden;
         }
 
         /* Responsive Mobile Styles */
@@ -1477,6 +1479,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           }
           .pos-content {
             flex-direction: column;
+            min-height: 0 !important;
+            overflow: hidden !important;
           }
           
           /* Menu View on Mobile */
@@ -1508,9 +1512,19 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           }
           
           .pos-products {
-            padding: 1rem !important;
-            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
-            gap: 1rem !important;
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            padding: 0.75rem !important;
+            padding-bottom: 5.5rem !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            grid-template-columns: none !important;
+          }
+          .pos-product-grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 0.7rem !important;
+            padding: 0 !important;
           }
           .pos-product-card {
             border-radius: 12px !important;
@@ -1525,6 +1539,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           .pos-cart-panel {
             width: 100% !important;
             height: 100% !important;
+            min-height: 0 !important;
             position: absolute !important;
             top: 0 !important;
             left: 0 !important;
@@ -2176,7 +2191,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     onChange={(e) => setProductSearchQuery(e.target.value)}
                   />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', padding: '0 1rem' }}>
+                <div className="pos-product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', padding: '0 1rem' }}>
                 {getVisibleProducts().map(p => {
                   const stockStatus = getStockStatus(p);
                   return (

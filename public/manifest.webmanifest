@@ -1,0 +1,21 @@
+{
+  "name": "بوابة المدير - Meridien POS",
+  "short_name": "Meridien POS",
+  "description": "نظام نقاط البيع وإدارة مطعم وكافيه مريديان",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "lang": "ar",
+  "dir": "rtl",
+  "theme_color": "#09090a",
+  "background_color": "#09090a",
+  "icons": [
+    {
+      "src": "/meridien-icon.png",
+      "sizes": "584x571",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
