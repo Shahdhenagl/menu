@@ -54,7 +54,7 @@ export default function DailyClosingView({ orders, expenses, language, userName 
       if (order.payment_method === 'split' && order.payment_details) {
         METHODS.forEach(method => {
           const cashierWallet = method === 'wallet_restaurant' ? n(order.payment_details?.wallet_cashier) : 0;
-          result[method] += n(order.payment_details?.[method]) + cashierWallet;
+          result[method] += Math.max(0, n(order.payment_details?.[method]) - n(order.payment_details?.tip_by_method?.[method])) + cashierWallet;
         });
       } else {
         const method = order.payment_method as PaymentMethodKey;
@@ -63,6 +63,22 @@ export default function DailyClosingView({ orders, expenses, language, userName 
     });
     return result;
   }, [drawerOrders]);
+  const tipsByMethod = useMemo(() => {
+    const result = Object.fromEntries(METHODS.map(method => [method, 0])) as Record<PaymentMethodKey, number>;
+    drawerOrders.forEach(order => {
+      const details = order.payment_details || {};
+      if (details.tip_by_method && typeof details.tip_by_method === 'object') {
+        Object.entries(details.tip_by_method).forEach(([method, value]) => {
+          if (result[method as PaymentMethodKey] !== undefined) result[method as PaymentMethodKey] += n(value);
+        });
+      } else if (n(details.tip_total) > 0) {
+        const method = (order.payment_method === 'split' ? 'cash' : order.payment_method) as PaymentMethodKey;
+        if (result[method] !== undefined) result[method] += n(details.tip_total);
+      }
+    });
+    return result;
+  }, [drawerOrders]);
+  const totalTips = Object.values(tipsByMethod).reduce((sum, value) => sum + value, 0);
   const outgoing = useMemo(() => {
     const result = Object.fromEntries(METHODS.map(method => [method, 0])) as Record<PaymentMethodKey, number>;
     drawerExpenses.forEach(expense => {
@@ -169,7 +185,22 @@ export default function DailyClosingView({ orders, expenses, language, userName 
   const printReport = () => {
     if (!bothClosed) { alert(ar ? 'لا يمكن الطباعة قبل إغلاق الخزنتين.' : 'Close both drawers before printing.'); return; }
     const drawerRows = (drawer: DrawerId) => (drawer === 1 ? closing?.drawer_1_methods : closing?.drawer_2_methods) || [];
-    const section = (drawer: DrawerId) => `<h2>${ar ? `تقفيل خزنة ${drawer}` : `Drawer ${drawer} Closing`}</h2><table><tr><th>${ar ? 'وسيلة الدفع' : 'Method'}</th><th>${ar ? 'المحصل' : 'Collected'}</th><th>${ar ? 'الصادر' : 'Out'}</th><th>${ar ? 'المفروض' : 'Expected'}</th><th>${ar ? 'المعدود' : 'Counted'}</th><th>${ar ? 'الفرق' : 'Difference'}</th></tr>${drawerRows(drawer).map(row => `<tr><td>${methodLabel(row.method)}</td><td>${fmt(row.incoming)}</td><td>${fmt(row.outgoing)}</td><td>${fmt(row.expected)}</td><td>${fmt(row.counted)}</td><td>${fmt(row.difference)}</td></tr>`).join('')}</table>`;
+    const section = (drawer: DrawerId) => {
+      const drawerTipOrders = dayOrders.filter(order => (order.drawer || 1) === drawer);
+      const tips = Object.fromEntries(METHODS.map(method => [method, 0])) as Record<PaymentMethodKey, number>;
+      drawerTipOrders.forEach(order => {
+        const details = order.payment_details || {};
+        if (details.tip_by_method && typeof details.tip_by_method === 'object') {
+          Object.entries(details.tip_by_method).forEach(([method, value]) => {
+            if (tips[method as PaymentMethodKey] !== undefined) tips[method as PaymentMethodKey] += n(value);
+          });
+        } else if (n(details.tip_total) > 0) {
+          const method = (order.payment_method === 'split' ? 'cash' : order.payment_method) as PaymentMethodKey;
+          if (tips[method] !== undefined) tips[method] += n(details.tip_total);
+        }
+      });
+      return `<h2>${ar ? `تقفيل خزنة ${drawer}` : `Drawer ${drawer} Closing`}</h2><table><tr><th>${ar ? 'وسيلة الدفع' : 'Method'}</th><th>${ar ? 'المحصل' : 'Collected'}</th><th>${ar ? 'الصادر' : 'Out'}</th><th>${ar ? 'المفروض' : 'Expected'}</th><th>${ar ? 'المعدود' : 'Counted'}</th><th>${ar ? 'الفرق' : 'Difference'}</th></tr>${drawerRows(drawer).map(row => `<tr><td>${methodLabel(row.method)}</td><td>${fmt(row.incoming)}</td><td>${fmt(row.outgoing)}</td><td>${fmt(row.expected)}</td><td>${fmt(row.counted)}</td><td>${fmt(row.difference)}</td></tr>`).join('')}</table><h3>${ar ? 'التبس للعرض فقط' : 'Tips — display only'}</h3><table><tr><th>${ar ? 'وسيلة الدفع' : 'Method'}</th><th>${ar ? 'التبس' : 'Tips'}</th></tr>${METHODS.filter(method => tips[method] > 0).map(method => `<tr><td>${methodLabel(method)}</td><td>${fmt(tips[method])}</td></tr>`).join('') || `<tr><td colspan="2">${ar ? 'لا يوجد تبس' : 'No tips'}</td></tr>`}</table>`;
+    };
     const win = window.open('', '_blank');
     if (!win) return;
     win.document.write(`<html dir="${ar ? 'rtl' : 'ltr'}"><head><title>${ar ? 'تقرير تقفيل اليوم' : 'Daily Closing Report'}</title><style>body{font-family:Arial;padding:28px;color:#111}h1{text-align:center;border-bottom:2px solid #111;padding-bottom:12px}h2{margin-top:28px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #bbb;padding:8px;text-align:center}th{background:#eee}.summary{display:flex;gap:20px;margin:20px 0}.card{border:1px solid #bbb;padding:12px;flex:1;text-align:center}</style></head><body><h1>${ar ? 'تقرير تقفيل اليوم' : 'Daily Closing Report'} - ${selectedDate}</h1><div class="summary"><div class="card">${ar ? 'إجمالي المحصل' : 'Total Collected'}<br><b>${fmt(dayOrders.reduce((sum, order) => sum + n(order.total_price), 0))}</b></div><div class="card">${ar ? 'عدد الطلبات' : 'Orders'}<br><b>${dayOrders.length}</b></div></div>${section(1)}${section(2)}<script>window.print()</script></body></html>`);
@@ -182,7 +213,7 @@ export default function DailyClosingView({ orders, expenses, language, userName 
       <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}><input type="date" className="input-gold" value={selectedDate} max={today()} onChange={e => setSelectedDate(e.target.value)} /><button className="btn-gold" disabled={!bothClosed} onClick={printReport}><Printer size={16} /> {ar ? 'طباعة التقرير' : 'Print Report'}</button></div>
     </div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '1rem', margin: '1.2rem 0' }}>
-      <Summary title={ar ? 'إجمالي المحصل من أول اليوم' : 'Total collected today'} value={fmt(dayOrders.reduce((sum, order) => sum + n(order.total_price), 0))} />
+      <Summary title={ar ? 'إجمالي المحصل من أول اليوم' : 'Total collected today'} value={fmt(dayOrders.reduce((sum, order) => sum + n(order.total_price), 0))} /><Summary title={ar ? 'إجمالي التبس — للعرض فقط' : 'Total tips — display only'} value={fmt(totalTips)} />
       <Summary title={ar ? 'الخزنة 1' : 'Drawer 1'} value={closing?.drawer_1_closed ? (ar ? 'مقفولة' : 'Closed') : (ar ? 'مفتوحة' : 'Open')} />
       <Summary title={ar ? 'الخزنة 2' : 'Drawer 2'} value={closing?.drawer_2_closed ? (ar ? 'مقفولة' : 'Closed') : (ar ? 'مفتوحة' : 'Open')} />
       <Summary title={ar ? 'الطلبات' : 'Orders'} value={String(dayOrders.length)} />

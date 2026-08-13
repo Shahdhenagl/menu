@@ -263,6 +263,7 @@ export default function ShiftClosingView({
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'الضريبة' : 'Tax'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'المبيعات' : 'Sales'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'المصروفات' : 'Expenses'}</th>
+                <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'التبس (عرض فقط)' : 'Tips (display only)'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'صافي الخزنة' : 'Net drawer'}</th>
                 <th style={{ textAlign: 'center', padding: '0.6rem 0.5rem' }}>{ar ? 'إجراء' : 'Action'}</th>
               </tr>
@@ -296,6 +297,13 @@ export default function ShiftClosingView({
                       <div key={m.method} style={{ fontSize: '0.68rem', color: 'var(--text-gray)', fontWeight: 500 }}>{m.label}: {fmt(m.amount)}</div>
                     ))}
                   </td>
+                  <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#f59e0b', fontWeight: 800 }}>
+                    <div>{fmt(report.tipsTotal || 0)}</div>
+                    {(report.tipsByMethod || []).filter(m => Math.abs(m.amount) > 0.001).map(m => (
+                      <div key={m.method} style={{ fontSize: '0.68rem', color: 'var(--text-gray)', fontWeight: 500 }}>{m.label}: {fmt(m.amount)}</div>
+                    ))}
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-gray)', fontWeight: 500 }}>{ar ? 'لا يدخل في الحسابات' : 'Excluded from accounting'}</div>
+                  </td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: 'var(--gold-primary)', fontWeight: 900 }}>
                     <div>{fmt(report.expectedBalance)}</div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-gray)', fontWeight: 500 }}>تحصيل + إيداعات - مصروفات</div>
@@ -325,7 +333,7 @@ export default function ShiftClosingView({
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid var(--gold-primary)' }}>
-                <td colSpan={7} style={{ padding: '0.7rem 0.5rem', fontWeight: 800, color: 'var(--text-light)' }}>
+                <td colSpan={8} style={{ padding: '0.7rem 0.5rem', fontWeight: 800, color: 'var(--text-light)' }}>
                   {ar ? 'إجمالي المتوقع المفتوح (غير مقفول)' : 'Total expected open balance'}
                 </td>
                 <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', fontWeight: 900, color: 'var(--gold-primary)' }}>{fmt(totalOpen)}</td>

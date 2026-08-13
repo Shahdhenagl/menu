@@ -73,6 +73,8 @@ const orderSubtotal = (o: Order) => o.items.reduce((x, i) => x + num(i.price) * 
 export type BuiltShiftReport = ShiftClosingReport & {
   /** نفس الوسائل بصيغة التخزين (بالمفتاح) */
   methodsRaw: ShiftClosingMethod[];
+  tipsTotal: number;
+  tipsByMethod: { method: string; label: string; amount: number }[];
 };
 
 /**
@@ -109,17 +111,38 @@ export const buildShiftReport = ({
   const expensesTotal = expenses.reduce((s, e) => s + num(e.amount), 0);
   const expectedBalance = cashCollected + deposits - expensesTotal;
 
+  // ===== التبس: عرض فقط، لا يدخل في collected أو tax أو expectedBalance =====
+  const tipByMethodValues: Record<string, number> = {};
+  METHOD_KEYS.forEach(m => (tipByMethodValues[m] = 0));
+  orders.forEach(o => {
+    const details = o.payment_details || {};
+    if (details.tip_by_method && typeof details.tip_by_method === 'object') {
+      Object.entries(details.tip_by_method).forEach(([method, value]) => {
+        if (tipByMethodValues[method] !== undefined) tipByMethodValues[method] += num(value);
+      });
+    } else if (num(details.tip_total) > 0) {
+      const method = o.payment_method === 'split' ? 'cash' : (o.payment_method || 'cash');
+      if (tipByMethodValues[method] !== undefined) tipByMethodValues[method] += num(details.tip_total);
+    }
+  });
+  const tipsTotal = Object.values(tipByMethodValues).reduce((sum, value) => sum + value, 0);
+  const tipsByMethod = METHOD_KEYS
+    .filter(m => Math.abs(tipByMethodValues[m]) > 0.001)
+    .map(m => ({ method: m, label: methodLabel(m, ar), amount: tipByMethodValues[m] }));
+
   // ===== تقسيم التحصيل على وسائل الدفع (مع دعم الدفع المقسم) =====
   const byMethod: Record<string, number> = {};
   METHOD_KEYS.forEach(m => (byMethod[m] = 0));
   orders.forEach(o => {
     if (o.payment_method === 'split' && o.payment_details) {
-      byMethod.cash += num(o.payment_details.cash);
-      byMethod.visa += num(o.payment_details.visa);
-      byMethod.wallet_restaurant += num(o.payment_details.wallet_restaurant);
-      byMethod.wallet_cafe += num(o.payment_details.wallet_cafe);
-      byMethod.instapay += num(o.payment_details.instapay);
-      byMethod.deferred += num(o.payment_details.deferred);
+      const details = o.payment_details;
+      const tips = details.tip_by_method && typeof details.tip_by_method === 'object' ? details.tip_by_method : {};
+      byMethod.cash += Math.max(0, num(details.cash) - num(tips.cash));
+      byMethod.visa += Math.max(0, num(details.visa) - num(tips.visa));
+      byMethod.wallet_restaurant += Math.max(0, num(details.wallet_restaurant) - num(tips.wallet_restaurant));
+      byMethod.wallet_cafe += Math.max(0, num(details.wallet_cafe) - num(tips.wallet_cafe));
+      byMethod.instapay += Math.max(0, num(details.instapay) - num(tips.instapay));
+      byMethod.deferred += Math.max(0, num(details.deferred) - num(tips.deferred));
     } else {
       const m = o.payment_method || 'cash';
       if (byMethod[m] !== undefined) byMethod[m] += num(o.payment_method === 'partner' ? (o.partner_amount_due ?? o.total_price) : o.total_price);
@@ -243,6 +266,8 @@ export const buildShiftReport = ({
     taxGroups,
     categories: categoriesSorted,
     methodsRaw,
+    tipsTotal,
+    tipsByMethod,
   };
 };
 

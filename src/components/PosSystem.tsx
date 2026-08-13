@@ -3300,12 +3300,33 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
                   const payableTotal = totalForOrder(collectPaymentOrder);
                   const remaining = payableTotal - totalPaid;
+                  // أي زيادة عن قيمة الفاتورة هي تبس للعرض فقط، ولا تغيّر total_price.
+                  const paidParts = [
+                    { method: 'cash', amount: cashVal },
+                    { method: 'visa', amount: visaVal },
+                    { method: 'wallet_restaurant', amount: walletCashierVal },
+                    { method: 'wallet_cafe', amount: walletCafeVal },
+                    { method: 'instapay', amount: instapayVal },
+                  ];
+                  let billRemainingForTips = payableTotal;
+                  const tipByMethod: Record<string, number> = {};
+                  paidParts.forEach(({ method, amount }) => {
+                    const appliedToBill = Math.min(amount, Math.max(0, billRemainingForTips));
+                    tipByMethod[method] = Math.max(0, amount - appliedToBill);
+                    billRemainingForTips = Math.max(0, billRemainingForTips - appliedToBill);
+                  });
+                  const tipTotal = Object.values(tipByMethod).reduce((sum, value) => sum + value, 0);
 
                   let statusText = '';
                   let isError = false;
                   let canSubmit = false;
 
-                  if (Math.abs(remaining) < 0.01) {
+                  if (remaining < -0.01) {
+                    statusText = language === 'ar'
+                      ? `✓ تم دفع الفاتورة + تبس ${Math.abs(remaining).toFixed(2)} EGP (للعرض فقط)`
+                      : `✓ Invoice paid + ${Math.abs(remaining).toFixed(2)} EGP tip (display only)`;
+                    canSubmit = true;
+                  } else if (Math.abs(remaining) < 0.01) {
                     statusText = language === 'ar' ? '✓ تم دفع كامل قيمة الفاتورة' : '✓ Full payment entered';
                     canSubmit = true;
                   } else if (remaining > 0) {
@@ -3381,10 +3402,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                 cash: cashVal,
                                 visa: visaVal,
                                 wallet_cashier: walletCashierVal,
-
+                                wallet_restaurant: walletCashierVal,
+                                wallet_cafe: walletCafeVal,
                                 instapay: instapayVal,
                                 deferred: remaining > 0.01 && payIsDeferred ? remaining : 0,
-                                customer_id: remaining > 0.01 && payIsDeferred ? payCustomerId : undefined
+                                customer_id: remaining > 0.01 && payIsDeferred ? payCustomerId : undefined,
+                                tip_total: tipTotal,
+                                tip_by_method: tipByMethod
                               };
 
                               const paidOrder = await db.updateOrder(collectPaymentOrder.id, {

@@ -501,6 +501,9 @@ export type ShiftClosingReport = {
   expectedBalance: number;
   depositsByMethod: { method: string; label: string; amount: number }[];
   expensesByMethod: { method: string; label: string; amount: number }[];
+  /** تبس للعرض فقط ولا يدخل في أي حساب مالي */
+  tipsTotal?: number;
+  tipsByMethod?: { method: string; label: string; amount: number }[];
   itemsCount: number;
   methods: { label: string; amount: number }[];
   /** تفصيل حسب نوع الطلب */
@@ -522,6 +525,8 @@ export type ShiftClosingReport = {
     expectedBalance: number;
     methods: { label: string; amount: number }[];
     expensesByMethod: { label: string; amount: number }[];
+    tipsTotal?: number;
+    tipsByMethod?: { label: string; amount: number }[];
     taxGroups: ShiftClosingTaxRow[];
   }[];
 };
@@ -545,6 +550,9 @@ export const printShiftClosing = async (
   const expenseRows = report.expensesByMethod.filter(m => Math.abs(m.amount) > 0.001).map(m => `
     <div class="row"><span>${m.label}</span><span class="v">- ${money(m.amount)}</span></div>`).join('')
     || `<div class="row empty">${isAr ? 'لا يوجد مصروفات' : 'No expenses'}</div>`;
+  const tipRows = (report.tipsByMethod || []).filter(m => Math.abs(m.amount) > 0.001).map(m => `
+    <div class="row"><span>${m.label}</span><span class="v">${money(m.amount)}</span></div>`).join('')
+    || `<div class="row empty">${isAr ? 'لا يوجد تبس' : 'No tips'}</div>`;
 
   // تفصيل حسب نوع الطلب — كل نوع بإجماليه وضريبته
   const typeRows = report.orderTypes.map(t => `
@@ -571,6 +579,7 @@ export const printShiftClosing = async (
   const drawerSections = (report.drawerBreakdown || []).map(d => {
     const methods = d.methods.filter(m => Math.abs(m.amount) > 0.001).map(m => `<div class="row"><span>${m.label}</span><span class="v">${money(m.amount)}</span></div>`).join('') || `<div class="row empty">${isAr ? 'لا يوجد تحصيل' : 'Nothing collected'}</div>`;
     const expenses = d.expensesByMethod.filter(m => Math.abs(m.amount) > 0.001).map(m => `<div class="row"><span>${m.label}</span><span class="v">- ${money(m.amount)}</span></div>`).join('') || `<div class="row empty">${isAr ? 'لا توجد مصروفات' : 'No expenses'}</div>`;
+    const tips = (d.tipsByMethod || []).filter(m => Math.abs(m.amount) > 0.001).map(m => `<div class="row"><span>${m.label}</span><span class="v">${money(m.amount)}</span></div>`).join('') || `<div class="row empty">${isAr ? 'لا يوجد تبس' : 'No tips'}</div>`;
     const taxes = d.taxGroups.map(g => `<div class="row sm"><span>${g.percent > 0 ? (isAr ? `ضريبة ${g.percent}%` : `Tax ${g.percent}%`) : (isAr ? 'بدون ضريبة' : 'No tax')}</span><span class="v">${money(g.tax)}</span></div>`).join('') || `<div class="row empty">${isAr ? 'لا توجد ضرائب' : 'No tax'}</div>`;
     return `<div class="drawer-box">
       <div class="drawer-title">${d.label}</div>
@@ -582,6 +591,8 @@ export const printShiftClosing = async (
       <div class="drawer-subtitle">${isAr ? 'وسائل التحصيل' : 'PAYMENT METHODS'}</div>${methods}
       <div class="drawer-subtitle">${isAr ? 'المصروفات الخارجة من الخزنة' : 'EXPENSES PAID FROM DRAWER'}</div>${expenses}
       <div class="row b"><span>${isAr ? 'إجمالي المصروفات' : 'Total expenses'}</span><span class="v">- ${money(d.expenses)}</span></div>
+      <div class="drawer-subtitle">${isAr ? 'التبس حسب وسيلة الدفع (للعرض فقط)' : 'TIPS BY PAYMENT METHOD (DISPLAY ONLY)'}</div>${tips}
+      <div class="row b"><span>${isAr ? 'إجمالي التبس' : 'Total tips'}</span><span class="v">${money(d.tipsTotal || 0)}</span></div>
       <div class="drawer-subtitle">${isAr ? 'تفصيل الضرائب' : 'TAX DETAILS'}</div>${taxes}
       <div class="total"><span class="lbl">${isAr ? 'صافي المتوقع في الخزنة' : 'Expected drawer balance'}</span><span class="val">${money(d.expectedBalance)} ${isAr ? 'ج.م' : 'EGP'}</span></div>
     </div>`;
@@ -658,6 +669,10 @@ export const printShiftClosing = async (
       ${depositRows}
       <div class="row" style="border-top:1px solid #000; font-weight:900;"><span>${isAr ? 'المصروفات الخارجة' : 'Expenses paid out'}</span><span class="v">- ${money(report.expenses)}</span></div>
       ${expenseRows}
+      <div class="sec">${isAr ? 'التبس — للعرض فقط ولا يدخل في الحسابات' : 'TIPS — DISPLAY ONLY, EXCLUDED FROM ACCOUNTING'}</div>
+      ${tipRows}
+      <div class="row b"><span>${isAr ? 'إجمالي التبس' : 'Total tips'}</span><span class="v">${money(report.tipsTotal || 0)}</span></div>
+
       <div class="total" style="margin-top:6px;">
         <span class="lbl">${isAr ? 'الرصيد المتوقع بالخزنة' : 'Expected drawer balance'}</span>
         <span class="val">${money(report.expectedBalance)} ${isAr ? 'ج.م' : 'EGP'}</span>
