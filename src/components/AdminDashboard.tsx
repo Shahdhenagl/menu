@@ -334,6 +334,7 @@ export default function AdminDashboard({
   const [classifyItemName, setClassifyItemName] = useState<string>('');
   const [classifyQty, setClassifyQty] = useState<number>(0);
   const [classifyPrice, setClassifyPrice] = useState<number>(0);
+  const [classifyItemSearch, setClassifyItemSearch] = useState('');
   
 
   // Expenses filtering states
@@ -8376,13 +8377,16 @@ export default function AdminDashboard({
 
       {classifyModalOpen && (
         <div className="admin-modal-overlay" style={{ zIndex: 1100 }} onClick={() => setClassifyModalOpen(false)}>
-          <div className="admin-modal" style={{ maxWidth: '600px', border: '1px solid var(--gold-primary)' }} onClick={e => e.stopPropagation()}>
-            <div className="admin-modal-header" style={{ borderBottom: '1px solid rgba(212, 175, 55, 0.2)' }}>
-              <h2 style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تصنيف المصروف (الذي تم سحبه من POS)' : 'Classify POS Expense'}</h2>
+          <div className="admin-modal" style={{ maxWidth: '680px', width: 'min(94vw, 680px)', border: '1px solid var(--gold-primary)', boxShadow: '0 24px 80px rgba(0,0,0,0.65)' }} onClick={e => e.stopPropagation()}>
+            <div className="admin-modal-header" style={{ borderBottom: '1px solid rgba(212, 175, 55, 0.25)', padding: '1.15rem 1.4rem', background: 'linear-gradient(135deg, rgba(212,175,55,0.12), transparent)' }}>
+              <div>
+                <h2 style={{ color: 'var(--gold-primary)', margin: 0, fontSize: '1.15rem' }}>{language === 'ar' ? 'تصنيف المصروف المسحوب من POS' : 'Classify POS Expense'}</h2>
+                <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{language === 'ar' ? 'حدّد نوع المصروف، ولو شراء مخزون اختَر الصنف والكمية.' : 'Choose the expense type, then select the item and quantity for inventory purchases.'}</p>
+              </div>
               <button className="btn-close" onClick={() => setClassifyModalOpen(false)}><X size={20} /></button>
             </div>
             <form onSubmit={handleClassifyExpenseSubmit}>
-              <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '2rem' }}>
+              <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', padding: '1.35rem 1.4rem', background: 'rgba(255,255,255,0.018)' }}>
                 <div className="form-group">
                   <label>{language === 'ar' ? 'نوع المصروف' : 'Expense Type'}</label>
                   <select className="admin-input" value={classifyType} onChange={(e) => setClassifyType(e.target.value as any)}>
@@ -8404,16 +8408,24 @@ export default function AdminDashboard({
                         {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </div>
-                    <div className="form-group">
-                      <label>{language === 'ar' ? 'صنف المخزون' : 'Inventory Item'}</label>
+                      <div className="form-group" style={{ padding: '0.9rem', border: '1px solid rgba(212,175,55,0.22)', borderRadius: '12px', background: 'rgba(0,0,0,0.16)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.55rem' }}>
+                        <label style={{ margin: 0 }}>{language === 'ar' ? 'صنف المخزون' : 'Inventory Item'}</label>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{inventoryItems.length} {language === 'ar' ? 'صنف' : 'items'}</span>
+                      </div>
+                      <div style={{ position: 'relative', marginBottom: '0.6rem' }}>
+                        <input className="admin-input" value={classifyItemSearch} onChange={e => setClassifyItemSearch(e.target.value)} placeholder={language === 'ar' ? 'ابحث باسم الصنف...' : 'Search inventory item...'} style={{ paddingInlineStart: '2.35rem' }} />
+                        <span style={{ position: 'absolute', insetInlineStart: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--gold-primary)', fontSize: '1rem', pointerEvents: 'none' }}>⌕</span>
+                      </div>
                       <select className="admin-input" required value={classifyItemId} onChange={(e) => {
                         setClassifyItemId(e.target.value);
                         const item = inventoryItems.find(i => i.id === e.target.value);
                         if (item) setClassifyItemName(item.name);
-                      }}>
+                      }} style={{ minHeight: '42px' }}>
                         <option value="">{language === 'ar' ? 'اختر الصنف...' : 'Select Item...'}</option>
-                        {inventoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        {inventoryItems.filter(i => !classifyItemSearch.trim() || i.name.toLowerCase().includes(classifyItemSearch.trim().toLowerCase())).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                       </select>
+                      {classifyItemSearch.trim() && inventoryItems.filter(i => i.name.toLowerCase().includes(classifyItemSearch.trim().toLowerCase())).length === 0 && <div style={{ color: '#f59e0b', fontSize: '0.78rem', marginTop: '0.45rem' }}>{language === 'ar' ? 'لا توجد أصناف مطابقة للبحث.' : 'No matching inventory items.'}</div>}
                     </div>
                     <div className="form-group">
                       <label>{language === 'ar' ? 'الكمية' : 'Quantity'}</label>
