@@ -3090,6 +3090,7 @@ export default function AdminDashboard({
   const uniqueCustomersMap: Record<string, {
     name: string;
     phone: string;
+    crmKey: string;
     orderCount: number;
     totalSpent: number;
     firstOrderDate: string;
@@ -3102,11 +3103,12 @@ export default function AdminDashboard({
 
   debtCustomers.forEach(customer => {
     const phone = customer.phone.trim();
-    if (!phone) return;
+    const crmKey = phone ? `phone:${phone}` : `customer:${customer.id}`;
     const createdAt = customer.created_at || new Date().toISOString();
-    uniqueCustomersMap[phone] = {
+    uniqueCustomersMap[crmKey] = {
       name: customer.name,
       phone,
+      crmKey,
       orderCount: 0,
       totalSpent: 0,
       firstOrderDate: createdAt,
@@ -3122,10 +3124,12 @@ export default function AdminDashboard({
 
   orders.forEach(order => {
     const phone = order.customer_phone.trim();
-    if (!uniqueCustomersMap[phone]) {
-      uniqueCustomersMap[phone] = {
+    const crmKey = `phone:${phone}`;
+    if (!uniqueCustomersMap[crmKey]) {
+      uniqueCustomersMap[crmKey] = {
         name: order.customer_name,
-        phone: phone,
+        phone,
+        crmKey,
         orderCount: 0,
         totalSpent: 0,
         firstOrderDate: order.created_at,
@@ -3137,24 +3141,22 @@ export default function AdminDashboard({
       };
     }
 
-    uniqueCustomersMap[phone].orderCount += 1;
+        uniqueCustomersMap[crmKey].orderCount += 1;
     if (order.status.startsWith('completed')) {
-      uniqueCustomersMap[phone].totalSpent += order.total_price;
+      uniqueCustomersMap[crmKey].totalSpent += order.total_price;
     }
-    uniqueCustomersMap[phone].allOrders.push(order);
-    
+    uniqueCustomersMap[crmKey].allOrders.push(order);
     // Sort orders for this customer by date desc
-    uniqueCustomersMap[phone].allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    
+    uniqueCustomersMap[crmKey].allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     // Update dates
-    if (new Date(order.created_at) < new Date(uniqueCustomersMap[phone].firstOrderDate)) {
-      uniqueCustomersMap[phone].firstOrderDate = order.created_at;
+    if (new Date(order.created_at) < new Date(uniqueCustomersMap[crmKey].firstOrderDate)) {
+      uniqueCustomersMap[crmKey].firstOrderDate = order.created_at;
     }
-    if (new Date(order.created_at) > new Date(uniqueCustomersMap[phone].lastOrderDate)) {
-      uniqueCustomersMap[phone].lastOrderDate = order.created_at;
+    if (new Date(order.created_at) > new Date(uniqueCustomersMap[crmKey].lastOrderDate)) {
+      uniqueCustomersMap[crmKey].lastOrderDate = order.created_at;
       // Prefer the latest entered name and table
-      uniqueCustomersMap[phone].name = order.customer_name;
-      uniqueCustomersMap[phone].preferredTable = order.table_number;
+      uniqueCustomersMap[crmKey].name = order.customer_name;
+      uniqueCustomersMap[crmKey].preferredTable = order.table_number;
     }
   });
 
@@ -4568,7 +4570,7 @@ export default function AdminDashboard({
                         return cust.name.toLowerCase().includes(term) || cust.phone.includes(term);
                       })
                       .map((cust) => (
-                        <tr key={cust.phone}>
+                        <tr key={cust.crmKey}>
                           <td style={{ fontWeight: '700' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                               <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--gold-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '0.9rem' }}>
@@ -4615,7 +4617,7 @@ export default function AdminDashboard({
                             <button 
                               className="btn-outline-gold" 
                               style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }} 
-                              onClick={() => setSelectedCustPhone(cust.phone)}
+                              onClick={() => setSelectedCustPhone(cust.crmKey)}
                             >
                               <Sparkles size={12} />
                               <span>{language === 'ar' ? 'عرض السجل 🔍' : 'View History 🔍'}</span>
