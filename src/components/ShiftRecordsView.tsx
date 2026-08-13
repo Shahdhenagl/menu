@@ -179,6 +179,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
 
   const totals = useMemo(() => ({
     collected: filtered.reduce((s, r) => s + num(r.collected), 0),
+    expenses: filtered.reduce((s, r) => s + num(r.expenses), 0),
     subtotal: filtered.reduce((s, r) => s + num(r.subtotal), 0),
     tax: filtered.reduce((s, r) => s + num(r.tax), 0),
     orders: filtered.reduce((s, r) => s + num(r.orders_count), 0),
@@ -256,6 +257,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
         <Stat title={ar ? 'قبل الضريبة' : 'Before tax'} value={fmt(totals.subtotal)} c="#9ca3af" />
         <Stat title={ar ? 'الضريبة' : 'Tax'} value={fmt(totals.tax)} c="#f59e0b" />
         <Stat title={ar ? 'إجمالي المحصل' : 'Collected'} value={fmt(totals.collected)} c="#10b981" />
+        <Stat title={ar ? 'إجمالي المصروف' : 'Total Expenses'} value={fmt(totals.expenses)} c="#ef4444" />
       </div>
 
       {loading ? (
