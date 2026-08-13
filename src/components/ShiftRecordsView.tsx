@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Printer, RefreshCw, ChevronDown, ChevronUp, FileText } from 'lucide-react';
-import type { RestaurantSettings, ShiftClosing } from '../types';
+import type { DailyClosing, RestaurantSettings, ShiftClosing } from '../types';
 import { db } from '../lib/supabase';
 import { printShiftClosing } from '../utils/printUtils';
 
@@ -29,7 +29,56 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
   const load = async () => {
     setLoading(true);
     try {
-      setRecords(await db.getShiftClosings());
+      const [shiftRows, dailyRows] = await Promise.all([
+        db.getShiftClosings(),
+        db.getDailyClosings(),
+      ]);
+
+      // شاشة السجلات كانت تقرأ shift_closings فقط، بينما تقفيل الخزنتين
+      // يُحفظ في daily_closings. نعرض النوعين في نفس الشاشة.
+      const dailyAsRecords: ShiftClosing[] = (dailyRows || []).map((d: DailyClosing) => {
+        const drawerMethods = [
+          ...(d.drawer_1_methods || []).map(m => ({ ...m, drawer: 1 })),
+          ...(d.drawer_2_methods || []).map(m => ({ ...m, drawer: 2 })),
+        ];
+        const methods = drawerMethods.map(m => ({
+          method: m.method,
+          label: `${m.drawer ? `خزنة ${m.drawer} - ` : ''}${m.method}`,
+          amount: num(m.expected),
+        }));
+        const closedAt = d.closed_at || d.created_at || `${d.closing_date}T23:59:59`;
+        const expected = num(d.total_expected);
+        return {
+          id: `daily-${d.id || d.closing_date}`,
+          bucket: 'daily',
+          bucket_label: `تقفيل اليوم — ${d.closing_date}`,
+          from_at: `${d.closing_date}T00:00:00`,
+          to_at: closedAt,
+          orders_count: num(d.orders_count),
+          items_count: 0,
+          subtotal: expected,
+          tax: 0,
+          discount: 0,
+          collected: expected,
+          methods,
+          order_types: [],
+          tax_groups: [],
+          categories: [],
+          order_ids: [],
+          closed_by: d.closed_by,
+          created_at: d.created_at || closedAt,
+          deposits: 0,
+          expenses: num(d.total_expected) - num(d.total_counted),
+          expectedBalance: expected,
+          depositsByMethod: [],
+          expensesByMethod: [],
+        };
+      });
+
+      const merged = [...shiftRows, ...dailyAsRecords];
+      const byId = new Map<string, ShiftClosing>();
+      merged.forEach(row => byId.set(row.id, row));
+      setRecords([...byId.values()].sort((a, b) => new Date(b.to_at).getTime() - new Date(a.to_at).getTime()));
     } finally {
       setLoading(false);
     }
@@ -137,11 +186,11 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           <p>{records.length === 0
             ? (ar ? 'مفيش سجلات تقفيل لسه' : 'No closing records yet')
             : (ar ? 'مفيش سجلات مطابقة للفلاتر' : 'No records match the filters')}</p>
-          {records.length === 0 && (
+              {records.length === 0 && (
             <p style={{ fontSize: '0.85rem', maxWidth: '520px', margin: '1rem auto 0', lineHeight: 1.7 }}>
               {ar
-                ? 'لو عملت تقفيل ومظهرش هنا، غالبًا جدول السجلات مش متظبط في الداتا بيز. شغّل على Supabase: supabase_patch_v26_shift_closings.sql ثم supabase_patch_v28_shift_closing_details.sql'
-                : 'If you closed a shift and nothing appears here, the records table is likely missing. Run supabase_patch_v26_shift_closings.sql then supabase_patch_v28_shift_closing_details.sql on Supabase.'}
+                ? 'لم يتم العثور على سجلات في shift_closings أو daily_closings. تأكد من تشغيل ترحيلات التقفيل والصلاحيات ثم اضغط تحديث.'
+                : 'No records were found in shift_closings or daily_closings. Check the closing migrations and permissions, then refresh.'}
             </p>
           )}
         </div>
