@@ -302,9 +302,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [expenseDrawer, setExpenseDrawer] = useState<1 | 2>(1);
   const [expenseEmployeeId, setExpenseEmployeeId] = useState<string>('');
   const [expenseNotes, setExpenseNotes] = useState<string>('');
-  const [expenseSaving, setExpenseSaving] = useState(false);
-  
-
+    const [expenseSaving, setExpenseSaving] = useState(false);
+  // جهاز POS المرتبط بصالة يملك خزنة واحدة فقط؛ المدير/الجهاز العام فقط يرى الخزنتين.
+  const allowedDrawer: 1 | 2 | null = deviceHall ? drawerOfHall(deviceHall, settings) : null;
+  const allowedDrawers: readonly (1 | 2)[] = allowedDrawer ? [allowedDrawer] : [1, 2];
+  const effectiveDrawer = (selected: 1 | 2): 1 | 2 => allowedDrawer || selected;
+  const scopedSummaryFilter = deviceHall ? `hall:${deviceHall}` : summaryScopeFilter;
   const previousPendingCount = useRef(0);
   const previousWebsiteOrdersCount = useRef(0);
 
@@ -863,17 +866,17 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   };
   const todayOrders = allOrders.filter(o => isToday(o.created_at));
   const matchesSummaryScope = (order: Order) => {
-    if (summaryScopeFilter === 'all') return true;
-    if (summaryScopeFilter.startsWith('hall:')) return order.hall === summaryScopeFilter.slice(5);
-    if (summaryScopeFilter.startsWith('drawer:')) return (order.drawer || (order.hall ? drawerForHall(order.hall) : undefined)) === Number(summaryScopeFilter.slice(7));
+    if (scopedSummaryFilter === 'all') return true;
+    if (scopedSummaryFilter.startsWith('hall:')) return order.hall === scopedSummaryFilter.slice(5);
+    if (scopedSummaryFilter.startsWith('drawer:')) return (order.drawer || (order.hall ? drawerForHall(order.hall) : undefined)) === Number(scopedSummaryFilter.slice(7));
     return true;
   };
   const summaryScopeLabel = () => {
-    if (summaryScopeFilter === 'all') return language === 'ar' ? 'كل الصالات والخزن' : 'All halls and drawers';
-    if (summaryScopeFilter.startsWith('hall:')) return summaryScopeFilter.slice(5);
-    if (summaryScopeFilter === 'drawer:1') return drawerName(1, settings, language === 'ar');
-    if (summaryScopeFilter === 'drawer:2') return drawerName(2, settings, language === 'ar');
-    return summaryScopeFilter;
+    if (scopedSummaryFilter === 'all') return language === 'ar' ? 'كل الصالات والخزن' : 'All halls and drawers';
+    if (scopedSummaryFilter.startsWith('hall:')) return scopedSummaryFilter.slice(5);
+    if (scopedSummaryFilter === 'drawer:1') return drawerName(1, settings, language === 'ar');
+    if (scopedSummaryFilter === 'drawer:2') return drawerName(2, settings, language === 'ar');
+    return scopedSummaryFilter;
   };
   const summaryOrders = todayOrders.filter(o =>
     matchesSummaryScope(o) &&
@@ -913,9 +916,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       <tr><td>${o.hall || ''}</td><td>${o.table_number}</td><td>#${o.id.slice(-4)}</td><td>${money(totalForOrder(o))}</td></tr>
     `).join('');
     const visibleHalls = (settings?.halls || []).filter(h => {
-      if (summaryScopeFilter === 'all') return true;
-      if (summaryScopeFilter.startsWith('hall:')) return h.name === summaryScopeFilter.slice(5);
-      if (summaryScopeFilter.startsWith('drawer:')) return drawerForHall(h.name) === Number(summaryScopeFilter.slice(7));
+      if (scopedSummaryFilter === 'all') return true;
+      if (scopedSummaryFilter.startsWith('hall:')) return h.name === scopedSummaryFilter.slice(5);
+      if (scopedSummaryFilter.startsWith('drawer:')) return drawerForHall(h.name) === Number(scopedSummaryFilter.slice(7));
       return true;
     });
     const hallRows = visibleHalls.map(h => {
@@ -1247,13 +1250,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         employee_id: selectedWaiter?.id,
         employee_name: selectedWaiter?.name,
         payment_date: getLocalDayStr(),
-        drawer: debtDrawer,
+        drawer: effectiveDrawer(debtDrawer),
       });
       await db.addFinancialTransaction({
         type: 'debt_settlement',
         amount,
         to_method: debtPaymentMethod,
-        drawer: debtDrawer,
+        drawer: effectiveDrawer(debtDrawer),
         customer_id: debtCustomerId,
         description: debtNotes || 'تسديد مديونية من نقطة البيع'
       });
@@ -1295,9 +1298,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         employee_id: selectedWaiter?.id,
         employee_name: selectedWaiter?.name,
         payment_date: getLocalDayStr(),
-        drawer: depositDrawer,
+        drawer: effectiveDrawer(depositDrawer),
       });
-      await db.addFinancialTransaction({ type: 'debt_settlement', amount, to_method: depositPaymentMethod, drawer: depositDrawer, customer_id: customer.id, description: depositNotes || `إيداع للعميل ${customer.name}` });
+      await db.addFinancialTransaction({ type: 'debt_settlement', amount, to_method: depositPaymentMethod, drawer: effectiveDrawer(depositDrawer), customer_id: customer.id, description: depositNotes || `إيداع للعميل ${customer.name}` });
       alert(language === 'ar' ? 'تم تسجيل الإيداع وتحديث حساب العميل' : 'Deposit recorded and customer account updated');
       setDepositModalOpen(false);
       setDepositCustomerId(''); setDepositAmount(''); setDepositNotes(''); setDepositPaymentMethod('cash'); setDepositDrawer(1);
@@ -1329,7 +1332,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         employee_name: selectedEmp.name,
         source: 'pos',
         classification_status: 'pending',
-        drawer: expenseDrawer
+        drawer: effectiveDrawer(expenseDrawer)
       });
       alert(language === 'ar' ? 'تم تسجيل سحب المصروف وسيظهر في تسوية المصروفات بالإدارة' : 'Expense withdrawal recorded for admin classification');
       setExpenseModalOpen(false);
@@ -2732,13 +2735,19 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>{new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}</p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    <select className="pos-input" value={summaryScopeFilter} onChange={e => setSummaryScopeFilter(e.target.value)} style={{ width: '220px' }}>
-                      <option value="all">{language === 'ar' ? 'كل الصالات والخزن' : 'All halls and drawers'}</option>
-                      {(settings?.halls || []).map(h => (
-                        <option key={`hall:${h.name}`} value={`hall:${h.name}`}>{h.name}</option>
-                      ))}
-                      <option value="drawer:1">{drawerName(1, settings, language === 'ar')}</option>
-                      <option value="drawer:2">{drawerName(2, settings, language === 'ar')}</option>
+                    <select className="pos-input" value={scopedSummaryFilter} onChange={e => { if (!deviceHall) setSummaryScopeFilter(e.target.value); }} style={{ width: '220px' }} disabled={!!deviceHall}>
+                      {!deviceHall && <option value="all">{language === 'ar' ? 'كل الصالات والخزن' : 'All halls and drawers'}</option>}
+                      {deviceHall ? (
+                        <option value={`hall:${deviceHall}`}>{deviceHall}</option>
+                      ) : (
+                        <>
+                          {(settings?.halls || []).map(h => (
+                            <option key={`hall:${h.name}`} value={`hall:${h.name}`}>{h.name}</option>
+                          ))}
+                          <option value="drawer:1">{drawerName(1, settings, language === 'ar')}</option>
+                          <option value="drawer:2">{drawerName(2, settings, language === 'ar')}</option>
+                        </>
+                      )}
                     </select>
                     <select className="pos-input" value={summaryOrderTypeFilter} onChange={e => setSummaryOrderTypeFilter(e.target.value as any)} style={{ width: '190px' }}>
                       <option value="all">{language === 'ar' ? 'كل أنواع الطلب' : 'All order types'}</option>
@@ -2806,9 +2815,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'حالة طاولات كل صالة' : 'Tables By Hall'}</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
                     {(settings?.halls || []).filter(h => {
-                      if (summaryScopeFilter === 'all') return true;
-                      if (summaryScopeFilter.startsWith('hall:')) return h.name === summaryScopeFilter.slice(5);
-                      if (summaryScopeFilter.startsWith('drawer:')) return drawerForHall(h.name) === Number(summaryScopeFilter.slice(7));
+                      if (scopedSummaryFilter === 'all') return true;
+                      if (scopedSummaryFilter.startsWith('hall:')) return h.name === scopedSummaryFilter.slice(5);
+                      if (scopedSummaryFilter.startsWith('drawer:')) return drawerForHall(h.name) === Number(scopedSummaryFilter.slice(7));
                       return true;
                     }).map(h => (
                       <div key={h.name} style={{ border: `1px solid ${hallColor(h.name)}`, borderRadius: '10px', padding: '0.9rem' }}>
@@ -2937,14 +2946,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     )}
                   </label>
                   <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    {([1, 2] as const).map(d => (
+                    {allowedDrawers.map(d => (
                       <button
                         key={d}
                         type="button"
                         onClick={() => {
                           if (collectPaymentOrder.hall) return;
                           playClickSound();
-                          setPayDrawer(d);
+                          setPayDrawer(effectiveDrawer(d));
                         }}
                         style={{
                           flex: 1, padding: '0.9rem', borderRadius: '12px', cursor: collectPaymentOrder.hall ? 'not-allowed' : 'pointer',
@@ -3725,8 +3734,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'الخزنة' : 'Drawer'}</label>
                       <select required className="pos-input" value={debtDrawer} onChange={e => setDebtDrawer(Number(e.target.value) as 1 | 2)} style={{ width: '100%', padding: '0.75rem' }}>
-                        <option value={1}>{language === 'ar' ? 'خزنة 1' : 'Drawer 1'}</option>
-                        <option value={2}>{language === 'ar' ? 'خزنة 2' : 'Drawer 2'}</option>
+                        {allowedDrawers.map(d => <option key={d} value={d}>{drawerName(d, settings, language === 'ar')}</option>)}
                       </select>
                     </div>
                     <div>
@@ -3769,8 +3777,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   <input required type="number" min="0.01" step="0.01" className="pos-input" placeholder={language === 'ar' ? 'المبلغ' : 'Amount'} value={depositAmount} onChange={e => setDepositAmount(e.target.value)} />
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     <select required className="pos-input" value={depositDrawer} onChange={e => setDepositDrawer(Number(e.target.value) as 1 | 2)}>
-                      <option value={1}>{language === 'ar' ? 'خزنة 1' : 'Drawer 1'}</option>
-                      <option value={2}>{language === 'ar' ? 'خزنة 2' : 'Drawer 2'}</option>
+                      {allowedDrawers.map(d => <option key={d} value={d}>{drawerName(d, settings, language === 'ar')}</option>)}
                     </select>
                     <select required className="pos-input" value={depositPaymentMethod} onChange={e => setDepositPaymentMethod(e.target.value as any)}>
                     <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
@@ -3802,8 +3809,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     <select required className="pos-input" value={expenseDrawer} onChange={e => setExpenseDrawer(Number(e.target.value) as 1 | 2)}>
-                      <option value={1}>{language === 'ar' ? 'خزنة 1' : 'Drawer 1'}</option>
-                      <option value={2}>{language === 'ar' ? 'خزنة 2' : 'Drawer 2'}</option>
+                      {allowedDrawers.map(d => <option key={d} value={d}>{drawerName(d, settings, language === 'ar')}</option>)}
                     </select>
                     <select required className="pos-input" value={expensePaymentMethod} onChange={e => setExpensePaymentMethod(e.target.value as any)}>
                       <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
