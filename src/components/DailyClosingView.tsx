@@ -27,7 +27,9 @@ const today = () => localDate(new Date());
 
 export default function DailyClosingView({ orders, expenses, language, userName }: Props) {
   const ar = language === 'ar';
-  const [selectedDate, setSelectedDate] = useState(today);
+  // لا تستخدم تاريخ الجهاز كبداية افتراضية؛ يوم التشغيل قد يمتد بعد منتصف الليل.
+  // نقرأ اليوم النشط الذي تم إنشاؤه بعد إغلاق الخزنتين حتى لا تعود الشاشة لليوم السابق بعد refresh.
+  const [selectedDate, setSelectedDate] = useState('');
   const [activeDrawer, setActiveDrawer] = useState<DrawerId>(1);
   const [closing, setClosing] = useState<DailyClosing | null>(null);
   const [counted, setCounted] = useState<Record<string, string>>({});
@@ -104,6 +106,15 @@ export default function DailyClosingView({ orders, expenses, language, userName 
   const fmt = (value: number) => `${n(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ar ? 'ج.م' : 'EGP'}`;
 
   useEffect(() => {
+    let cancelled = false;
+    db.getCurrentOperatingDay().then(state => {
+      if (!cancelled && state?.date) setSelectedDate(state.date);
+    }).catch(error => console.warn('Failed to load current operating day', error));
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedDate) return;
     let cancelled = false;
     setLoading(true);
     db.getDailyClosing(selectedDate).then(found => {
