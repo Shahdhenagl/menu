@@ -20,7 +20,7 @@ import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe, PaymentMethodKey, Partner, Expense, CustomerPayment } from '../types';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import { taxPercentForOrder } from '../utils/tax';
-import { drawerOfHall, drawerName, collectedPaymentParts } from '../utils/shiftClosing';
+import { drawerOfHall, drawerName, collectedPaymentParts, collectedFromOrder, deferredFromOrder } from '../utils/shiftClosing';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
 
 // ألوان الصالات وأنواع الطلبات (نفس ألوان شاشة المطبخ للتناسق)
@@ -68,6 +68,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [lastPlacedOrder, setLastPlacedOrder] = useState<Order | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [productRecipes, setProductRecipes] = useState<ProductRecipe[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
 
   const [view, setView] = useState<PosView>(() => {
     try { 
@@ -364,7 +365,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   }, [view]);
 
   const loadData = async () => {
-    const [cats, prods, users, ords, prnts, sets, custs, emps, atts, invItems, prodRecipes, pts] = await Promise.all([
+    const [cats, prods, users, ords, prnts, sets, custs, emps, atts, invItems, prodRecipes, pts, exps] = await Promise.all([
       db.getCategories(),
       db.getProducts(),
       db.getSystemUsers(),
@@ -376,7 +377,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       db.getAttendanceLogs(),
       db.getInventoryItems(),
       db.getProductRecipes(),
-      db.getPartners()
+      db.getPartners(),
+      db.getExpenses()
     ]);
     setCategories(cats.sort((a, b) => {
       const aBar = a.department === 'bar';
@@ -397,6 +399,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     setAttendanceLogsList(atts);
     setInventoryItems(invItems || []);
     setProductRecipes(prodRecipes || []);
+    setExpenses(exps || []);
     if (cats.length > 0) setActiveCategory(cats[0].id);
   };
 
@@ -890,18 +893,29 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     (summaryOrderTypeFilter === 'all' || o.order_type === summaryOrderTypeFilter)
   );
   const todayCompletedOrders = summaryOrders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality' && o.payment_method !== 'staff');
+  const summaryExpenses = expenses.filter(e => {
+    if (getLocalDayStr(new Date(e.expense_date || e.created_at || '')) !== getLocalDayStr()) return false;
+    if (scopedSummaryFilter.startsWith('drawer:')) return Number(e.drawer || 1) === Number(scopedSummaryFilter.slice(7));
+    if (scopedSummaryFilter.startsWith('hall:')) return drawerOfHall(scopedSummaryFilter.slice(5), settings) === Number(e.drawer || 1);
+    return true;
+  });
+  const summaryExpensesTotal = summaryExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const paymentTotals = payMethods.reduce((acc, method) => ({ ...acc, [method]: 0 }), {} as Record<PayMethod, number>);
   todayCompletedOrders.forEach(order => {
     Object.entries(paymentParts(order)).forEach(([method, amount]) => {
       paymentTotals[method as PayMethod] += Number(amount) || 0;
     });
+    // الآجل لا يدخل في المحصل، لكنه يجب أن يظهر في صف «آجل» حتى تتطابق التقسيمة مع إجمالي الفاتورة.
+    const deferred = deferredFromOrder(order);
+    if (deferred > 0) paymentTotals.deferred += deferred;
   });
   const unpaidTableOrders = summaryOrders.filter(o =>
     o.order_type === 'dine_in' &&
     ['pending', 'preparing', 'prepared', 'delivered'].includes(o.status)
   );
   const unpaidTablesTotal = unpaidTableOrders.reduce((sum, o) => sum + totalForOrder(o), 0);
-  const summaryRevenue = todayCompletedOrders.reduce((sum, o) => sum + (Number(o.total_price) || 0), 0);
+  const summaryRevenue = todayCompletedOrders.reduce((sum, o) => sum + collectedFromOrder(o), 0);
+  const summaryDeferred = todayCompletedOrders.reduce((sum, o) => sum + deferredFromOrder(o), 0);
   const summarySubtotal = todayCompletedOrders.reduce((sum, o) => {
     return sum + o.items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0);
   }, 0);
@@ -955,7 +969,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         <div class="total sub">${ar ? 'إجمالي قبل الضريبة' : 'Total Before Tax'}: ${money(summarySubtotal)}</div>
         <div class="total sub">${ar ? 'إجمالي الضريبة' : 'Total Tax'}: ${money(summaryTax)}</div>
         ${summaryDiscount > 0.001 ? `<div class="total sub" style="color:#d32f2f">${ar ? 'إجمالي الخصم' : 'Total Discount'}: - ${money(summaryDiscount)}</div>` : ''}
-        <div class="total">${ar ? 'إجمالي المحصل النهائي' : 'Final Collected'}: ${money(summaryRevenue)}</div>
+        <div class="total">${ar ? 'إجمالي المحصل الفعلي' : 'Actual Collected'}: ${money(summaryRevenue)}</div>
+        <div class="total sub">${ar ? 'إجمالي الآجل' : 'Deferred Total'}: ${money(summaryDeferred)}</div>
+        <div class="total sub" style="color:#b71c1c">${ar ? 'إجمالي المصروفات' : 'Total Expenses'}: ${money(summaryExpensesTotal)}</div>
         <hr style="margin:16px 0; border:1px solid #eee;" />
         <div class="total sub">${ar ? 'لسه متحصلش من الطاولات' : 'Unpaid table total'}: ${money(unpaidTablesTotal)}</div>
         <h2>${ar ? 'تقسيمة وسائل الدفع' : 'Payment Breakdown'}</h2>
@@ -2835,6 +2851,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.25)' }}>
                     <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'المحصل' : 'Collected'}</span>
                     <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#10b981' }}>{money(summaryRevenue)}</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.25)' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'إجمالي المصروف' : 'Total Expenses'}</span>
+                    <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#ef4444' }}>{money(summaryExpensesTotal)}</div>
                   </div>
                   <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.25)' }}>
                     <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'لسه متحصلش من الطاولات' : 'Unpaid tables'}</span>
