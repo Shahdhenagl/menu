@@ -2491,7 +2491,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                           👨‍🍳 {order.payment_details?.employee_name || (language === 'ar' ? 'استاف' : 'Staff')}
                         </div>
                       ) : (
-                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{order.customer_name}</div>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{partnerForOrder(order)?.name || order.customer_name}</div>
                       )}
                       {order.table_number && order.table_number !== '-' && <div style={{ color: 'var(--text-muted)' }}>Table: {order.table_number}</div>}
                     </div>
@@ -2531,7 +2531,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                                   drawer: undefined,
                                   payment_details: { ...(order.payment_details || {}), type: 'partner', cash_collected: 0 }
                                 }, selectedWaiter?.name);
-                                printCustomerReceipt(partnerOrder || order, language, settings);
+                                const completedPartnerOrder = partnerOrder || order;
+                                printCustomerReceipt({ ...completedPartnerOrder, customer_name: partnerForOrder(completedPartnerOrder)?.name || completedPartnerOrder.customer_name }, language, settings);
                                 loadData();
                               } catch (err) {
                                 console.error(err);
@@ -2546,7 +2547,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               playClickSound();
                               try {
                                 await db.updateOrderStatus(order.id, 'completed', selectedWaiter?.name);
-                                printCustomerReceipt(order, language, settings);
+                                printCustomerReceipt({ ...order, customer_name: partnerForOrder(order)?.name || order.customer_name }, language, settings);
                                 loadData();
                               } catch (err) {
                                 console.error(err);
@@ -2561,7 +2562,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                             <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#a855f7', color: 'var(--text-white)' }} onClick={() => {
                               playClickSound();
                               markCheckPrinted(order.id);
-                              printCustomerReceipt(order, language, settings, { preBill: true });
+                              printCustomerReceipt({ ...order, customer_name: partnerForOrder(order)?.name || order.customer_name }, language, settings, { preBill: true });
                             }}>{language === 'ar' ? 'طباعة الفاتورة' : 'Print Bill'}</button>
                             <button className="pos-btn" style={{ padding: '0.5rem', fontSize: '0.9rem', flex: 1, background: '#2ecc71', color: '#000' }} onClick={() => {
                               setCollectPaymentOrder(order);

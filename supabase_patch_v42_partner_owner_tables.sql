@@ -25,7 +25,8 @@ create index if not exists orders_partner_id_idx on public.orders(partner_id);
 create index if not exists partner_transactions_partner_created_idx
   on public.partner_transactions(partner_id, created_at desc);
 
--- Partner orders are not cashier collections. They are ledger debits.
+-- Partner orders are not cashier collections. They become ledger debits only
+-- after the POS confirms delivery/completion, never when the order is first opened.
 create or replace function public.record_partner_order_debit()
 returns trigger
 language plpgsql
@@ -33,7 +34,10 @@ security definer
 set search_path = public
 as $$
 begin
-  if new.partner_id is not null and coalesce(new.partner_amount_due, 0) > 0 then
+  if new.status = 'completed'
+     and new.partner_id is not null
+     and coalesce(new.partner_amount_due, 0) > 0
+     and (tg_op = 'INSERT' or old.status is distinct from 'completed') then
     insert into public.partner_transactions
       (partner_id, type, amount, description, order_id, hall, table_number, created_at)
     values
@@ -55,7 +59,7 @@ $$;
 
 drop trigger if exists trg_record_partner_order_debit on public.orders;
 create trigger trg_record_partner_order_debit
-after insert on public.orders
+after insert or update of status, partner_id, partner_amount_due on public.orders
 for each row execute function public.record_partner_order_debit();
 
 alter table public.partners enable row level security;
@@ -86,5 +90,13 @@ notify pgrst, 'reload schema';
 -- If an old database has a different orders.id type, remove the two FK columns above and
 -- use the same type as orders.id before rerunning this migration.
 
--- Backfill is intentionally not automatic: existing historical owner orders must be reviewed
--- before creating ledger debits to avoid double counting.
+-- Remove only the automatic debits created too early by the old INSERT-only trigger.
+-- Manual partner transactions and completed-order debits are preserved.
+delete from public.partner_transactions pt
+using public.orders o
+where pt.order_id = o.id
+  and o.partner_id is not null
+  and o.status is distinct from 'completed';
+
+-- Backfill is intentionally not automatic: existing completed owner orders must be reviewed
+-- before creating missing ledger debits to avoid double counting.
