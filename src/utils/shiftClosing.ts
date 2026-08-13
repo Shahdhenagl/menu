@@ -27,17 +27,18 @@ export const drawerName = (id: DrawerId, settings?: RestaurantSettings | null, a
  */
 export const drawerOf = (o: Order, settings?: RestaurantSettings | null): DrawerId => {
   if (o.drawer === 1 || o.drawer === 2) return o.drawer;
-  if (o.hall) {
-    const hall = (settings?.halls || []).find(h => h.name === o.hall);
-    if (hall?.drawer === 1 || hall?.drawer === 2) return hall.drawer;
-  }
+  if (o.hall) return drawerOfHall(o.hall, settings);
   return 1;
 };
 
 /** خزنة الصالة من الإعدادات (وقت إنشاء الأوردر) */
 export const drawerOfHall = (hall: string | null | undefined, settings?: RestaurantSettings | null): DrawerId => {
-  const h = (settings?.halls || []).find(x => x.name === hall);
-  return h?.drawer === 2 ? 2 : 1;
+  const halls = settings?.halls || [];
+  const index = halls.findIndex(x => x.name === hall);
+  const configured = index >= 0 ? halls[index]?.drawer : undefined;
+  if (configured === 1 || configured === 2) return configured;
+  // توافق مع الإعدادات القديمة: الصالة الأولى على خزنة 1 والثانية على خزنة 2.
+  return index === 1 ? 2 : 1;
 };
 
 export const orderTypeLabel = (t: string | undefined, ar: boolean): string => {
