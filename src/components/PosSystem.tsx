@@ -1477,6 +1477,16 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
         /* Responsive Mobile Styles */
         @media (max-width: 768px) {
+          .pos-fullscreen {
+            position: absolute !important;
+            inset: 0 auto auto 0 !important;
+            width: 100vw !important;
+            min-height: 100dvh !important;
+            height: auto !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            touch-action: pan-y;
+          }
           .pos-header {
             padding: 1rem;
           }
@@ -1617,6 +1627,38 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           
           .mobile-only-btn {
             display: block !important;
+          }
+
+          /* The whole POS page scrolls on mobile, including the top controls. */
+          .pos-content {
+            flex: none !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+          }
+          .pos-content > .pos-top-controls + * {
+            flex: none !important;
+            min-height: 0 !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          .pos-dashboard-actions {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 0.55rem !important;
+            width: 100% !important;
+            justify-content: stretch !important;
+          }
+          .pos-dashboard-actions > button {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: none !important;
+            min-height: 48px !important;
+            margin: 0 !important;
+            padding: 0.65rem 0.4rem !important;
+            font-size: 0.82rem !important;
+            line-height: 1.35 !important;
           }
         }
         
@@ -2478,7 +2520,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     </button>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'stretch', gap: '0.65rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <div className="pos-dashboard-actions" style={{ display: 'flex', alignItems: 'stretch', gap: '0.65rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <button className="pos-btn" style={{ minWidth: '120px' }} onClick={() => { setCustomerPhone(''); setCustomerName(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setCart([]); setView('customer_info'); }}>
                     <Plus size={16} style={{ verticalAlign: 'middle', marginInlineEnd: '0.3rem' }} />{t.newOrder}
                   </button>
