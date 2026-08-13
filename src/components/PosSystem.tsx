@@ -364,6 +364,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     setMobileShowCart(false);
   }, [view]);
 
+  useEffect(() => {
+    const departmentCategories = categories.filter(c => (c.department || 'restaurant') === posDepartment);
+    if (departmentCategories.length > 0 && !departmentCategories.some(c => c.id === activeCategory)) {
+      setActiveCategory(departmentCategories[0].id);
+    }
+  }, [posDepartment, categories, activeCategory]);
+
   const loadData = async () => {
     const [cats, prods, users, ords, prnts, sets, custs, emps, atts, invItems, prodRecipes, pts, exps] = await Promise.all([
       db.getCategories(),
@@ -666,16 +673,16 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [productSearchQuery, setProductSearchQuery] = useState('');
 
   const getVisibleProducts = () => {
+    const departmentCategories = categories.filter(c => (c.department || 'restaurant') === posDepartment);
+    const activeCategoryForDepartment = departmentCategories.some(c => c.id === activeCategory) ? activeCategory : null;
     return products.filter(p => {
       if (!p.is_available) return false;
+      if ((p.department || 'restaurant') !== posDepartment) return false;
       if (productSearchQuery.trim()) {
         const query = productSearchQuery.toLowerCase();
-        if (!p.name_ar.toLowerCase().includes(query) && !p.name_en.toLowerCase().includes(query)) {
-          return false;
-        }
-        // If searching, ignore category filter so it searches across all categories
-      } else {
-        if (p.category_id !== activeCategory) return false;
+        if (!p.name_ar.toLowerCase().includes(query) && !p.name_en.toLowerCase().includes(query)) return false;
+      } else if (activeCategoryForDepartment && p.category_id !== activeCategoryForDepartment) {
+        return false;
       }
       if (orderType === 'talabat' && (p.talabat_price === undefined || p.talabat_price === null)) return false;
       return true;
@@ -1539,6 +1546,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           }
           
           /* Menu View on Mobile */
+          .pos-menu-layout {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+          }
           .pos-menu-sidebar {
             width: 100% !important;
             height: auto !important;
@@ -1567,8 +1582,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           }
           
           .pos-products {
-            flex: 1 1 auto !important;
-            min-height: 300px !important;
+            flex: none !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 420px !important;
             padding: 0.75rem !important;
             padding-bottom: 5.5rem !important;
             overflow-y: auto !important;
@@ -1576,6 +1593,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
             grid-template-columns: none !important;
           }
           .pos-product-grid {
+            flex: none !important;
+            min-height: 200px !important;
             display: grid !important;
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             gap: 0.7rem !important;
@@ -2247,7 +2266,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           )}
 
           {view === 'menu' && (
-            <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', display: 'flex', paddingTop: '3.75rem' }}>
+            <motion.div key="menu" className="pos-menu-layout" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', display: 'flex', paddingTop: '3.75rem' }}>
               <div className="pos-menu-sidebar">
                 <div style={{ display: 'flex', padding: '10px', gap: '5px', borderBottom: '1px solid var(--border-color)' }}>
                   <button 
