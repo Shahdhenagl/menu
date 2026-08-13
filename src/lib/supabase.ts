@@ -760,7 +760,13 @@ export const db = {
           .from('expenses')
           .select('*')
           .order('expense_date', { ascending: false });
-        if (!error) return data || [];
+        if (!error) {
+          const remote = (data || []) as Expense[];
+          const local = getLocalData('meridien_expenses', [] as Expense[]);
+          const byId = new Map<string, Expense>();
+          [...remote, ...local].forEach(row => byId.set(row.id, row));
+          return [...byId.values()].sort((a, b) => new Date(b.expense_date || b.created_at || 0).getTime() - new Date(a.expense_date || a.created_at || 0).getTime());
+        }
         console.warn("Supabase fetch expenses error, falling back to local storage:", error.message);
       } catch (err) {
         console.warn("Supabase fetch expenses failed, falling back to local storage.", err);
