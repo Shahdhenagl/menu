@@ -1480,13 +1480,26 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
             padding: 1rem;
           }
           .pos-top-controls {
-            top: 0.45rem; left: 0.5rem; right: 0.5rem;
-            padding: 0.35rem; gap: 0.35rem;
+            position: relative !important;
+            inset: auto !important;
+            width: 100%; box-sizing: border-box;
+            flex: 0 0 auto;
+            padding: 0.35rem;
+            border-radius: 0 0 12px 12px;
           }
-          .pos-top-actions { gap: 0.35rem; }
+          .pos-top-actions {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+          }
+          .pos-top-actions::-webkit-scrollbar { display: none; }
+          .pos-top-actions button,
+          .pos-top-actions > div { flex: 0 0 auto; }
           .pos-top-actions button { padding: 0.45rem 0.65rem !important; font-size: 0.78rem !important; }
           .pos-top-close { flex-basis: 36px !important; width: 36px !important; height: 36px !important; }
-          .pos-content { padding-top: 4.7rem; }
+          .pos-content { padding-top: 0; }
           .pos-header h1 {
             font-size: 1.5rem !important;
           }
