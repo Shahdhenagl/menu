@@ -153,7 +153,8 @@ export default function DailyClosingView({ orders, expenses, language, userName 
       alert(persisted.drawer_1_closed && persisted.drawer_2_closed ? (ar ? 'تم إغلاق الخزنتين وانتهى يوم التشغيل. بدأ يوم جديد تلقائيًا.' : 'Both drawers are closed. The operating day is complete and a new day has started.') : (ar ? `تم إغلاق الخزنة ${activeDrawer}. أغلق الخزنة الأخرى لطباعة التقرير.` : `Drawer ${activeDrawer} closed. Close the other drawer to print the report.`));
     } catch (error) {
       console.error(error);
-      alert(ar ? 'حدث خطأ أثناء حفظ تقفيل الخزنة.' : 'Failed to close the drawer.');
+      const reason = error instanceof Error ? error.message : String(error || 'Unknown error');
+      alert(ar ? `حدث خطأ أثناء حفظ تقفيل الخزنة.\n\nالسبب: ${reason}` : `Failed to close the drawer.\n\nReason: ${reason}`);
     } finally { setSaving(false); }
   };
 

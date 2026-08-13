@@ -213,7 +213,8 @@ export default function ShiftClosingView({
       await printShiftClosing(report, language, settings);
     } catch (err) {
       console.error(err);
-      alert(ar ? 'حصل خطأ أثناء التقفيل.' : 'Failed to close the shift.');
+      const reason = err instanceof Error ? err.message : String(err || 'Unknown error');
+      alert(ar ? `حصل خطأ أثناء التقفيل.\n\nالسبب: ${reason}` : `Failed to close the shift.\n\nReason: ${reason}`);
     } finally {
       setClosing(null);
     }
