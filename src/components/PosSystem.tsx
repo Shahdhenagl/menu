@@ -1518,6 +1518,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
             min-height: 0 !important;
             overflow: hidden !important;
           }
+          .pos-content > .pos-top-controls + * {
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            width: 100% !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+          }
           
           /* Menu View on Mobile */
           .pos-menu-sidebar {
