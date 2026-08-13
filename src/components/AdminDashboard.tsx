@@ -221,6 +221,7 @@ export default function AdminDashboard({
   
   const [showDebtSettleModal, setShowDebtSettleModal] = useState<string | null>(null);
   const [debtSettleMethods, setDebtSettleMethods] = useState({ cash: '', visa: '', wallet: '', instapay: '' });
+  const [debtSettleDrawer, setDebtSettleDrawer] = useState<1 | 2>(1);
   const [isSettlingDebt, setIsSettlingDebt] = useState(false);
 
   const fetchDebtCustomers = async () => {
@@ -4488,7 +4489,7 @@ export default function AdminDashboard({
                           <td style={{ fontWeight: '700' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                               <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--gold-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                {cust.name.trim().charAt(0).toUpperCase()}
+                                {(cust.name || '؟').trim().charAt(0).toUpperCase()}
                               </div>
                               <div>
                                 <div>{cust.name}</div>
@@ -4595,7 +4596,7 @@ export default function AdminDashboard({
                         <td style={{ fontWeight: '700' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                             <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: (cust.total_debt || 0) > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', border: `1px solid ${(cust.total_debt || 0) > 0 ? 'var(--danger)' : 'var(--success)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: (cust.total_debt || 0) > 0 ? 'var(--danger)' : 'var(--success)', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                              {cust.name.trim().charAt(0).toUpperCase()}
+                              {(cust.name || '؟').trim().charAt(0).toUpperCase()}
                             </div>
                             <span>{cust.name}</span>
                           </div>
@@ -4616,6 +4617,7 @@ export default function AdminDashboard({
                             onClick={() => {
                               setShowDebtSettleModal(cust.id);
                               setDebtSettleMethods({ cash: '', visa: '', wallet: '', instapay: '' });
+                              setDebtSettleDrawer(1);
                             }}
                           >
                             <CheckCircle size={14} />
@@ -4664,9 +4666,17 @@ export default function AdminDashboard({
                       <div className="modal-body">
                         <div style={{ background: 'rgba(212,175,55,0.05)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', textAlign: 'center', border: '1px solid rgba(212,175,55,0.2)' }}>
                           <div style={{ fontSize: '0.9rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'العميل' : 'Customer'}</div>
-                          <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{cust.name}</div>
+                          <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{cust.name || 'عميل غير مسمى'}</div>
                           <div style={{ fontSize: '0.85rem', color: 'var(--danger)', marginTop: '0.5rem' }}>{language === 'ar' ? 'المديونية الحالية:' : 'Current Debt:'} <span className="font-en" style={{ fontWeight: 'bold' }}>{(cust.total_debt || 0).toLocaleString()} EGP</span></div>
                         </div>
+
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-gray)' }}>
+                          {language === 'ar' ? 'الخزنة التي استلمت التحصيل' : 'Receiving Drawer'}
+                        </label>
+                        <select className="input-gold" value={debtSettleDrawer} onChange={e => setDebtSettleDrawer(Number(e.target.value) as 1 | 2)} style={{ width: '100%', marginBottom: '1.5rem' }}>
+                          <option value={1}>{language === 'ar' ? 'خزنة 1' : 'Drawer 1'}</option>
+                          <option value={2}>{language === 'ar' ? 'خزنة 2' : 'Drawer 2'}</option>
+                        </select>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                           <div>
@@ -4746,20 +4756,38 @@ export default function AdminDashboard({
                             try {
                               setIsSettlingDebt(true);
                               
-                              if (cashVal > 0) {
-                                await db.addFinancialTransaction({ type: 'debt_settlement', amount: cashVal, from_method: 'deferred', to_method: 'cash', customer_id: cust.id, description: language === 'ar' ? 'تسديد دفعة من المديونية (كاش)' : 'Debt settlement (Cash)' });
-                              }
-                              if (visaVal > 0) {
-                                await db.addFinancialTransaction({ type: 'debt_settlement', amount: visaVal, from_method: 'deferred', to_method: 'visa', customer_id: cust.id, description: language === 'ar' ? 'تسديد دفعة من المديونية (فيزا)' : 'Debt settlement (Visa)' });
-                              }
-                              if (walletVal > 0) {
-                                await db.addFinancialTransaction({ type: 'debt_settlement', amount: walletVal, from_method: 'deferred', to_method: 'wallet', customer_id: cust.id, description: language === 'ar' ? 'تسديد دفعة من المديونية (محفظة)' : 'Debt settlement (Wallet)' });
-                              }
-                              if (instapayVal > 0) {
-                                await db.addFinancialTransaction({ type: 'debt_settlement', amount: instapayVal, from_method: 'deferred', to_method: 'instapay', customer_id: cust.id, description: language === 'ar' ? 'تسديد دفعة من المديونية (إنستاباي)' : 'Debt settlement (Instapay)' });
-                              }
+                              const recordDebtPayment = async (
+                                amount: number,
+                                paymentMethod: 'cash' | 'visa' | 'wallet_restaurant' | 'instapay',
+                                labelAr: string,
+                                labelEn: string,
+                              ) => {
+                                const description = language === 'ar' ? `إيداع سداد مديونية: ${labelAr}` : `Debt deposit: ${labelEn}`;
+                                await db.addCustomerPayment({
+                                  customer_id: cust.id,
+                                  amount,
+                                  payment_method: paymentMethod,
+                                  payment_date: getLocalDayStr(),
+                                  drawer: debtSettleDrawer,
+                                  notes: description,
+                                });
+                                await db.addFinancialTransaction({
+                                  type: 'debt_settlement',
+                                  amount,
+                                  from_method: 'deferred',
+                                  to_method: paymentMethod,
+                                  customer_id: cust.id,
+                                  drawer: debtSettleDrawer,
+                                  description,
+                                });
+                              };
 
-                              await db.updateCustomerDebt(cust.id, remainingDebt);
+                              if (cashVal > 0) await recordDebtPayment(cashVal, 'cash', 'كاش', 'Cash');
+                              if (visaVal > 0) await recordDebtPayment(visaVal, 'visa', 'فيزا', 'Visa');
+                              if (walletVal > 0) await recordDebtPayment(walletVal, 'wallet_restaurant', 'محفظة', 'Wallet');
+                              if (instapayVal > 0) await recordDebtPayment(instapayVal, 'instapay', 'إنستاباي', 'Instapay');
+
+                              await db.updateCustomerDebt(cust.id, Math.max(0, remainingDebt));
                               await fetchDebtCustomers();
                               
                               setShowDebtSettleModal(null);
@@ -8405,7 +8433,7 @@ export default function AdminDashboard({
               <div className="admin-modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
                   <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'rgba(212, 175, 55, 0.15)', border: '2px solid var(--gold-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold-primary)', fontWeight: 'bold', fontSize: '1.2rem' }}>
-                    {cust.name.trim().charAt(0).toUpperCase()}
+                    {(cust.name || '؟').trim().charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <h2 style={{ margin: 0, fontSize: '1.3rem' }}>{cust.name}</h2>
