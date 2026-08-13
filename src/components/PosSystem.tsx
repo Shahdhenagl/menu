@@ -3773,7 +3773,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
                       <option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option>
                       <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
-                      <option value="petty_cash">{language === 'ar' ? 'عهدة نقدية' : 'Petty cash'}</option>
+                      <option value="instapay">{language === 'ar' ? 'إنستا باي' : 'Instapay'}</option>
                     </select>
                   </div>
                   <select required className="pos-input" value={expenseEmployeeId} onChange={e => setExpenseEmployeeId(e.target.value)}>
