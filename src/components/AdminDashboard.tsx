@@ -263,6 +263,7 @@ export default function AdminDashboard({
   const [invFilterMonth, setInvFilterMonth] = useState<string>(() => getLocalMonthStr());
   const [invFilterYear, setInvFilterYear] = useState<number>(() => new Date().getFullYear());
   const [invOrderTypeFilter, setInvOrderTypeFilter] = useState<'all' | 'takeaway' | 'talabat' | 'dine_in' | 'delivery'>('all');
+  const [invHallFilter, setInvHallFilter] = useState<string>('all');
   const [invPaymentFilter, setInvPaymentFilter] = useState<string>('all');
   const [invSearchQuery, setInvSearchQuery] = useState('');
 
@@ -1469,6 +1470,12 @@ export default function AdminDashboard({
     if (!classifyExpenseId) return;
     setLoading(true);
     try {
+      const expenseToClassify = expenses.find(exp => exp.id === classifyExpenseId);
+      if (!expenseToClassify) {
+        alert(language === 'ar' ? 'المصروف غير موجود أو تم تحديثه بالفعل' : 'Expense not found or already updated');
+        setLoading(false);
+        return;
+      }
       if (classifyType === 'general') {
         await db.updateExpense(classifyExpenseId, {
           classification_status: 'general',
@@ -1477,6 +1484,11 @@ export default function AdminDashboard({
       } else if (classifyType === 'inventory_purchase') {
         if (!classifySupplierId || !classifyItemId || classifyQty <= 0 || classifyPrice <= 0) {
           alert(language === 'ar' ? 'يرجى إدخال بيانات الشراء كاملة وصحيحة' : 'Please enter valid purchase details');
+          setLoading(false);
+          return;
+        }
+        if (Math.abs(Number(classifyPrice) - Number(expenseToClassify.amount)) > 0.01) {
+          alert(language === 'ar' ? `إجمالي الشراء يجب أن يساوي مبلغ السحب: ${Number(expenseToClassify.amount).toLocaleString()} جنيه` : `Purchase total must equal the withdrawal amount: ${Number(expenseToClassify.amount).toLocaleString()} EGP`);
           setLoading(false);
           return;
         }
@@ -2397,6 +2409,8 @@ export default function AdminDashboard({
     // Order type filter
     if (invOrderTypeFilter !== 'all' && o.order_type !== invOrderTypeFilter) return false;
 
+    // Hall filter: applies to dine-in invoices and leaves takeaway/delivery excluded when a hall is selected.
+    if (invHallFilter !== 'all' && o.hall !== invHallFilter) return false;
     // Payment method filter
     if (invPaymentFilter !== 'all') {
       if (invPaymentFilter === 'deferred') {
@@ -2440,6 +2454,18 @@ export default function AdminDashboard({
   });
 
   const filteredTotalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const todayExpenseDate = getLocalDayStr();
+  const todayExpenses = expenses.filter(e => e.expense_date === todayExpenseDate);
+  const todayExpensesTotal = todayExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const todayGeneralExpenses = todayExpenses
+    .filter(e => e.classification_status === 'general')
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const todayInventoryExpenses = todayExpenses
+    .filter(e => e.classification_status === 'inventory_purchase')
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const todayPendingExpenses = todayExpenses
+    .filter(e => e.classification_status === 'pending' || !e.classification_status)
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
   // --- SETTINGS ACTIONS ---
   const handleAddPromo = () => {
@@ -4813,6 +4839,13 @@ export default function AdminDashboard({
                   <option value="talabat">{language === 'ar' ? '📱 طلبات' : '📱 Talabat'}</option>
                 </select>
 
+                {/* Hall filter */}
+                <select value={invHallFilter} onChange={(e) => setInvHallFilter(e.target.value)} className="input-gold" style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}>
+                  <option value="all">{language === 'ar' ? 'كل الصالات' : 'All Halls'}</option>
+                  {(halls.length > 0 ? halls : [{ name: 'صالة 1' }, { name: 'صالة 2' }]).map(h => (
+                    <option key={h.name} value={h.name}>{language === 'ar' ? `🏛️ ${h.name}` : `🏛️ ${h.name}`}</option>
+                  ))}
+                </select>
                 {/* Payment method filter */}
                 <select value={invPaymentFilter} onChange={(e) => setInvPaymentFilter(e.target.value)} className="input-gold" style={{ padding: '0.4rem 0.8rem', borderRadius: '10px', fontSize: '0.85rem' }}>
                   <option value="all">{language === 'ar' ? 'كل طرق الدفع' : 'All Payments'}</option>
@@ -5563,6 +5596,37 @@ export default function AdminDashboard({
                     {language === 'ar' ? 'تسجيل مصروف جديد' : 'Record New Expense'}
                   </button>
                 </div>
+              </div>
+
+              {/* Daily Expense Settlement Module */}
+              <div style={{ marginBottom: '1.5rem', padding: '1.25rem', borderRadius: '16px', border: '1px solid rgba(212,175,55,0.35)', background: 'linear-gradient(135deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                  <div>
+                    <h2 style={{ margin: 0, color: 'var(--gold-primary)', fontSize: '1.15rem' }}>{language === 'ar' ? 'تسوية مصروفات اليوم' : 'Today Expense Settlement'}</h2>
+                    <p style={{ margin: '0.35rem 0 0', color: 'var(--text-gray)', fontSize: '0.82rem' }}>{language === 'ar' ? `إجمالي السحوبات المسجلة بتاريخ ${todayExpenseDate}` : `Withdrawals recorded on ${todayExpenseDate}`}</p>
+                  </div>
+                  <span style={{ padding: '0.45rem 0.8rem', borderRadius: '999px', background: todayPendingExpenses === 0 ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.14)', color: todayPendingExpenses === 0 ? '#4ade80' : '#f87171', fontWeight: 800, fontSize: '0.85rem' }}>
+                    {todayPendingExpenses === 0 ? (language === 'ar' ? 'تمت التسوية بالكامل' : 'Fully settled') : (language === 'ar' ? `متبقي للتصنيف: ${todayPendingExpenses.toLocaleString()} جنيه` : `Unclassified: ${todayPendingExpenses.toLocaleString()} EGP`)}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
+                  {[
+                    { label: language === 'ar' ? 'إجمالي مصروفات اليوم' : 'Today total', value: todayExpensesTotal, color: '#f87171' },
+                    { label: language === 'ar' ? 'مصروفات عامة' : 'General expenses', value: todayGeneralExpenses, color: '#60a5fa' },
+                    { label: language === 'ar' ? 'مشتريات مخزون' : 'Inventory purchases', value: todayInventoryExpenses, color: '#fbbf24' },
+                    { label: language === 'ar' ? 'غير مصنف' : 'Unclassified', value: todayPendingExpenses, color: todayPendingExpenses > 0 ? '#f87171' : '#4ade80' }
+                  ].map(card => (
+                    <div key={card.label} style={{ padding: '0.9rem', borderRadius: '12px', background: 'rgba(0,0,0,0.16)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div style={{ color: 'var(--text-gray)', fontSize: '0.78rem', marginBottom: '0.35rem' }}>{card.label}</div>
+                      <strong className="font-en" style={{ color: card.color, fontSize: '1.15rem' }}>{card.value.toLocaleString()} EGP</strong>
+                    </div>
+                  ))}
+                </div>
+                {todayPendingExpenses > 0 && (
+                  <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', borderRadius: '10px', background: 'rgba(239,68,68,0.08)', color: '#fca5a5', fontSize: '0.85rem' }}>
+                    {language === 'ar' ? 'افتح زر «تصنيف» بجانب كل مصروف غير مصنف، واختر مصروفات عامة أو مشتريات مخزون. لا تعتبر التسوية مكتملة إلا عندما يصبح المتبقي صفرًا.' : 'Classify every pending expense as general or inventory purchase. Settlement is complete when the remaining amount reaches zero.'}
+                  </div>
+                )}
               </div>
 
               {/* Periodic Filters Block */}
