@@ -89,6 +89,7 @@ export interface CustomerPayment {
   employee_id?: string;
   employee_name?: string;
   payment_date: string;
+  drawer?: DrawerId;
   created_at?: string;
 }
 
@@ -415,6 +416,16 @@ export interface ShiftClosing {
   order_ids: string[];
   closed_by?: string;
   created_at?: string;
+  /** إجمالي إيداعات العملاء خلال الفترة */
+  deposits: number;
+  /** إجمالي المصروفات المسحوبة خلال الفترة */
+  expenses: number;
+  /** صافي المتوقع = المبيعات + الإيداعات - المصروفات */
+  expectedBalance: number;
+  /** تفصيل الإيداعات حسب وسيلة الدفع */
+  depositsByMethod: ShiftClosingMethod[];
+  /** تفصيل المصروفات حسب وسيلة الدفع */
+  expensesByMethod: ShiftClosingMethod[];
   /** اتحفظ على الجهاز ده بس (الداتا بيز رفضت) — الواجهة بتحذّر */
   __localOnly?: boolean;
 }

@@ -2342,6 +2342,22 @@ export const db = {
     }
   },
 
+  async getCustomerPayments(): Promise<CustomerPayment[]> {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('customer_payments')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error) return (data || []) as CustomerPayment[];
+        console.warn('Supabase fetch customer payments error; falling back locally', error.message);
+      } catch (err) {
+        console.warn('Supabase fetch customer payments failed; falling back locally', err);
+      }
+    }
+    return getLocalData('meridien_customer_payments', [] as CustomerPayment[]);
+  },
+
   async addCustomerPayment(payment: Omit<CustomerPayment, 'id' | 'created_at'>): Promise<CustomerPayment> {
     const newPayment: CustomerPayment = { ...payment, id: crypto.randomUUID(), created_at: new Date().toISOString() };
     if (supabase) {
@@ -2587,7 +2603,15 @@ export const db = {
     };
     if (supabase) {
       try {
-        const payload: any = { ...record };
+        const payload: any = {
+          ...record,
+          expected_balance: record.expectedBalance,
+          deposits_by_method: record.depositsByMethod,
+          expenses_by_method: record.expensesByMethod,
+        };
+        delete payload.expectedBalance;
+        delete payload.depositsByMethod;
+        delete payload.expensesByMethod;
         let res = await (supabase as any).from('shift_closings').insert([payload]).select().single();
         // لو الداتا بيز ناقصها عمود جديد (زي order_types/tax_groups قبل patch v28)
         // نشيله ونعيد المحاولة بدل ما السجل يروح محلي ويختفي عن باقي الأجهزة

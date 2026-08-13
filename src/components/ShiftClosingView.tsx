@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Printer, Lock, RefreshCw } from 'lucide-react';
-import type { Order, Category, Product, RestaurantSettings, ShiftClosing } from '../types';
+import type { Order, Category, Product, RestaurantSettings, ShiftClosing, Expense, CustomerPayment } from '../types';
 import { db } from '../lib/supabase';
 import { printShiftClosing } from '../utils/printUtils';
 import { buildShiftReport, drawerOf, drawerName, DRAWERS } from '../utils/shiftClosing';
@@ -25,6 +25,8 @@ export default function ShiftClosingView({
 }: ShiftClosingViewProps) {
   const ar = language === 'ar';
   const [lastByBucket, setLastByBucket] = useState<Record<string, ShiftClosing>>({});
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -39,13 +41,19 @@ export default function ShiftClosingView({
   const loadLast = useCallback(async () => {
     setLoading(true);
     try {
-      const all = await db.getShiftClosings();
+      const [all, allExpenses, allPayments] = await Promise.all([
+        db.getShiftClosings(),
+        db.getExpenses(),
+        db.getCustomerPayments(),
+      ]);
       const map: Record<string, ShiftClosing> = {};
       all.forEach(c => {
         const prev = map[c.bucket];
         if (!prev || new Date(c.to_at).getTime() > new Date(prev.to_at).getTime()) map[c.bucket] = c;
       });
       setLastByBucket(map);
+      setExpenses(allExpenses);
+      setCustomerPayments(allPayments);
     } finally {
       setLoading(false);
     }
@@ -81,6 +89,30 @@ export default function ShiftClosingView({
     return d;
   }, [lastByBucket, completed, settings]);
 
+  const transactionTime = useCallback((value?: string, fallbackDate?: string): number => {
+    const raw = value || fallbackDate;
+    if (!raw) return 0;
+    const parsed = new Date(raw.includes('T') ? raw : `${raw}T00:00:00`);
+    return parsed.getTime();
+  }, []);
+
+  const openTransactionsOf = useCallback(<T extends { drawer?: 1 | 2; created_at?: string }>(
+    bucket: string,
+    items: T[],
+    fallbackDate: (item: T) => string | undefined,
+    endAt?: Date,
+  ): T[] => {
+    const start = periodStart(bucket).getTime();
+    const end = (endAt || now).getTime();
+    const last = lastByBucket[bucket];
+    return items.filter(item => {
+      const itemDrawer = item.drawer === 2 ? 2 : 1;
+      if (bucketOfDrawer(itemDrawer) !== bucket) return false;
+      const t = transactionTime(item.created_at, fallbackDate(item));
+      return last ? t > start && t <= end : t >= start && t <= end;
+    });
+  }, [lastByBucket, periodStart, now, transactionTime]);
+
   /** أوردرات الفترة المفتوحة: بعد آخر تقفيل ولحد دلوقتي */
   const openOrdersOf = useCallback((bucket: string): Order[] => {
     const start = periodStart(bucket).getTime();
@@ -100,22 +132,26 @@ export default function ShiftClosingView({
     buildShiftReport({
       title: labelOf(bucket),
       orders: bucketOrders,
+      expenses: openTransactionsOf(bucket, expenses, e => e.expense_date, to),
+      customerPayments: openTransactionsOf(bucket, customerPayments, p => p.payment_date, to),
       categories,
       products,
       settings,
       from,
       to,
       ar,
-    }), [categories, products, settings, ar, labelOf]);
+    }), [categories, products, settings, ar, labelOf, expenses, customerPayments, openTransactionsOf]);
 
   const handleClose = async (bucket: string) => {
     const bucketOrders = openOrdersOf(bucket);
-    if (bucketOrders.length === 0) {
-      alert(ar ? 'مفيش أوردرات جديدة من آخر تقفيل.' : 'No new orders since the last closing.');
-      return;
-    }
     const from = periodStart(bucket);
     const to = new Date();
+    const bucketExpenses = openTransactionsOf(bucket, expenses, e => e.expense_date, to);
+    const bucketPayments = openTransactionsOf(bucket, customerPayments, p => p.payment_date, to);
+    if (bucketOrders.length === 0 && bucketExpenses.length === 0 && bucketPayments.length === 0) {
+      alert(ar ? 'مفيش حركة جديدة من آخر تقفيل.' : 'No new activity since the last closing.');
+      return;
+    }
     const label = labelOf(bucket);
     const ok = window.confirm(
       ar
@@ -138,6 +174,11 @@ export default function ShiftClosingView({
         tax: report.tax,
         discount: report.discount,
         collected: report.collected,
+        deposits: report.deposits,
+        expenses: report.expenses,
+        expectedBalance: report.expectedBalance,
+        depositsByMethod: report.depositsByMethod,
+        expensesByMethod: report.expensesByMethod,
         methods: report.methodsRaw,
         order_types: report.orderTypes,
         tax_groups: report.taxGroups,
@@ -162,7 +203,7 @@ export default function ShiftClosingView({
 
   const handlePreview = (bucket: string) => {
     const bucketOrders = openOrdersOf(bucket);
-    const report = buildReport(bucket, bucketOrders, periodStart(bucket), new Date());
+    const report = buildReport(bucket, bucketOrders, periodStart(bucket), now);
     printShiftClosing({ ...report, title: report.title + (ar ? ' (معاينة)' : ' (Preview)') }, language, settings);
   };
 
@@ -172,7 +213,7 @@ export default function ShiftClosingView({
     return { bucket, bucketOrders, report, last: lastByBucket[bucket] };
   });
 
-  const totalOpen = rows.reduce((s, r) => s + r.report.collected, 0);
+  const totalOpen = rows.reduce((s, r) => s + r.report.expectedBalance, 0);
 
   return (
     <div style={{ background: 'var(--bg-darker)', borderRadius: '12px', padding: '1.5rem', border: '1px solid var(--border-color)' }}>
@@ -201,7 +242,8 @@ export default function ShiftClosingView({
                 <th style={{ textAlign: 'center', padding: '0.6rem 0.5rem' }}>{ar ? 'أوردرات' : 'Orders'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'قبل الضريبة' : 'Before tax'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'الضريبة' : 'Tax'}</th>
-                <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'المحصل' : 'Collected'}</th>
+                <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'المبيعات' : 'Sales'}</th>
+                <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'المتوقع' : 'Expected'}</th>
                 <th style={{ textAlign: 'center', padding: '0.6rem 0.5rem' }}>{ar ? 'إجراء' : 'Action'}</th>
               </tr>
             </thead>
@@ -221,16 +263,20 @@ export default function ShiftClosingView({
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: 'var(--text-light)' }}>{fmt(report.subtotal)}</td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#f59e0b' }}>{fmt(report.tax)}</td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#10b981', fontWeight: 800 }}>{fmt(report.collected)}</td>
+                  <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: 'var(--gold-primary)', fontWeight: 900 }}>
+                    <div>{fmt(report.expectedBalance)}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-gray)', fontWeight: 500 }}>+{fmt(report.deposits)} / -{fmt(report.expenses)}</div>
+                  </td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <button className="btn-gold outline" style={{ padding: '0.4rem 0.7rem', fontSize: '0.8rem' }}
-                        disabled={bucketOrders.length === 0}
+                        disabled={bucketOrders.length === 0 && report.deposits === 0 && report.expenses === 0}
                         onClick={() => handlePreview(bucket)}
                         title={ar ? 'طباعة من غير تقفيل' : 'Print without closing'}>
                         <Printer size={14} /> {ar ? 'معاينة' : 'Preview'}
                       </button>
                       <button className="btn-gold" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-                        disabled={bucketOrders.length === 0 || closing === bucket}
+                        disabled={(bucketOrders.length === 0 && report.deposits === 0 && report.expenses === 0) || closing === bucket}
                         onClick={() => handleClose(bucket)}>
                         <Lock size={14} /> {closing === bucket ? (ar ? 'جاري…' : 'Closing…') : (ar ? 'تقفيل وطباعة' : 'Close & print')}
                       </button>
@@ -246,8 +292,8 @@ export default function ShiftClosingView({
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid var(--gold-primary)' }}>
-                <td colSpan={5} style={{ padding: '0.7rem 0.5rem', fontWeight: 800, color: 'var(--text-light)' }}>
-                  {ar ? 'إجمالي المفتوح (غير مقفول)' : 'Total open (not closed)'}
+                <td colSpan={6} style={{ padding: '0.7rem 0.5rem', fontWeight: 800, color: 'var(--text-light)' }}>
+                  {ar ? 'إجمالي المتوقع المفتوح (غير مقفول)' : 'Total expected open balance'}
                 </td>
                 <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', fontWeight: 900, color: 'var(--gold-primary)' }}>{fmt(totalOpen)}</td>
                 <td />

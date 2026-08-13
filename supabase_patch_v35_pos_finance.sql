@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS customer_payments (
   employee_id UUID,
   employee_name TEXT,
   payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  drawer SMALLINT CHECK (drawer IN (1, 2)),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -34,6 +35,7 @@ ALTER TABLE expenses ADD COLUMN IF NOT EXISTS employee_id UUID;
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS employee_name TEXT;
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS drawer SMALLINT;
+ALTER TABLE customer_payments ADD COLUMN IF NOT EXISTS drawer SMALLINT;
 
 CREATE INDEX IF NOT EXISTS idx_expenses_source_classification
   ON expenses (source, classification_status, expense_date DESC);

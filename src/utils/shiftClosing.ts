@@ -1,5 +1,5 @@
 import type {
-  Order, Category, Product, RestaurantSettings, DrawerId,
+  Order, Category, Product, RestaurantSettings, DrawerId, Expense, CustomerPayment,
   ShiftClosingCategory, ShiftClosingMethod, ShiftClosingTypeRow, ShiftClosingTaxRow,
 } from '../types';
 import type { ShiftClosingReport } from './printUtils';
@@ -79,10 +79,12 @@ export type BuiltShiftReport = ShiftClosingReport & {
  * تجميع الضرائب حسب النسبة، والأصناف المباعة مرتبة حسب التصنيف.
  */
 export const buildShiftReport = ({
-  title, orders, categories, products, settings, from, to, ar,
+  title, orders, expenses = [], customerPayments = [], categories, products, settings, from, to, ar,
 }: {
   title: string;
   orders: Order[];
+  expenses?: Expense[];
+  customerPayments?: CustomerPayment[];
   categories: Category[];
   products: Product[];
   settings?: RestaurantSettings | null;
@@ -98,6 +100,9 @@ export const buildShiftReport = ({
     return s + (base * (percent / 100));
   }, 0);
   const discount = Math.max(0, subtotal + tax - collected);
+  const deposits = customerPayments.reduce((s, p) => s + num(p.amount), 0);
+  const expensesTotal = expenses.reduce((s, e) => s + num(e.amount), 0);
+  const expectedBalance = collected + deposits - expensesTotal;
 
   // ===== تقسيم التحصيل على وسائل الدفع (مع دعم الدفع المقسم) =====
   const byMethod: Record<string, number> = {};
@@ -120,6 +125,26 @@ export const buildShiftReport = ({
   const methodsRaw: ShiftClosingMethod[] = METHOD_KEYS
     .filter(m => Math.abs(byMethod[m]) > 0.001)
     .map(m => ({ method: m, label: methodLabel(m, ar), amount: byMethod[m] }));
+
+  const byDepositMethod: Record<string, number> = {};
+  const byExpenseMethod: Record<string, number> = {};
+  METHOD_KEYS.forEach(m => { byDepositMethod[m] = 0; byExpenseMethod[m] = 0; });
+  customerPayments.forEach(p => {
+    const m = p.payment_method || 'cash';
+    if (byDepositMethod[m] !== undefined) byDepositMethod[m] += num(p.amount);
+    else byDepositMethod.cash += num(p.amount);
+  });
+  expenses.forEach(e => {
+    const m = e.payment_method || 'cash';
+    if (byExpenseMethod[m] !== undefined) byExpenseMethod[m] += num(e.amount);
+    else byExpenseMethod.cash += num(e.amount);
+  });
+  const depositsByMethod = METHOD_KEYS
+    .filter(m => Math.abs(byDepositMethod[m]) > 0.001)
+    .map(m => ({ method: m, label: methodLabel(m, ar), amount: byDepositMethod[m] }));
+  const expensesByMethod = METHOD_KEYS
+    .filter(m => Math.abs(byExpenseMethod[m]) > 0.001)
+    .map(m => ({ method: m, label: methodLabel(m, ar), amount: byExpenseMethod[m] }));
 
   // ===== التفصيل حسب نوع الطلب =====
   const typeMap = new Map<string, ShiftClosingTypeRow>();
@@ -202,6 +227,11 @@ export const buildShiftReport = ({
     tax,
     discount,
     collected,
+    deposits,
+    expenses: expensesTotal,
+    expectedBalance,
+    depositsByMethod,
+    expensesByMethod,
     itemsCount,
     methods: methodsRaw.map(m => ({ label: m.label, amount: m.amount })),
     orderTypes,

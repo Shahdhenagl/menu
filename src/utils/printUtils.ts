@@ -496,6 +496,11 @@ export type ShiftClosingReport = {
   tax: number;
   discount: number;
   collected: number;    // إجمالي المحصل بالضريبة
+  deposits: number;
+  expenses: number;
+  expectedBalance: number;
+  depositsByMethod: { method: string; label: string; amount: number }[];
+  expensesByMethod: { method: string; label: string; amount: number }[];
   itemsCount: number;
   methods: { label: string; amount: number }[];
   /** تفصيل حسب نوع الطلب */
@@ -518,6 +523,12 @@ export const printShiftClosing = async (
   const methodRows = report.methods.filter(m => Math.abs(m.amount) > 0.001).map(m => `
     <div class="row"><span>${m.label}</span><span class="v">${money(m.amount)}</span></div>`).join('')
     || `<div class="row empty">${isAr ? 'لا يوجد تحصيل' : 'Nothing collected'}</div>`;
+  const depositRows = report.depositsByMethod.filter(m => Math.abs(m.amount) > 0.001).map(m => `
+    <div class="row"><span>${m.label}</span><span class="v">+ ${money(m.amount)}</span></div>`).join('')
+    || `<div class="row empty">${isAr ? 'لا يوجد إيداعات' : 'No deposits'}</div>`;
+  const expenseRows = report.expensesByMethod.filter(m => Math.abs(m.amount) > 0.001).map(m => `
+    <div class="row"><span>${m.label}</span><span class="v">- ${money(m.amount)}</span></div>`).join('')
+    || `<div class="row empty">${isAr ? 'لا يوجد مصروفات' : 'No expenses'}</div>`;
 
   // تفصيل حسب نوع الطلب — كل نوع بإجماليه وضريبته
   const typeRows = report.orderTypes.map(t => `
@@ -605,6 +616,16 @@ export const printShiftClosing = async (
       ${methodRows}
       <div class="row" style="border-top:1px solid #000; font-weight:900;">
         <span>${isAr ? 'إجمالي المحصل' : 'Total collected'}</span><span class="v">${money(report.collected)}</span>
+      </div>
+
+      <div class="sec">${isAr ? 'الإيداعات والمصروفات' : 'DEPOSITS & EXPENSES'}</div>
+      <div class="row"><span>${isAr ? 'إيداعات العملاء' : 'Customer deposits'}</span><span class="v">+ ${money(report.deposits)}</span></div>
+      ${depositRows}
+      <div class="row" style="border-top:1px solid #000; font-weight:900;"><span>${isAr ? 'المصروفات الخارجة' : 'Expenses paid out'}</span><span class="v">- ${money(report.expenses)}</span></div>
+      ${expenseRows}
+      <div class="total" style="margin-top:6px;">
+        <span class="lbl">${isAr ? 'الرصيد المتوقع بالخزنة' : 'Expected drawer balance'}</span>
+        <span class="val">${money(report.expectedBalance)} ${isAr ? 'ج.م' : 'EGP'}</span>
       </div>
 
       <div class="sec">${isAr ? 'حسب نوع الطلب' : 'BY ORDER TYPE'}</div>

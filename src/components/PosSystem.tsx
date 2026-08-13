@@ -285,11 +285,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [debtCustomerId, setDebtCustomerId] = useState<string>('');
   const [debtAmount, setDebtAmount] = useState<string>('');
   const [debtPaymentMethod, setDebtPaymentMethod] = useState<PaymentMethodKey>('cash');
+  const [debtDrawer, setDebtDrawer] = useState<1 | 2>(1);
   const [debtNotes, setDebtNotes] = useState<string>('');
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const [depositCustomerId, setDepositCustomerId] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   const [depositPaymentMethod, setDepositPaymentMethod] = useState<Exclude<PaymentMethodKey, 'deferred' | 'petty_cash'>>('cash');
+  const [depositDrawer, setDepositDrawer] = useState<1 | 2>(1);
   const [depositNotes, setDepositNotes] = useState('');
   const [depositSaving, setDepositSaving] = useState(false);
   
@@ -1225,15 +1227,33 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
   const handleDebtSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!debtCustomerId || !debtAmount || isNaN(Number(debtAmount))) {
+    const amount = Number(debtAmount);
+    const customer = customers.find(c => c.id === debtCustomerId);
+    if (!customer || !amount || isNaN(amount) || amount <= 0) {
       alert(language === 'ar' ? 'الرجاء إدخال العميل والمبلغ بشكل صحيح' : 'Please enter customer and valid amount');
       return;
     }
+    if (amount > Number(customer.total_debt || 0)) {
+      alert(language === 'ar' ? 'مبلغ السداد أكبر من مديونية العميل' : 'Settlement cannot exceed the customer debt');
+      return;
+    }
     try {
+      await db.updateCustomerDebt(customer.id, Math.max(0, Number(customer.total_debt || 0) - amount));
+      await db.addCustomerPayment({
+        customer_id: customer.id,
+        amount,
+        payment_method: debtPaymentMethod as any,
+        notes: debtNotes || 'تسديد مديونية من نقطة البيع',
+        employee_id: selectedWaiter?.id,
+        employee_name: selectedWaiter?.name,
+        payment_date: getLocalDayStr(),
+        drawer: debtDrawer,
+      });
       await db.addFinancialTransaction({
         type: 'debt_settlement',
-        amount: Number(debtAmount),
+        amount,
         to_method: debtPaymentMethod,
+        drawer: debtDrawer,
         customer_id: debtCustomerId,
         description: debtNotes || 'تسديد مديونية من نقطة البيع'
       });
@@ -1243,6 +1263,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       setDebtAmount('');
       setDebtNotes('');
       setDebtPaymentMethod('cash');
+      setDebtDrawer(1);
       loadData();
     } catch (err) {
       console.error(err);
@@ -1273,12 +1294,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         notes: depositNotes || 'إيداع/تحصيل من حساب العميل',
         employee_id: selectedWaiter?.id,
         employee_name: selectedWaiter?.name,
-        payment_date: getLocalDayStr()
+        payment_date: getLocalDayStr(),
+        drawer: depositDrawer,
       });
-      await db.addFinancialTransaction({ type: 'debt_settlement', amount, to_method: depositPaymentMethod, customer_id: customer.id, description: depositNotes || `إيداع للعميل ${customer.name}` });
+      await db.addFinancialTransaction({ type: 'debt_settlement', amount, to_method: depositPaymentMethod, drawer: depositDrawer, customer_id: customer.id, description: depositNotes || `إيداع للعميل ${customer.name}` });
       alert(language === 'ar' ? 'تم تسجيل الإيداع وتحديث حساب العميل' : 'Deposit recorded and customer account updated');
       setDepositModalOpen(false);
-      setDepositCustomerId(''); setDepositAmount(''); setDepositNotes(''); setDepositPaymentMethod('cash');
+      setDepositCustomerId(''); setDepositAmount(''); setDepositNotes(''); setDepositPaymentMethod('cash'); setDepositDrawer(1);
       loadData();
     } catch (err) {
       console.error(err);
@@ -3699,7 +3721,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'المبلغ' : 'Amount'}</label>
                     <input required type="number" step="0.01" className="pos-input" value={debtAmount} onChange={(e) => setDebtAmount(e.target.value)} style={{ width: '100%', padding: '0.75rem' }} />
                   </div>
-                  <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'الخزنة' : 'Drawer'}</label>
+                      <select required className="pos-input" value={debtDrawer} onChange={e => setDebtDrawer(Number(e.target.value) as 1 | 2)} style={{ width: '100%', padding: '0.75rem' }}>
+                        <option value={1}>{language === 'ar' ? 'خزنة 1' : 'Drawer 1'}</option>
+                        <option value={2}>{language === 'ar' ? 'خزنة 2' : 'Drawer 2'}</option>
+                      </select>
+                    </div>
+                    <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</label>
                     <select required className="pos-input" value={debtPaymentMethod} onChange={(e) => setDebtPaymentMethod(e.target.value as any)} style={{ width: '100%', padding: '0.75rem' }}>
                       <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
@@ -3708,6 +3738,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
                       <option value="instapay">{language === 'ar' ? 'انستاباي' : 'Instapay'}</option>
                     </select>
+                    </div>
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'ملاحظات' : 'Notes'}</label>
@@ -3736,13 +3767,19 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     {customers.filter(c => Number(c.total_debt || 0) > 0).map(c => <option key={c.id} value={c.id}>{c.name} — {Number(c.total_debt || 0).toFixed(2)} EGP</option>)}
                   </select>
                   <input required type="number" min="0.01" step="0.01" className="pos-input" placeholder={language === 'ar' ? 'المبلغ' : 'Amount'} value={depositAmount} onChange={e => setDepositAmount(e.target.value)} />
-                  <select required className="pos-input" value={depositPaymentMethod} onChange={e => setDepositPaymentMethod(e.target.value as any)}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <select required className="pos-input" value={depositDrawer} onChange={e => setDepositDrawer(Number(e.target.value) as 1 | 2)}>
+                      <option value={1}>{language === 'ar' ? 'خزنة 1' : 'Drawer 1'}</option>
+                      <option value={2}>{language === 'ar' ? 'خزنة 2' : 'Drawer 2'}</option>
+                    </select>
+                    <select required className="pos-input" value={depositPaymentMethod} onChange={e => setDepositPaymentMethod(e.target.value as any)}>
                     <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
                     <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
                     <option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option>
                     <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
                     <option value="instapay">Instapay</option>
-                  </select>
+                    </select>
+                  </div>
                   <textarea className="pos-input" placeholder={language === 'ar' ? 'ملاحظة اختيارية' : 'Optional note'} value={depositNotes} onChange={e => setDepositNotes(e.target.value)} />
                   <div style={{ display: 'flex', gap: '1rem' }}>
                     <button disabled={depositSaving} type="submit" className="pos-btn" style={{ flex: 1 }}>{depositSaving ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'تسجيل الإيداع' : 'Record Deposit')}</button>
