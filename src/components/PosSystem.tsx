@@ -1554,6 +1554,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
             min-height: 0 !important;
             overflow: visible !important;
           }
+          .pos-content > .pos-menu-layout {
+            flex: 0 0 auto !important;
+            overflow: visible !important;
+          }
           .pos-menu-sidebar {
             width: 100% !important;
             height: auto !important;
@@ -1582,19 +1586,24 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           }
           
           .pos-products {
-            flex: none !important;
+            flex: 0 0 auto !important;
             width: 100% !important;
-            height: auto !important;
-            min-height: 420px !important;
+            height: calc(100dvh - 260px) !important;
+            max-height: calc(100dvh - 260px) !important;
+            min-height: 260px !important;
+            box-sizing: border-box !important;
             padding: 0.75rem !important;
             padding-bottom: 5.5rem !important;
-            overflow-y: auto !important;
+            overflow-y: scroll !important;
             overflow-x: hidden !important;
+            -webkit-overflow-scrolling: touch !important;
+            overscroll-behavior-y: contain !important;
+            touch-action: pan-y !important;
             grid-template-columns: none !important;
           }
           .pos-product-grid {
             flex: none !important;
-            min-height: 200px !important;
+            min-height: 0 !important;
             display: grid !important;
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
             gap: 0.7rem !important;
