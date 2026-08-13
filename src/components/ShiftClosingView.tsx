@@ -262,7 +262,8 @@ export default function ShiftClosingView({
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'قبل الضريبة' : 'Before tax'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'الضريبة' : 'Tax'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'المبيعات' : 'Sales'}</th>
-                <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'المتوقع' : 'Expected'}</th>
+                <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'المصروفات' : 'Expenses'}</th>
+                <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'صافي الخزنة' : 'Net drawer'}</th>
                 <th style={{ textAlign: 'center', padding: '0.6rem 0.5rem' }}>{ar ? 'إجراء' : 'Action'}</th>
               </tr>
             </thead>
@@ -289,9 +290,15 @@ export default function ShiftClosingView({
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: 'var(--text-light)' }}>{fmt(report.subtotal)}</td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#f59e0b' }}>{fmt(report.tax)}</td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#10b981', fontWeight: 800 }}>{fmt(report.collected)}</td>
+                  <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#ef4444', fontWeight: 800 }}>
+                    <div>- {fmt(report.expenses)}</div>
+                    {report.expensesByMethod?.filter(m => Math.abs(m.amount) > 0.001).map(m => (
+                      <div key={m.method} style={{ fontSize: '0.68rem', color: 'var(--text-gray)', fontWeight: 500 }}>{m.label}: {fmt(m.amount)}</div>
+                    ))}
+                  </td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: 'var(--gold-primary)', fontWeight: 900 }}>
                     <div>{fmt(report.expectedBalance)}</div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-gray)', fontWeight: 500 }}>+{fmt(report.deposits)} / -{fmt(report.expenses)}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-gray)', fontWeight: 500 }}>تحصيل + إيداعات - مصروفات</div>
                   </td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -311,14 +318,14 @@ export default function ShiftClosingView({
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-gray)' }}>
+                <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-gray)' }}>
                   {ar ? 'مفيش صالات أو مبيعات' : 'No halls or sales'}
                 </td></tr>
               )}
             </tbody>
             <tfoot>
               <tr style={{ borderTop: '2px solid var(--gold-primary)' }}>
-                <td colSpan={6} style={{ padding: '0.7rem 0.5rem', fontWeight: 800, color: 'var(--text-light)' }}>
+                <td colSpan={7} style={{ padding: '0.7rem 0.5rem', fontWeight: 800, color: 'var(--text-light)' }}>
                   {ar ? 'إجمالي المتوقع المفتوح (غير مقفول)' : 'Total expected open balance'}
                 </td>
                 <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', fontWeight: 900, color: 'var(--gold-primary)' }}>{fmt(totalOpen)}</td>
