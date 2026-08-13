@@ -12,7 +12,7 @@
   "background_color": "#09090a",
   "icons": [
     {
-      "src": "/meridien-icon.png",
+      "src": "/meridien-icon-v2.png",
       "sizes": "584x571",
       "type": "image/png",
       "purpose": "any maskable"

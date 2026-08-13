@@ -1397,6 +1397,20 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           flex: 1; min-height: 0; min-width: 0; display: flex; position: relative; overflow: hidden;
           overscroll-behavior: contain;
         }
+        .pos-top-controls {
+          position: absolute; top: 0.65rem; left: 0.75rem; right: 0.75rem;
+          display: flex; justify-content: space-between; align-items: flex-start;
+          gap: 0.5rem; z-index: 100; padding: 0.4rem;
+          background: rgba(9, 9, 10, 0.92); border: 1px solid rgba(212, 175, 55, 0.28);
+          border-radius: 12px; backdrop-filter: blur(8px);
+        }
+        .pos-top-actions {
+          display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+          min-width: 0; flex: 1;
+        }
+        .pos-top-actions button { white-space: nowrap; min-height: 38px; }
+        .pos-top-close { flex: 0 0 40px; }
+        .pos-content > .pos-top-controls + * { min-width: 0; }
         .pos-btn {
           background: linear-gradient(45deg, var(--gold-dark), var(--gold-primary));
           color: #000; border: none; padding: 1rem 2rem; border-radius: 12px;
@@ -1465,6 +1479,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           .pos-header {
             padding: 1rem;
           }
+          .pos-top-controls {
+            top: 0.45rem; left: 0.5rem; right: 0.5rem;
+            padding: 0.35rem; gap: 0.35rem;
+          }
+          .pos-top-actions { gap: 0.35rem; }
+          .pos-top-actions button { padding: 0.45rem 0.65rem !important; font-size: 0.78rem !important; }
+          .pos-top-close { flex-basis: 36px !important; width: 36px !important; height: 36px !important; }
+          .pos-content { padding-top: 4.7rem; }
           .pos-header h1 {
             font-size: 1.5rem !important;
           }
@@ -1612,8 +1634,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       <div className={`pos-content ${mobileShowCart && view === 'menu' ? 'show-mobile-cart' : ''}`} dir={language === 'ar' ? 'rtl' : 'ltr'}>
         
         {/* Top Floating Controls */}
-        <div style={{ position: 'absolute', top: '1rem', left: '1rem', right: '1rem', display: 'flex', justifyContent: 'space-between', zIndex: 100 }}>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div className="pos-top-controls">
+          <div className="pos-top-actions">
             {view === 'menu' && (
               <button
                 onClick={() => { if (selectedWaiter || role === 'waiter') setView('waiter_dashboard'); else setView('customer_info'); }}
@@ -1735,7 +1757,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               </div>
             )}
           </div>
-          <button onClick={handleClose} style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', color: 'var(--text-white)', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px' }}>
+          <button className="pos-top-close" onClick={handleClose} style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', color: 'var(--text-white)', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px' }}>
             <X size={24} />
           </button>
         </div>
