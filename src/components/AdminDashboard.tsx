@@ -2665,30 +2665,41 @@ export default function AdminDashboard({
     }
   });
 
-  const leastSoldProductsReport = Object.values(allProductsSalesMap)
+  const salesProducts = Object.values(allProductsSalesMap);
+  const leastSoldProductsReport = salesProducts
     .sort((a, b) => a.quantity - b.quantity) // Ascending order (least sold first)
     .slice(0, 5);
+  const topSoldProductsReport = salesProducts
+    .filter(product => product.quantity > 0)
+    .sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue)
+    .slice(0, 10);
 
   // Payment Methods Breakdown (Total Revenue vs Total Expenses)
   const paymentMethodsStats: Record<string, { revenue: number, expenses: number, net: number }> = {
     cash: { revenue: 0, expenses: 0, net: 0 },
     visa: { revenue: 0, expenses: 0, net: 0 },
     wallet_restaurant: { revenue: 0, expenses: 0, net: 0 },
+    wallet_cafe: { revenue: 0, expenses: 0, net: 0 },
     instapay: { revenue: 0, expenses: 0, net: 0 },
     petty_cash: { revenue: 0, expenses: 0, net: 0 }
-
   };
 
   analyticsFilteredOrders.forEach(order => {
-    if (order.status.startsWith('completed')) {
-      const parts = order.status.split('_');
-      const method = parts[1] as string;
-      if (method && paymentMethodsStats[method]) {
-        paymentMethodsStats[method].revenue += order.total_price;
-      } else {
-        // Fallback to cash if completed status doesn't specify a method
-        paymentMethodsStats.cash.revenue += order.total_price;
-      }
+    if (!order.status.startsWith('completed')) return;
+    const details = order.payment_details || {};
+    if (order.payment_method === 'split' && details) {
+      (Object.keys(paymentMethodsStats) as string[]).forEach(method => {
+        const amount = Number(details[method as keyof typeof details]) || 0;
+        paymentMethodsStats[method].revenue += Math.max(0, amount);
+      });
+      return;
+    }
+    const statusMethod = order.status.split('_')[1] as string;
+    const method = order.payment_method || statusMethod || 'cash';
+    if (paymentMethodsStats[method]) {
+      paymentMethodsStats[method].revenue += Number(order.total_price) || 0;
+    } else {
+      paymentMethodsStats.cash.revenue += Number(order.total_price) || 0;
     }
   });
 
@@ -3818,8 +3829,8 @@ export default function AdminDashboard({
                   <tbody>
                     {(Object.keys(paymentMethodsStats) as Array<keyof typeof paymentMethodsStats>).map((method) => {
                       const stats = paymentMethodsStats[method];
-                      const methodNameAr = method === 'cash' ? '💵 كاش (نقدي)' : method === 'visa' ? '💳 فيزا (بطاقة)' : method === 'wallet_restaurant' ? '📱 محفظة المطعم' : method === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
-                      const methodNameEn = method === 'cash' ? 'Cash' : method === 'visa' ? 'Visa / Card' : method === 'wallet_restaurant' ? 'Cafe Wallet' : method === 'petty_cash' ? 'Petty Cash' : 'InstaPay';
+                      const methodNameAr = method === 'cash' ? '💵 كاش (نقدي)' : method === 'visa' ? '💳 فيزا (بطاقة)' : method === 'wallet_restaurant' ? '📱 محفظة المطعم' : method === 'wallet_cafe' ? '☕ محفظة الكافيه' : method === 'petty_cash' ? '💼 عهدة' : '⚡ إنستا باي';
+                      const methodNameEn = method === 'cash' ? 'Cash' : method === 'visa' ? 'Visa / Card' : method === 'wallet_restaurant' ? 'Restaurant Wallet' : method === 'wallet_cafe' ? 'Cafe Wallet' : method === 'petty_cash' ? 'Petty Cash' : 'InstaPay';
 
                       return (
                         <tr key={method}>
@@ -3837,6 +3848,28 @@ export default function AdminDashboard({
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Top Sold Products Table */}
+            <div className="table-panel" style={{ marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.25rem', color: 'var(--success)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                🏆 {language === 'ar' ? 'المنتجات الأعلى مبيعًا' : 'Top Selling Products'}
+              </h2>
+              <div className="table-wrapper">
+                <table className="luxury-table">
+                  <thead><tr><th>{language === 'ar' ? 'الترتيب' : 'Rank'}</th><th>{language === 'ar' ? 'المنتج' : 'Product'}</th><th>{language === 'ar' ? 'الكمية المباعة' : 'Units Sold'}</th><th>{language === 'ar' ? 'إجمالي قيمة المبيعات' : 'Total Revenue'}</th></tr></thead>
+                  <tbody>
+                    {topSoldProductsReport.length ? topSoldProductsReport.map((prod, idx) => (
+                      <tr key={prod.id}>
+                        <td className="font-en" style={{ fontWeight: 800, color: idx < 3 ? 'var(--gold-primary)' : 'var(--text-muted)' }}>#{idx + 1}</td>
+                        <td style={{ fontWeight: 700, color: 'var(--text-white)' }}>{language === 'ar' ? prod.name_ar : prod.name_en}</td>
+                        <td className="font-en" style={{ fontWeight: 800, color: 'var(--success)' }}>{prod.quantity}</td>
+                        <td className="font-en" style={{ color: 'var(--gold-primary)' }}>{prod.revenue.toLocaleString()} EGP</td>
+                      </tr>
+                    )) : <tr><td colSpan={4}>{language === 'ar' ? 'لا توجد مبيعات في الفترة المحددة' : 'No sales in the selected period'}</td></tr>}
                   </tbody>
                 </table>
               </div>
