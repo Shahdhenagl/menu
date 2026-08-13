@@ -128,6 +128,11 @@ export default function ShiftClosingView({
     });
   }, [completed, lastByBucket, periodStart, settings]);
 
+  const openOrdersOfBucket = useCallback((bucket: string): Order[] => {
+    const openStatuses = new Set(['pending', 'preparing', 'prepared', 'delivered']);
+    return orders.filter(o => openStatuses.has(o.status) && bucketOfDrawer(drawerOf(o, settings)) === bucket);
+  }, [orders, settings]);
+
   const buildReport = useCallback((bucket: string, bucketOrders: Order[], from: Date, to: Date) =>
     buildShiftReport({
       title: labelOf(bucket),
@@ -143,6 +148,14 @@ export default function ShiftClosingView({
     }), [categories, products, settings, ar, labelOf, expenses, customerPayments, openTransactionsOf]);
 
   const handleClose = async (bucket: string) => {
+    const blockingOrders = openOrdersOfBucket(bucket);
+    if (blockingOrders.length > 0) {
+      const details = blockingOrders.map(o => `#${o.id.slice(0, 6)}${o.table_number ? ` — ${ar ? 'طاولة' : 'Table'} ${o.table_number}` : ''}`).join('\n');
+      alert(ar
+        ? `لا يمكن تقفيل ${labelOf(bucket)} لأن هناك ${blockingOrders.length} أوردر مفتوح/غير مكتمل:\n\n${details}\n\nأكمل الأوردرات أو أغلقها أولًا ثم حاول التقفيل.`
+        : `Cannot close ${labelOf(bucket)} because ${blockingOrders.length} order(s) are still open:\n\n${details}\n\nComplete or close them first.`);
+      return;
+    }
     const bucketOrders = openOrdersOf(bucket);
     const from = periodStart(bucket);
     const to = new Date();
@@ -186,15 +199,18 @@ export default function ShiftClosingView({
         order_ids: bucketOrders.map(o => o.id),
         closed_by: userName || '-',
       });
+      if (saved.__localOnly) {
+        throw new Error(ar
+          ? 'لم يتم تأكيد حفظ التقفيل على Supabase. شغّل ترحيل shift_closings وتحقق من صلاحيات الجدول.'
+          : 'The closing was not confirmed in Supabase. Run the shift_closings migration and check table permissions.');
+      }
+      const persisted = await db.getShiftClosings();
+      const confirmed = persisted.some(c => c.id === saved.id && c.bucket === bucket);
+      if (!confirmed) {
+        throw new Error('Shift closing was inserted but could not be read back from Supabase.');
+      }
       setLastByBucket(prev => ({ ...prev, [bucket]: saved }));
       await printShiftClosing(report, language, settings);
-      if (saved.__localOnly) {
-        alert(ar
-          ? `تحذير: التقفيل اتحفظ على الجهاز ده بس ومش هيظهر على الأجهزة التانية.\n\nالسبب إن جدول سجلات التقفيل مش موجود أو ناقص أعمدة في الداتا بيز.\nشغّل الملفات دي على Supabase:\n• supabase_patch_v37_shift_closings_access.sql
-• supabase_patch_v35_pos_finance.sql
-• supabase_patch_v36_shift_cash_movements.sql`
-          : 'Warning: this closing was saved on this device only and will not appear on other devices.\n\nRun supabase_patch_v37_shift_closings_access.sql, supabase_patch_v35_pos_finance.sql, and supabase_patch_v36_shift_cash_movements.sql on Supabase.');
-      }
     } catch (err) {
       console.error(err);
       alert(ar ? 'حصل خطأ أثناء التقفيل.' : 'Failed to close the shift.');
@@ -261,7 +277,14 @@ export default function ShiftClosingView({
                         : (ar ? 'لسه مفيش تقفيل سابق' : 'No previous closing')}
                     </div>
                   </td>
-                  <td style={{ padding: '0.7rem 0.5rem', textAlign: 'center', color: 'var(--text-light)', fontWeight: 700 }}>{bucketOrders.length}</td>
+                  <td style={{ padding: '0.7rem 0.5rem', textAlign: 'center', color: 'var(--text-light)', fontWeight: 700 }}>
+                    <div>{bucketOrders.length}</div>
+                    {openOrdersOfBucket(bucket).length > 0 && (
+                      <div style={{ color: '#ef4444', fontSize: '0.72rem', fontWeight: 700, marginTop: '0.25rem' }}>
+                        {ar ? `⚠ ${openOrdersOfBucket(bucket).length} مفتوح` : `⚠ ${openOrdersOfBucket(bucket).length} open`}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: 'var(--text-light)' }}>{fmt(report.subtotal)}</td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#f59e0b' }}>{fmt(report.tax)}</td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#10b981', fontWeight: 800 }}>{fmt(report.collected)}</td>
