@@ -2715,7 +2715,7 @@ export const db = {
     const rest = all.filter(c => c.closing_date !== record.closing_date);
     rest.unshift(record);
     saveLocalData('meridien_daily_closings', rest);
-    return record;
+    return { ...record, __localOnly: true } as DailyClosing;
   },
 
   /** بيفتح يوم مقفول تاني للتعديل. */

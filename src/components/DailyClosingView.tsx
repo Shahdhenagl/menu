@@ -139,9 +139,18 @@ export default function DailyClosingView({ orders, expenses, language, userName 
         drawer_1_total_counted: drawer1Counted,
         drawer_2_total_counted: drawer2Counted,
       });
-      setClosing(saved);
-      if (saved.drawer_1_closed && saved.drawer_2_closed) await db.startNextOperatingDay(selectedDate);
-      alert(saved.drawer_1_closed && saved.drawer_2_closed ? (ar ? 'تم إغلاق الخزنتين وانتهى يوم التشغيل. بدأ يوم جديد تلقائيًا.' : 'Both drawers are closed. The operating day is complete and a new day has started.') : (ar ? `تم إغلاق الخزنة ${activeDrawer}. أغلق الخزنة الأخرى لطباعة التقرير.` : `Drawer ${activeDrawer} closed. Close the other drawer to print the report.`));
+      if ((saved as any).__localOnly) {
+        throw new Error(ar
+          ? 'تم الحفظ على هذا الجهاز فقط ولم يتم تأكيده في Supabase. شغّل ترحيل daily_closings وتحقق من صلاحيات الجدول.'
+          : 'The closing was saved locally only and was not confirmed in Supabase. Run the daily_closings migration and check table permissions.');
+      }
+      const persisted = await db.getDailyClosing(selectedDate);
+      if (!persisted || persisted.id !== saved.id || !persisted.drawer_1_closed && activeDrawer === 1 || !persisted.drawer_2_closed && activeDrawer === 2) {
+        throw new Error('Daily closing was not confirmed after saving.');
+      }
+      setClosing(persisted);
+      if (persisted.drawer_1_closed && persisted.drawer_2_closed) await db.startNextOperatingDay(selectedDate);
+      alert(persisted.drawer_1_closed && persisted.drawer_2_closed ? (ar ? 'تم إغلاق الخزنتين وانتهى يوم التشغيل. بدأ يوم جديد تلقائيًا.' : 'Both drawers are closed. The operating day is complete and a new day has started.') : (ar ? `تم إغلاق الخزنة ${activeDrawer}. أغلق الخزنة الأخرى لطباعة التقرير.` : `Drawer ${activeDrawer} closed. Close the other drawer to print the report.`));
     } catch (error) {
       console.error(error);
       alert(ar ? 'حدث خطأ أثناء حفظ تقفيل الخزنة.' : 'Failed to close the drawer.');
