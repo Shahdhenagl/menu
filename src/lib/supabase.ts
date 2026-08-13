@@ -126,6 +126,26 @@ function saveLocalData<T>(key: string, data: T) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
+// Normalize partner table names because older records may contain a JSON string or a comma-separated value.
+const normalizePartner = (partner: any): any => {
+  if (!partner) return partner;
+  const raw = partner.table_names;
+  let tableNames: string[] = [];
+  if (Array.isArray(raw)) tableNames = raw;
+  else if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      tableNames = Array.isArray(parsed) ? parsed : raw.split(',');
+    } catch {
+      tableNames = raw.split(',');
+    }
+  }
+  return {
+    ...partner,
+    table_names: Array.from(new Set(tableNames.map((name: unknown) => String(name).trim()).filter(Boolean)))
+  };
+};
+
 // Unified Database API (works against Supabase if configured, or falls back transparently to LocalStorage)
 export const db = {
   // --- MANUFACTURING RECIPES ---
@@ -2805,24 +2825,24 @@ export const db = {
     if (supabase) {
       try {
         const { data, error } = await supabase.from('partners').select('*').order('created_at', { ascending: true });
-        if (!error) return data || [];
+        if (!error) return (data || []).map(normalizePartner);
       } catch (err) {
         console.warn("Supabase fetch partners failed", err);
       }
     }
-    return getLocalData('meridien_partners', []);
+    return getLocalData('meridien_partners', []).map(normalizePartner);
   },
 
   async addPartner(partner: Omit<any, 'id' | 'created_at'>): Promise<any> {
-    const newPartner = {
+    const newPartner = normalizePartner({
       ...partner,
       id: crypto.randomUUID(),
       created_at: new Date().toISOString()
-    };
+    });
     if (supabase) {
       try {
         const { data, error } = await (supabase as any).from('partners').insert([newPartner]).select().single();
-        if (!error && data) return data;
+        if (!error && data) return normalizePartner(data);
       } catch (err) {
         console.warn("Supabase insert partner failed", err);
       }
@@ -2834,16 +2854,20 @@ export const db = {
   },
 
   async updatePartner(id: string, updates: Partial<any>): Promise<boolean> {
+    const normalizedUpdates = {
+      ...updates,
+      ...(Object.prototype.hasOwnProperty.call(updates, 'table_names') ? { table_names: normalizePartner(updates).table_names } : {})
+    };
     if (supabase) {
       try {
-        const { error } = await supabase.from('partners').update(updates).eq('id', id);
+        const { error } = await supabase.from('partners').update(normalizedUpdates).eq('id', id);
         if (!error) return true;
       } catch (err) {
         console.warn("Supabase update partner failed", err);
       }
     }
     const partners = getLocalData('meridien_partners', [] as any[]);
-    const updated = partners.map(p => p.id === id ? { ...p, ...updates } : p);
+    const updated = partners.map(p => p.id === id ? normalizePartner({ ...p, ...normalizedUpdates }) : normalizePartner(p));
     saveLocalData('meridien_partners', updated);
     return true;
   },

@@ -826,7 +826,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       o.table_number !== '-' &&
       ['pending', 'preparing', 'prepared', 'delivered'].includes(o.status)
     );
-  const partnerTableNames = Array.from(new Set(partners.flatMap(p => p.table_names || []).map(name => String(name).trim()).filter(Boolean)));
+  const partnerTableEntries = partners.flatMap(partner => (Array.isArray(partner.table_names) ? partner.table_names : []).map(name => ({
+    name: String(name).trim(),
+    partner
+  }))).filter(entry => Boolean(entry.name));
+  const partnerTableNames = Array.from(new Set(partnerTableEntries.map(entry => entry.name)));
   const getTableOrder = (hall: string, tableNo: string | number) =>
     dineInOrdersForHall(hall).find(o => String(o.table_number).trim().toLowerCase() === String(tableNo).trim().toLowerCase());
   const checkPrintedKey = (orderId: string) => `meridien_check_printed_${orderId}`;
@@ -2084,6 +2088,17 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   })}
                 </div>
 
+                {partnerTableEntries.length > 0 && (
+                  <div style={{ marginBottom: '0.9rem', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid rgba(251,191,36,0.35)', background: 'linear-gradient(135deg, rgba(251,191,36,0.12), rgba(0,0,0,0.12))', color: '#fbbf24' }}>
+                    <div style={{ fontWeight: 900 }}>{language === 'ar' ? 'طاولات الملاك والشركاء' : 'Owner & Partner Tables'}</div>
+                    <div style={{ marginTop: '0.25rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{partnerTableEntries.map(entry => `${entry.name} — ${entry.partner.name}`).join(' • ')}</div>
+                  </div>
+                )}
+                {partnerTableEntries.length === 0 && (
+                  <div style={{ marginBottom: '0.9rem', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid rgba(245,158,11,0.35)', background: 'rgba(245,158,11,0.08)', color: '#fbbf24', fontSize: '0.82rem' }}>
+                    {language === 'ar' ? 'لا توجد طاولات ملاك ظاهرة. أضف أسماء الطاولات من موديول العهد والشركاء ثم تأكد من تشغيل ترحيل قاعدة البيانات.' : 'No owner tables are visible. Assign table names in Partners & Custody and run the database migration.'}
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.9rem' }}>
                   {[...Array.from({ length: 40 }, (_, i) => String(i + 1)), ...partnerTableNames].map(tableNo => {
                     const status = getTableStatus(selectedHall, tableNo);
@@ -2103,15 +2118,17 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                         }}
                         title={!isEmpty && order ? `#${order.id.slice(-6)} - ${order.customer_name}` : ''}
                         style={{
-                          minHeight: '96px', borderRadius: '12px', border: `2px solid ${color}`,
-                          background: isEmpty ? `${color}22` : `linear-gradient(135deg, ${color}44, rgba(0,0,0,0.28))`,
+                          minHeight: '96px', borderRadius: '12px', border: `2px solid ${partnerForTable(String(tableNo)) ? '#fbbf24' : color}`,
+                          background: partnerForTable(String(tableNo))
+                            ? (isEmpty ? 'linear-gradient(135deg, rgba(251,191,36,0.2), rgba(0,0,0,0.25))' : 'linear-gradient(135deg, rgba(251,191,36,0.35), rgba(0,0,0,0.28))')
+                            : (isEmpty ? `${color}22` : `linear-gradient(135deg, ${color}44, rgba(0,0,0,0.28))`),
                           color: 'var(--text-white)', cursor: isEmpty ? 'pointer' : 'not-allowed',
                           opacity: isEmpty ? 1 : 0.78, fontFamily: 'inherit', textAlign: 'center',
                           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
                         }}
                       >
-                          <span style={{ fontSize: '1.15rem', fontWeight: 900, color }}>{tableNo}</span>
-                          {partnerForTable(String(tableNo)) ? <span style={{ fontSize: '0.7rem', color: '#fbbf24' }}>{language === 'ar' ? `شريك: ${partnerForTable(String(tableNo))?.name}` : `Partner: ${partnerForTable(String(tableNo))?.name}`}</span> : null}
+                          <span style={{ fontSize: '1.15rem', fontWeight: 900, color: partnerForTable(String(tableNo)) ? '#fbbf24' : color }}>{tableNo}</span>
+                          {partnerForTable(String(tableNo)) ? <span style={{ fontSize: '0.7rem', color: '#fbbf24', fontWeight: 800 }}>{language === 'ar' ? `مالك: ${partnerForTable(String(tableNo))?.name}` : `Owner: ${partnerForTable(String(tableNo))?.name}`}</span> : null}
                         <span style={{ fontSize: '0.85rem', fontWeight: 800 }}>{tableStatusLabels[status]}</span>
                         {order ? <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>#{order.id.slice(-4)}</span> : null}
                       </button>
