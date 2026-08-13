@@ -20,7 +20,7 @@ import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe, PaymentMethodKey, Partner, Expense, CustomerPayment } from '../types';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import { taxPercentForOrder } from '../utils/tax';
-import { drawerOfHall, drawerName } from '../utils/shiftClosing';
+import { drawerOfHall, drawerName, collectedPaymentParts } from '../utils/shiftClosing';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
 
 // ألوان الصالات وأنواع الطلبات (نفس ألوان شاشة المطبخ للتناسق)
@@ -869,18 +869,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     return method;
   };
   const paymentParts = (order: Order): Partial<Record<PayMethod, number>> => {
-    const parts: Partial<Record<PayMethod, number>> = {};
-    const n = (v: any) => Number(v) || 0;
-    if (order.payment_method === 'split' && order.payment_details) {
-      payMethods.forEach(method => {
-        const amount = n(order.payment_details?.[method]);
-        if (amount > 0) parts[method] = amount;
-      });
-      return parts;
-    }
-    const method = (order.payment_method || 'cash') as PayMethod;
-    if (payMethods.includes(method)) parts[method] = n(order.total_price);
-    return parts;
+    return collectedPaymentParts(order) as Partial<Record<PayMethod, number>>;
   };
   const todayOrders = allOrders.filter(o => isToday(o.created_at));
   const matchesSummaryScope = (order: Order) => {
@@ -3386,8 +3375,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                               const activeMethods = [
                                 cashVal > 0 && 'cash',
                                 visaVal > 0 && 'visa',
-                                walletCashierVal > 0 && 'wallet_cashier',
-
+                                walletCashierVal > 0 && 'wallet_restaurant',
+                                walletCafeVal > 0 && 'wallet_cafe',
                                 instapayVal > 0 && 'instapay',
                                 remaining > 0.01 && payIsDeferred && 'deferred'
                               ].filter(Boolean) as string[];

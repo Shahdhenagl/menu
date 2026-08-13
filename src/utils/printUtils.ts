@@ -5,6 +5,7 @@ import type {
 import { db } from '../lib/supabase';
 import { configureQzSecurity } from './qzSecurity';
 import { taxPercentForOrder } from './tax';
+import { collectedFromOrder, deferredFromOrder } from './shiftClosing';
 import qz from 'qz-tray';
 import QRCode from 'qrcode';
 
@@ -381,6 +382,8 @@ export const printCustomerReceipt = async (
   const n = (v: any) => Number(v) || 0;
   const itemsSubtotal = order.items.reduce((s, i) => s + n(i.price) * n(i.quantity), 0);
   const grandTotal = n(order.total_price);
+  const collectedNow = collectedFromOrder(order);
+  const deferredBalance = deferredFromOrder(order);
   // نسبة الضريبة (للعرض في العنوان) — حسب نوع الطلب: صالة / دليفري / تيك أواي
   const taxPercent = taxPercentForOrder(settings, order.order_type, order.hall);
   const diff = grandTotal - itemsSubtotal;            // موجب = ضريبة/خدمة ، سالب = خصم
@@ -467,9 +470,13 @@ export const printCustomerReceipt = async (
       </table>
       ${breakdownHtml}
       <div class="total">
-        <span class="lbl">${isAr ? 'الإجمالي المطلوب' : 'Grand Total'}</span>
-        <span class="val">${order.total_price.toFixed(2)} ${isAr ? 'ج.م' : 'EGP'}</span>
+        <span class="lbl">${isAr ? 'إجمالي الفاتورة' : 'Invoice Total'}</span>
+        <span class="val">${grandTotal.toFixed(2)} ${isAr ? 'ج.م' : 'EGP'}</span>
       </div>
+      ${!isPreBill && deferredBalance > 0.001 ? `<div class="sums" style="margin-top:6px; border-top:0; padding-top:0;">
+        <div><span>${isAr ? 'المدفوع الآن' : 'Collected now'}</span><span>${money(collectedNow)}</span></div>
+        <div class="disc"><span>${isAr ? 'المتبقي الآجل' : 'Deferred balance'}</span><span>${money(deferredBalance)}</span></div>
+      </div>` : ''}
       ${qrHtml}
       <hr class="divider"/>
       <div class="foot">

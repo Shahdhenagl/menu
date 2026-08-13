@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Lock, Printer, Wallet } from 'lucide-react';
 import type { Category, DailyClosing, DailyClosingMethod, Expense, Order, PaymentMethodKey, Product, RestaurantSettings, DrawerId } from '../types';
 import { db } from '../lib/supabase';
+import { collectedPaymentParts } from '../utils/shiftClosing';
 
 interface Props {
   orders: Order[];
@@ -53,15 +54,9 @@ export default function DailyClosingView({ orders, expenses, language, userName 
   const incoming = useMemo(() => {
     const result = Object.fromEntries(METHODS.map(method => [method, 0])) as Record<PaymentMethodKey, number>;
     drawerOrders.forEach(order => {
-      if (order.payment_method === 'split' && order.payment_details) {
-        METHODS.forEach(method => {
-          const cashierWallet = method === 'wallet_restaurant' ? n(order.payment_details?.wallet_cashier) : 0;
-          result[method] += Math.max(0, n(order.payment_details?.[method]) - n(order.payment_details?.tip_by_method?.[method])) + cashierWallet;
-        });
-      } else {
-        const method = order.payment_method as PaymentMethodKey;
-        result[method] = (result[method] || 0) + n(method === 'partner' ? (order.partner_amount_due ?? order.total_price) : order.total_price);
-      }
+      Object.entries(collectedPaymentParts(order)).forEach(([method, amount]) => {
+        if (result[method as PaymentMethodKey] !== undefined) result[method as PaymentMethodKey] += n(amount);
+      });
     });
     return result;
   }, [drawerOrders]);

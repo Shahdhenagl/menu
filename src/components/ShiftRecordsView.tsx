@@ -3,7 +3,7 @@ import { Printer, RefreshCw, ChevronDown, ChevronUp, FileText } from 'lucide-rea
 import type { DailyClosing, RestaurantSettings, ShiftClosing } from '../types';
 import { db } from '../lib/supabase';
 import { printShiftClosing } from '../utils/printUtils';
-import { drawerOfHall } from '../utils/shiftClosing';
+import { drawerOfHall, collectedFromOrder } from '../utils/shiftClosing';
 import { taxPercentForOrder } from '../utils/tax';
 
 interface ShiftRecordsViewProps {
@@ -66,9 +66,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
         const dayExpenses = (allExpenses || []).filter(e => localDay(e.expense_date || e.created_at) === d.closing_date);
         const dayPayments = (allPayments || []).filter(p => localDay(p.payment_date || p.created_at) === d.closing_date);
         const daySubtotal = dayOrders.reduce((s, o) => s + orderSubtotal(o), 0);
-        const dayCollected = dayOrders.reduce((s, o) => s + num(o.total_price), 0);
-        const dayPartnerDebt = dayOrders.filter(o => o.payment_method === 'partner' || o.partner_id)
-          .reduce((s, o) => s + num(o.partner_amount_due ?? o.total_price), 0);
+        const dayCollected = dayOrders.reduce((s, o) => s + collectedFromOrder(o), 0);
         const dayTax = dayOrders.reduce((s, o) => {
           if (o.payment_method === 'partner' || o.partner_id) return s;
           return s + orderSubtotal(o) * taxPercentForOrder(settings, o.order_type, o.hall) / 100;
@@ -98,7 +96,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           const row = dayTaxMap.get(percent) || { percent, base: 0, tax: 0, collected: 0, orders: 0 };
           row.base += base;
           row.tax += percent ? base * percent / 100 : 0;
-          row.collected += num(o.total_price);
+          row.collected += collectedFromOrder(o);
           row.orders += 1;
           dayTaxMap.set(percent, row);
         });
@@ -117,8 +115,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           const expenses = (allExpenses || []).filter(e => localDay(e.expense_date || e.created_at) === d.closing_date && (e.drawer || 1) === drawer);
           const payments = (allPayments || []).filter(p => localDay(p.payment_date || p.created_at) === d.closing_date && (p.drawer || 1) === drawer);
           const subtotal = orders.reduce((s, o) => s + orderSubtotal(o), 0);
-          const collected = orders.reduce((s, o) => s + num(o.total_price), 0);
-          const partnerDebt = orders.filter(o => o.payment_method === 'partner').reduce((s, o) => s + num(o.partner_amount_due ?? o.total_price), 0);
+          const collected = orders.reduce((s, o) => s + collectedFromOrder(o), 0);
           const tax = orders.reduce((s, o) => s + (o.payment_method === 'partner' || o.partner_id ? 0 : orderSubtotal(o) * taxPercentForOrder(settings, o.order_type, o.hall) / 100), 0);
           const deposits = payments.reduce((s, p) => s + num(p.amount), 0);
           const expenseTotal = expenses.reduce((s, e) => s + num(e.amount), 0);
@@ -127,8 +124,8 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           ].map(m => ({ label: methodLabel(m.method, ar), amount: num(m.incoming ?? m.expected) }));
           const expensesByMethod = Object.entries(expenses.reduce((acc: Record<string, number>, e) => { const key = e.payment_method || 'cash'; acc[key] = (acc[key] || 0) + num(e.amount); return acc; }, {})).map(([method, amount]) => ({ method, label: methodLabel(method, ar), amount }));
           const taxMap: Record<string, { percent: number; base: number; tax: number; collected: number; orders: number }> = {};
-          orders.forEach(o => { const percent = o.payment_method === 'partner' || o.partner_id ? 0 : taxPercentForOrder(settings, o.order_type, o.hall); const key = String(percent); const row = taxMap[key] || (taxMap[key] = { percent, base: 0, tax: 0, collected: 0, orders: 0 }); row.base += orderSubtotal(o); row.tax += percent ? orderSubtotal(o) * percent / 100 : 0; row.collected += num(o.total_price); row.orders += 1; });
-          return { drawer, label: ar ? `خزنة ${drawer}` : `Drawer ${drawer}`, ordersCount: orders.length, subtotal, tax, discount: Math.max(0, subtotal + tax - collected), collected, deposits, expenses: expenseTotal, expectedBalance: collected - partnerDebt + deposits - expenseTotal, methods, expensesByMethod, taxGroups: Object.values(taxMap) };
+          orders.forEach(o => { const percent = o.payment_method === 'partner' || o.partner_id ? 0 : taxPercentForOrder(settings, o.order_type, o.hall); const key = String(percent); const row = taxMap[key] || (taxMap[key] = { percent, base: 0, tax: 0, collected: 0, orders: 0 }); row.base += orderSubtotal(o); row.tax += percent ? orderSubtotal(o) * percent / 100 : 0; row.collected += collectedFromOrder(o); row.orders += 1; });
+          return { drawer, label: ar ? `خزنة ${drawer}` : `Drawer ${drawer}`, ordersCount: orders.length, subtotal, tax, discount: Math.max(0, subtotal + tax - orders.reduce((s, o) => s + num(o.total_price), 0)), collected, deposits, expenses: expenseTotal, expectedBalance: collected + deposits - expenseTotal, methods, expensesByMethod, taxGroups: Object.values(taxMap) };
         });
         return {
           id: `daily-${d.id || d.closing_date}`,
@@ -140,7 +137,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           items_count: dayCategories.reduce((s, c) => s + c.qty, 0),
           subtotal: daySubtotal,
           tax: dayTax,
-          discount: Math.max(0, daySubtotal + dayTax - dayCollected),
+          discount: Math.max(0, daySubtotal + dayTax - dayOrders.reduce((s, o) => s + num(o.total_price), 0)),
           collected: dayCollected,
           methods,
           order_types: [],
@@ -151,7 +148,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           created_at: d.created_at || closedAt,
           deposits: dayPayments.reduce((s, p) => s + num(p.amount), 0),
           expenses: dayExpenses.reduce((s, e) => s + num(e.amount), 0),
-          expectedBalance: dayCollected - dayPartnerDebt + dayPayments.reduce((s, p) => s + num(p.amount), 0) - dayExpenses.reduce((s, e) => s + num(e.amount), 0),
+          expectedBalance: dayCollected + dayPayments.reduce((s, p) => s + num(p.amount), 0) - dayExpenses.reduce((s, e) => s + num(e.amount), 0),
           depositsByMethod: Object.entries(dayPayments.reduce((acc: Record<string, number>, p) => { const key = p.payment_method || 'cash'; acc[key] = (acc[key] || 0) + num(p.amount); return acc; }, {})).map(([method, amount]) => ({ method, label: methodLabel(method, ar), amount })),
           expensesByMethod: Object.entries(dayExpenses.reduce((acc: Record<string, number>, e) => { const key = e.payment_method || 'cash'; acc[key] = (acc[key] || 0) + num(e.amount); return acc; }, {})).map(([method, amount]) => ({ method, label: methodLabel(method, ar), amount })),
           drawerBreakdown,

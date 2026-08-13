@@ -10,6 +10,39 @@ export const METHOD_KEYS = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 
 
 const num = (v: any): number => Number(v) || 0;
 
+/** المبالغ التي دخلت الخزنة فعليًا من الأوردر، بدون الآجل وبدون التبس. */
+export const collectedPaymentParts = (order: Order): Record<string, number> => {
+  const result: Record<string, number> = {};
+  const details = order.payment_details || {};
+  const tips = details.tip_by_method && typeof details.tip_by_method === 'object' ? details.tip_by_method : {};
+  const add = (method: string, value: unknown) => {
+    const amount = Math.max(0, num(value) - num(tips[method]));
+    if (amount > 0) result[method] = (result[method] || 0) + amount;
+  };
+
+  if (order.payment_method === 'partner' || order.payment_method === 'deferred') return result;
+  if (order.payment_method === 'split') {
+    add('cash', details.cash);
+    add('visa', details.visa);
+    add('wallet_restaurant', details.wallet_restaurant ?? details.wallet_cashier);
+    add('wallet_cafe', details.wallet_cafe);
+    add('instapay', details.instapay);
+    add('petty_cash', details.petty_cash);
+    return result;
+  }
+  add(order.payment_method || 'cash', order.total_price);
+  return result;
+};
+
+export const collectedFromOrder = (order: Order): number =>
+  Object.values(collectedPaymentParts(order)).reduce((sum, value) => sum + value, 0);
+
+export const deferredFromOrder = (order: Order): number => {
+  if (order.payment_method === 'deferred') return num(order.total_price);
+  if (order.payment_method === 'split') return Math.max(0, num(order.payment_details?.deferred));
+  return 0;
+};
+
 // ===== الخزن =====
 export const DRAWERS: DrawerId[] = [1, 2];
 
@@ -97,16 +130,17 @@ export const buildShiftReport = ({
   ar: boolean;
 }): BuiltShiftReport => {
   const subtotal = orders.reduce((s, o) => s + orderSubtotal(o), 0);
-  const collected = orders.reduce((s, o) => s + num(o.total_price), 0);
-  const partnerDebt = orders.filter(o => o.payment_method === 'partner').reduce((s, o) => s + num(o.partner_amount_due ?? o.total_price), 0);
-  const cashCollected = collected - partnerDebt;
+  const invoiceTotal = orders.reduce((s, o) => s + num(o.total_price), 0);
+  const collected = orders.reduce((s, o) => s + collectedFromOrder(o), 0);
+  const cashCollected = collected;
   const tax = orders.reduce((s, o) => {
     if (o.payment_method === 'partner' || o.partner_id) return s;
     const base = orderSubtotal(o);
     const percent = taxPercentForOrder(settings, o.order_type, o.hall);
     return s + (base * (percent / 100));
   }, 0);
-  const discount = Math.max(0, subtotal + tax - collected);
+  // الآجل ليس خصمًا؛ الخصم يحسب من إجمالي الفاتورة قبل التحصيل.
+  const discount = Math.max(0, subtotal + tax - invoiceTotal);
   const deposits = customerPayments.reduce((s, p) => s + num(p.amount), 0);
   const expensesTotal = expenses.reduce((s, e) => s + num(e.amount), 0);
   const expectedBalance = cashCollected + deposits - expensesTotal;
@@ -134,20 +168,9 @@ export const buildShiftReport = ({
   const byMethod: Record<string, number> = {};
   METHOD_KEYS.forEach(m => (byMethod[m] = 0));
   orders.forEach(o => {
-    if (o.payment_method === 'split' && o.payment_details) {
-      const details = o.payment_details;
-      const tips = details.tip_by_method && typeof details.tip_by_method === 'object' ? details.tip_by_method : {};
-      byMethod.cash += Math.max(0, num(details.cash) - num(tips.cash));
-      byMethod.visa += Math.max(0, num(details.visa) - num(tips.visa));
-      byMethod.wallet_restaurant += Math.max(0, num(details.wallet_restaurant) - num(tips.wallet_restaurant));
-      byMethod.wallet_cafe += Math.max(0, num(details.wallet_cafe) - num(tips.wallet_cafe));
-      byMethod.instapay += Math.max(0, num(details.instapay) - num(tips.instapay));
-      byMethod.deferred += Math.max(0, num(details.deferred) - num(tips.deferred));
-    } else {
-      const m = o.payment_method || 'cash';
-      if (byMethod[m] !== undefined) byMethod[m] += num(o.payment_method === 'partner' ? (o.partner_amount_due ?? o.total_price) : o.total_price);
-      else byMethod.cash += num(o.total_price);
-    }
+    Object.entries(collectedPaymentParts(o)).forEach(([method, amount]) => {
+      if (byMethod[method] !== undefined) byMethod[method] += amount;
+    });
   });
 
   const methodsRaw: ShiftClosingMethod[] = METHOD_KEYS
@@ -181,7 +204,7 @@ export const buildShiftReport = ({
 
   orders.forEach(o => {
     const base = orderSubtotal(o);
-    const total = num(o.total_price);
+    const total = collectedFromOrder(o);
     const percent = taxPercentForOrder(settings, o.order_type, o.hall);
     const t = base * (percent / 100);
     const type = o.order_type || 'dine_in';

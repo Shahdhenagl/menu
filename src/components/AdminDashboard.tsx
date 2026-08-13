@@ -33,6 +33,7 @@ import {
   UserCheck, DollarSign, WalletCards, TrendingDown, Download, ChevronDown, Receipt
 } from 'lucide-react';
 import { playClickSound, playNewOrderSound } from '../utils/audioUtils';
+import { collectedPaymentParts, collectedFromOrder, deferredFromOrder } from '../utils/shiftClosing';
 import FinancialsView from './FinancialsView';
 import DailyClosingView from './DailyClosingView';
 import ShiftRecordsView from './ShiftRecordsView';
@@ -2588,7 +2589,8 @@ export default function AdminDashboard({
 
   // Stats Counters
   const completedOrders = analyticsFilteredOrders.filter(o => o.status.startsWith('completed'));
-  const totalRevenue = completedOrders.reduce((sum, o) => sum + o.total_price, 0);
+  // التحصيل = ما دخل فعليًا فقط؛ الآجل يظل مديونية ولا يدخل في المقبوضات.
+  const totalRevenue = completedOrders.reduce((sum, o) => sum + collectedFromOrder(o), 0);
   const totalOrdersCount = analyticsFilteredOrders.length;
   const avgOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0;
   const activeProductsCount = products.filter(p => p.is_available).length;
@@ -2616,9 +2618,9 @@ export default function AdminDashboard({
         id: o.id,
         type: 'income',
         title: language === 'ar' ? `تحصيل طلب #${o.id.slice(0,4)}` : `Order Collection #${o.id.slice(0,4)}`,
-        amount: o.total_price,
+        amount: collectedFromOrder(o),
         date: new Date(o.created_at),
-        method: o.status.split('_')[1] || 'cash'
+        method: o.payment_method || o.status.split('_')[1] || 'cash'
       });
     }
   });
@@ -2686,21 +2688,9 @@ export default function AdminDashboard({
 
   analyticsFilteredOrders.forEach(order => {
     if (!order.status.startsWith('completed')) return;
-    const details = order.payment_details || {};
-    if (order.payment_method === 'split' && details) {
-      (Object.keys(paymentMethodsStats) as string[]).forEach(method => {
-        const amount = Number(details[method as keyof typeof details]) || 0;
-        paymentMethodsStats[method].revenue += Math.max(0, amount);
-      });
-      return;
-    }
-    const statusMethod = order.status.split('_')[1] as string;
-    const method = order.payment_method || statusMethod || 'cash';
-    if (paymentMethodsStats[method]) {
-      paymentMethodsStats[method].revenue += Number(order.total_price) || 0;
-    } else {
-      paymentMethodsStats.cash.revenue += Number(order.total_price) || 0;
-    }
+    Object.entries(collectedPaymentParts(order)).forEach(([method, amount]) => {
+      if (paymentMethodsStats[method]) paymentMethodsStats[method].revenue += amount;
+    });
   });
 
   analyticsFilteredExpenses.forEach(exp => {
@@ -4942,10 +4932,11 @@ export default function AdminDashboard({
 
               {/* Invoice Summary Cards */}
               {(() => {
-                const totalSales = filteredInvoices.reduce((s, o) => s + o.total_price, 0);
+                const invoiceGrossTotal = filteredInvoices.reduce((s, o) => s + Number(o.total_price || 0), 0);
+                const totalSales = filteredInvoices.reduce((s, o) => s + collectedFromOrder(o), 0);
                 const totalCost = filteredInvoices.reduce((s, o) => s + (o.total_cost || 0), 0);
                 const totalProfit = totalSales - totalCost;
-                const deferredTotal = filteredInvoices.filter(o => o.payment_method === 'deferred' || o.payment_details?.deferred > 0).reduce((s, o) => s + (o.payment_details?.deferred || o.total_price), 0);
+                const deferredTotal = filteredInvoices.reduce((s, o) => s + deferredFromOrder(o), 0);
                 const hospitalityTotal = filteredInvoices.filter(o => o.payment_method === 'hospitality').reduce((s, o) => s + (o.payment_details?.original_price || 0), 0);
                 const staffTotal = filteredInvoices.filter(o => o.payment_method === 'staff').reduce((s, o) => s + (o.payment_details?.original_price || 0), 0);
                 return (
@@ -4955,6 +4946,7 @@ export default function AdminDashboard({
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'إجمالي المبيعات' : 'Total Sales'}</div>
                         <div className="font-en" style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--success)' }}>
                           +{totalSales.toLocaleString()} <span style={{ fontSize: '0.7rem' }}>EGP</span>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{language === 'ar' ? `إجمالي الفواتير: ${invoiceGrossTotal.toLocaleString()} EGP` : `Invoice total: ${invoiceGrossTotal.toLocaleString()} EGP`}</div>
                         </div>
                       </div>
                       <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(239,68,68,0.2)', textAlign: 'center' }}>
@@ -5013,7 +5005,9 @@ export default function AdminDashboard({
                         <tbody>
                           {filteredInvoices.map(inv => {
                             const cost = inv.total_cost || 0;
-                            const profit = inv.total_price - cost;
+                            const collected = collectedFromOrder(inv);
+                            const deferred = deferredFromOrder(inv);
+                            const profit = collected - cost;
                             const payLabel = inv.payment_method === 'cash' ? '💵 كاش' : inv.payment_method === 'visa' ? '💳 فيزا' : inv.payment_method === 'deferred' ? '📋 آجل' : inv.payment_method === 'wallet_restaurant' ? '📱 محفظة المطعم' : inv.payment_method === 'instapay' ? '💸 انستاباي' : inv.payment_method === 'split' ? '🔀 مقسم' : inv.payment_method === 'hospitality' ? '🎁 ضيافة' : inv.payment_method === 'staff' ? '👨‍🍳 فواتير استاف' : inv.payment_method === 'petty_cash' ? '💼 عهدة' : '💵 كاش';
 
                             const typeLabel = inv.order_type === 'dine_in' ? '🍽️' : inv.order_type === 'takeaway' ? '🥡' : inv.order_type === 'delivery' ? '🚗' : inv.order_type === 'talabat' ? '📱' : '—';
@@ -5038,7 +5032,10 @@ export default function AdminDashboard({
                                 <td className="font-en" style={{ fontSize: '0.8rem' }}>{new Date(inv.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}</td>
                                 <td style={{ fontSize: '0.85rem' }}>{typeLabel} {inv.order_type?.toUpperCase()}</td>
                                 <td style={{ fontSize: '0.85rem' }}>{payLabel}</td>
-                                <td className="font-en" style={{ fontWeight: 'bold', color: 'var(--success)' }}>+{inv.total_price.toLocaleString()}</td>
+                                <td className="font-en" style={{ fontWeight: 'bold', color: 'var(--success)' }}>
+                                  +{collected.toLocaleString()}
+                                  {deferred > 0.001 && <div style={{ fontSize: '0.7rem', color: '#fbbf24', marginTop: '0.2rem' }}>{language === 'ar' ? `آجل: ${deferred.toLocaleString()}` : `Deferred: ${deferred.toLocaleString()}`}</div>}
+                                </td>
                                 <td className="font-en" style={{ fontWeight: 'bold', color: 'var(--danger)' }}>-{cost.toLocaleString()}</td>
                                 <td className="font-en" style={{ fontWeight: '800', color: profit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
                                   {profit >= 0 ? '+' : ''}{profit.toLocaleString()} EGP
@@ -5069,7 +5066,7 @@ export default function AdminDashboard({
                                             `  ${language === 'ar' ? 'الموظف:' : 'Employee:'} ${pd.employee_name || '-'}\n` +
                                             `  ${language === 'ar' ? 'القيمة الأصلية:' : 'Original value:'} ${pd.original_price} EGP`;
                                         }
-                                        alert(`${language === 'ar' ? 'تفاصيل الفاتورة' : 'Invoice Details'} #${inv.id.slice(0,8)}\n\n${items}\n\n${language === 'ar' ? 'الإجمالي' : 'Total'}: ${inv.total_price} EGP\n${language === 'ar' ? 'التكلفة' : 'Cost'}: ${cost} EGP\n${language === 'ar' ? 'الربح' : 'Profit'}: ${profit} EGP${payInfo}`);
+                                        alert(`${language === 'ar' ? 'تفاصيل الفاتورة' : 'Invoice Details'} #${inv.id.slice(0,8)}\n\n${items}\n\n${language === 'ar' ? 'إجمالي الفاتورة' : 'Invoice Total'}: ${inv.total_price} EGP\n${language === 'ar' ? 'المدفوع فعليًا' : 'Collected'}: ${collected} EGP\n${language === 'ar' ? 'المتبقي الآجل' : 'Deferred Balance'}: ${deferred} EGP\n${language === 'ar' ? 'التكلفة' : 'Cost'}: ${cost} EGP\n${language === 'ar' ? 'الربح على التحصيل' : 'Collected Profit'}: ${profit} EGP${payInfo}`);
                                       }}
                                     >
                                       👁 {language === 'ar' ? 'عرض' : 'View'}
