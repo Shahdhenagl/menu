@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, BarProduct, DailyClosing, ShiftClosing } from '../types';
+import type { Category, Product, Order, RestaurantSettings, Expense, SystemUser, RecipeComment, Printer, Supplier, InventoryItem, PurchaseInvoice, ManufacturingOrder, SystemNotification, ProductionLog, ProductRecipe, Customer, CustomerPayment, Employee, AttendanceLog, EmployeeTransaction, TransferRequest, BarProduct, DailyClosing, ShiftClosing } from '../types';
 import { initialCategories, initialProducts, initialInventoryItems, initialProductRecipes } from './seedData';
 
 // Load credentials from environment
@@ -2342,6 +2342,22 @@ export const db = {
     }
   },
 
+  async addCustomerPayment(payment: Omit<CustomerPayment, 'id' | 'created_at'>): Promise<CustomerPayment> {
+    const newPayment: CustomerPayment = { ...payment, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('customer_payments').insert([newPayment]).select().single();
+        if (!error && data) return data;
+        console.warn('Supabase customer payment insert failed; falling back locally', error);
+      } catch (err) {
+        console.warn('Supabase customer payment insert failed; falling back locally', err);
+      }
+    }
+    const payments = getLocalData('meridien_customer_payments', [] as CustomerPayment[]);
+    payments.unshift(newPayment);
+    saveLocalData('meridien_customer_payments', payments);
+    return newPayment;
+  },
   // --- EMPLOYEES ---
   async getEmployees(): Promise<Employee[]> {
     if (supabase) {

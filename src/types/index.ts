@@ -80,6 +80,18 @@ export interface Customer {
   created_at?: string;
 }
 
+export interface CustomerPayment {
+  id: string;
+  customer_id: string;
+  amount: number;
+  payment_method: 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay';
+  notes?: string;
+  employee_id?: string;
+  employee_name?: string;
+  payment_date: string;
+  created_at?: string;
+}
+
 export interface PromoCodeDetails {
   discount: number;
   expiryDate?: string | null; // Format YYYY-MM-DD
@@ -134,6 +146,11 @@ export interface Expense {
   source?: 'pos' | 'admin';
   classification_status?: 'pending' | 'general' | 'inventory_purchase';
   purchase_invoice_id?: string;
+  supplier_name?: string;
+  inventory_item_id?: string;
+  inventory_item_name?: string;
+  inventory_quantity?: number;
+  inventory_unit_price?: number;
 }
 
 export interface SystemUser {

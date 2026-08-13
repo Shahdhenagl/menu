@@ -14,7 +14,7 @@ import {
   ShoppingBag, Utensils, CheckCircle, X,
   Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
   Pizza, Coffee, ChefHat, Wine, Cake, MessageCircle, Camera, Search,
-  Bell, Sun, Moon, BarChart3
+  Bell, Sun, Moon, BarChart3, Wallet, Receipt, CreditCard
 } from 'lucide-react';
 import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe, PaymentMethodKey } from '../types';
@@ -286,6 +286,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [debtAmount, setDebtAmount] = useState<string>('');
   const [debtPaymentMethod, setDebtPaymentMethod] = useState<PaymentMethodKey>('cash');
   const [debtNotes, setDebtNotes] = useState<string>('');
+  const [quickCreditOrder, setQuickCreditOrder] = useState(false);
+  const [depositModalOpen, setDepositModalOpen] = useState(false);
+  const [depositCustomerId, setDepositCustomerId] = useState('');
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositPaymentMethod, setDepositPaymentMethod] = useState<Exclude<PaymentMethodKey, 'deferred' | 'petty_cash'>>('cash');
+  const [depositNotes, setDepositNotes] = useState('');
+  const [depositSaving, setDepositSaving] = useState(false);
   
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [expenseName, setExpenseName] = useState<string>('');
@@ -293,6 +300,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [expensePaymentMethod, setExpensePaymentMethod] = useState<Exclude<PaymentMethodKey, 'deferred'>>('cash');
   const [expenseEmployeeId, setExpenseEmployeeId] = useState<string>('');
   const [expenseNotes, setExpenseNotes] = useState<string>('');
+  const [expenseCategory, setExpenseCategory] = useState<'general' | 'inventory_purchase'>('general');
+  const [expenseSupplierName, setExpenseSupplierName] = useState('');
+  const [expenseInventoryItemId, setExpenseInventoryItemId] = useState('');
+  const [expenseInventoryQuantity, setExpenseInventoryQuantity] = useState('');
+  const [expenseInventoryUnitPrice, setExpenseInventoryUnitPrice] = useState('');
+  const [expenseSaving, setExpenseSaving] = useState(false);
   
 
   const previousPendingCount = useRef(0);
@@ -1242,38 +1255,86 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     }
   };
 
-  const handleExpenseSubmit = async (e: React.FormEvent) => {
+  const handleCustomerDepositSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!expenseName || !expenseAmount || isNaN(Number(expenseAmount))) {
-      alert(language === 'ar' ? 'الرجاء إدخال اسم وقيمة المصروف' : 'Please enter expense name and amount');
+    const amount = Number(depositAmount);
+    const customer = customers.find(c => c.id === depositCustomerId);
+    if (!customer || !amount || amount <= 0) {
+      alert(language === 'ar' ? 'اختر العميل وأدخل مبلغًا صحيحًا' : 'Select a customer and enter a valid amount');
       return;
     }
+    if (amount > Number(customer.total_debt || 0)) {
+      alert(language === 'ar' ? 'مبلغ الإيداع أكبر من مديونية العميل' : 'Deposit cannot exceed the customer debt');
+      return;
+    }
+    setDepositSaving(true);
     try {
-      const selectedEmp = employeesList.find(emp => emp.id === expenseEmployeeId);
-      await db.addExpense({
-        name: expenseName,
-        type: 'مصروفات عامة', // default, can be reclassified in Admin
-        amount: Number(expenseAmount),
-        payment_method: expensePaymentMethod,
-        expense_date: getLocalDayStr(),
-        notes: expenseNotes,
-        employee_id: expenseEmployeeId,
-        employee_name: selectedEmp?.name,
-        source: 'pos',
-        classification_status: 'pending'
+      const nextDebt = Math.max(0, Number(customer.total_debt || 0) - amount);
+      await db.updateCustomerDebt(customer.id, nextDebt);
+      await db.addCustomerPayment({
+        customer_id: customer.id,
+        amount,
+        payment_method: depositPaymentMethod,
+        notes: depositNotes || 'إيداع/تحصيل من حساب العميل',
+        employee_id: selectedWaiter?.id,
+        employee_name: selectedWaiter?.name,
+        payment_date: getLocalDayStr()
       });
-      alert(language === 'ar' ? 'تم تسجيل المصروف بنجاح!' : 'Expense recorded!');
-      setExpenseModalOpen(false);
-      setExpenseName('');
-      setExpenseAmount('');
-      setExpenseNotes('');
-      setExpenseEmployeeId('');
-      setExpensePaymentMethod('cash');
+      await db.addFinancialTransaction({ type: 'debt_settlement', amount, to_method: depositPaymentMethod, customer_id: customer.id, description: depositNotes || `إيداع للعميل ${customer.name}` });
+      alert(language === 'ar' ? 'تم تسجيل الإيداع وتحديث حساب العميل' : 'Deposit recorded and customer account updated');
+      setDepositModalOpen(false);
+      setDepositCustomerId(''); setDepositAmount(''); setDepositNotes(''); setDepositPaymentMethod('cash');
       loadData();
     } catch (err) {
       console.error(err);
-      alert(language === 'ar' ? 'فشل تسجيل المصروف' : 'Failed to record expense');
+      alert(language === 'ar' ? 'فشل تسجيل الإيداع' : 'Failed to record deposit');
+    } finally { setDepositSaving(false); }
+  };
+
+  const handleExpenseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = Number(expenseAmount);
+    const quantity = Number(expenseInventoryQuantity);
+    const unitPrice = Number(expenseInventoryUnitPrice);
+    const selectedEmp = employeesList.find(emp => emp.id === expenseEmployeeId);
+    const selectedItem = inventoryItems.find(item => item.id === expenseInventoryItemId);
+    if (!expenseName || !amount || amount <= 0 || (expenseCategory === 'inventory_purchase' && (!selectedItem || !expenseSupplierName || !quantity || !unitPrice))) {
+      alert(language === 'ar' ? 'أكمل بيانات المصروف أو فاتورة الشراء المطلوبة' : 'Complete the expense or purchase invoice fields');
+      return;
     }
+    setExpenseSaving(true);
+    try {
+      let purchaseInvoiceId: string | undefined;
+      if (expenseCategory === 'inventory_purchase' && selectedItem) {
+        const invoice = await db.addPurchaseInvoice({
+          supplier_id: null as any, supplier_name: expenseSupplierName, invoice_date: getLocalDayStr(),
+          items: [{ item_id: selectedItem.id, item_name: selectedItem.name, quantity, unit_price: unitPrice, total_price: quantity * unitPrice }],
+          total_amount: amount,
+          paid_cash: expensePaymentMethod === 'cash' ? amount : 0,
+          paid_visa: expensePaymentMethod === 'visa' ? amount : 0,
+          paid_wallet: expensePaymentMethod === 'wallet_restaurant' ? amount : 0,
+          paid_instapay: expensePaymentMethod === 'instapay' ? amount : 0
+        });
+        purchaseInvoiceId = invoice.id;
+      }
+      await db.addExpense({
+        name: expenseName, type: expenseCategory === 'inventory_purchase' ? 'بضائع وخامات' : 'مصروفات عامة', amount,
+        payment_method: expensePaymentMethod, expense_date: getLocalDayStr(), notes: expenseNotes,
+        employee_id: expenseEmployeeId, employee_name: selectedEmp?.name, source: 'pos',
+        classification_status: expenseCategory === 'inventory_purchase' ? 'inventory_purchase' : 'general',
+        purchase_invoice_id: purchaseInvoiceId, supplier_name: expenseSupplierName || undefined,
+        inventory_item_id: selectedItem?.id, inventory_item_name: selectedItem?.name,
+        inventory_quantity: expenseCategory === 'inventory_purchase' ? quantity : undefined,
+        inventory_unit_price: expenseCategory === 'inventory_purchase' ? unitPrice : undefined,
+        drawer: payDrawer
+      });
+      alert(language === 'ar' ? 'تم تسجيل المصروف بنجاح' : 'Expense recorded successfully');
+      setExpenseModalOpen(false);
+      setExpenseName(''); setExpenseAmount(''); setExpenseNotes(''); setExpenseEmployeeId(''); setExpensePaymentMethod('cash');
+      setExpenseCategory('general'); setExpenseSupplierName(''); setExpenseInventoryItemId(''); setExpenseInventoryQuantity(''); setExpenseInventoryUnitPrice('');
+      loadData();
+    } catch (err) { console.error(err); alert(language === 'ar' ? 'فشل تسجيل المصروف' : 'Failed to record expense'); }
+    finally { setExpenseSaving(false); }
   };
 
   return (
@@ -1855,7 +1916,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   if (role === 'waiter') setView('waiter_dashboard');
                   else setView('role_select');
                 }}>{t.back}</button>
-                <button className="pos-btn" disabled={!customerName} onClick={() => setView('order_type')}>{t.continue}</button>
+                <button className="pos-btn" disabled={!customerName} onClick={() => {
+                  if (quickCreditOrder) {
+                    const creditCustomer = customers.find(c => c.phone === customerPhone);
+                    if (!creditCustomer) {
+                      alert(language === 'ar' ? 'لازم العميل يكون مسجلًا في الحسابات الآجلة أولًا' : 'The customer must already exist in credit accounts');
+                      return;
+                    }
+                    setPayCustomerId(creditCustomer.id);
+                    setPayIsDeferred(true);
+                  }
+                  setView('order_type');
+                }}>{quickCreditOrder ? (language === 'ar' ? 'متابعة للطلب الآجل' : 'Continue Credit Order') : t.continue}</button>
                 
                 {role === 'waiter' && (
                   <button className="pos-btn-outline" style={{ borderColor: 'var(--text-gray)', color: 'var(--text-gray)' }} onClick={() => {
@@ -2302,21 +2374,25 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     </button>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <button className="pos-btn" onClick={() => { setCustomerPhone(''); setCustomerName(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setCart([]); setView('customer_info'); }}>
-                    {t.newOrder}
+                <div style={{ display: 'flex', alignItems: 'stretch', gap: '0.65rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button className="pos-btn" style={{ minWidth: '120px' }} onClick={() => { setQuickCreditOrder(false); setCustomerPhone(''); setCustomerName(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setCart([]); setView('customer_info'); }}>
+                    <Plus size={16} style={{ verticalAlign: 'middle', marginInlineEnd: '0.3rem' }} />{t.newOrder}
+                  </button>
+                  <button className="pos-btn-outline" style={{ minWidth: '120px', borderColor: '#f59e0b', color: '#fbbf24' }} onClick={() => { setQuickCreditOrder(true); setCustomerPhone(''); setCustomerName(''); setTableNumber(''); setSelectedHall(''); setOrderType(null); setCart([]); setView('customer_info'); }}>
+                    <CreditCard size={16} style={{ verticalAlign: 'middle', marginInlineEnd: '0.3rem' }} />{language === 'ar' ? 'طلب آجل' : 'Credit Order'}
+                  </button>
+                  <button className="pos-btn-outline" style={{ minWidth: '120px', borderColor: '#22c55e', color: '#4ade80' }} onClick={() => setDepositModalOpen(true)}>
+                    <Wallet size={16} style={{ verticalAlign: 'middle', marginInlineEnd: '0.3rem' }} />{language === 'ar' ? 'إيداع عميل' : 'Customer Deposit'}
+                  </button>
+                  <button className="pos-btn-outline" style={{ minWidth: '120px', borderColor: '#ef4444', color: '#f87171' }} onClick={() => setExpenseModalOpen(true)}>
+                    <Receipt size={16} style={{ verticalAlign: 'middle', marginInlineEnd: '0.3rem' }} />{language === 'ar' ? 'سحب مصروف' : 'Expense Withdrawal'}
                   </button>
                   <button className="pos-btn-outline" onClick={async () => {
                     if (selectedWaiter) {
-                      try {
-                        await db.updateWaiterActiveStatus(selectedWaiter.id, false);
-                      } catch (e) {}
+                      try { await db.updateWaiterActiveStatus(selectedWaiter.id, false); } catch (e) {}
                     }
                     localStorage.removeItem('meridien_active_pos_waiter');
-                    setSelectedWaiter(null);
-                    setWaiterPasscode('');
-                    setRole('waiter');
-                    setView('waiter_auth');
+                    setSelectedWaiter(null); setWaiterPasscode(''); setRole('waiter'); setView('waiter_auth');
                   }}>
                     {language === 'ar' ? 'تسجيل خروج' : 'Logout'}
                   </button>
@@ -3684,53 +3760,66 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
             </motion.div>
           )}
 
+          {depositModalOpen && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '1rem' }}>
+              <div style={{ background: 'var(--bg-dark)', padding: '2rem', borderRadius: '16px', border: '1px solid #22c55e', width: '100%', maxWidth: '460px' }}>
+                <h3 style={{ color: '#4ade80', marginBottom: '1.5rem', textAlign: 'center' }}>{language === 'ar' ? 'إيداع في حساب العميل' : 'Customer Account Deposit'}</h3>
+                <form onSubmit={handleCustomerDepositSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <select required className="pos-input" value={depositCustomerId} onChange={e => setDepositCustomerId(e.target.value)}>
+                    <option value="">{language === 'ar' ? 'اختر العميل...' : 'Select customer...'}</option>
+                    {customers.filter(c => Number(c.total_debt || 0) > 0).map(c => <option key={c.id} value={c.id}>{c.name} — {Number(c.total_debt || 0).toFixed(2)} EGP</option>)}
+                  </select>
+                  <input required type="number" min="0.01" step="0.01" className="pos-input" placeholder={language === 'ar' ? 'المبلغ' : 'Amount'} value={depositAmount} onChange={e => setDepositAmount(e.target.value)} />
+                  <select required className="pos-input" value={depositPaymentMethod} onChange={e => setDepositPaymentMethod(e.target.value as any)}>
+                    <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
+                    <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
+                    <option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option>
+                    <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
+                    <option value="instapay">Instapay</option>
+                  </select>
+                  <textarea className="pos-input" placeholder={language === 'ar' ? 'ملاحظة اختيارية' : 'Optional note'} value={depositNotes} onChange={e => setDepositNotes(e.target.value)} />
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button disabled={depositSaving} type="submit" className="pos-btn" style={{ flex: 1 }}>{depositSaving ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'تسجيل الإيداع' : 'Record Deposit')}</button>
+                    <button type="button" className="pos-btn-outline" style={{ flex: 1 }} onClick={() => setDepositModalOpen(false)}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          )}
           {/* Expense Withdrawal Modal */}
           {expenseModalOpen && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '1rem' }}>
-              <div style={{ background: 'var(--bg-dark)', padding: '2rem', borderRadius: '16px', border: '1px solid var(--gold-primary)', width: '100%', maxWidth: '400px' }}>
-                <h3 style={{ color: 'var(--gold-primary)', marginBottom: '1.5rem', textAlign: 'center' }}>
-                  {language === 'ar' ? 'سحب مصروف' : 'Withdraw Expense'}
-                </h3>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '1rem' }}>
+              <div style={{ background: 'var(--bg-dark)', padding: '2rem', borderRadius: '16px', border: '1px solid var(--gold-primary)', width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto' }}>
+                <h3 style={{ color: 'var(--gold-primary)', marginBottom: '1.5rem', textAlign: 'center' }}>{language === 'ar' ? 'سحب مصروف' : 'Withdraw Expense'}</h3>
                 <form onSubmit={handleExpenseSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'اسم المصروف' : 'Expense Name'}</label>
-                    <input required type="text" className="pos-input" value={expenseName} onChange={(e) => setExpenseName(e.target.value)} style={{ width: '100%', padding: '0.75rem' }} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <input required type="text" className="pos-input" placeholder={language === 'ar' ? 'اسم المصروف' : 'Expense name'} value={expenseName} onChange={e => setExpenseName(e.target.value)} />
+                    <input required type="number" min="0.01" step="0.01" className="pos-input" placeholder={language === 'ar' ? 'الإجمالي' : 'Total amount'} value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} />
                   </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'المبلغ' : 'Amount'}</label>
-                    <input required type="number" step="0.01" className="pos-input" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} style={{ width: '100%', padding: '0.75rem' }} />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'طريقة الدفع (الخزنة)' : 'Payment Method'}</label>
-                    <select required className="pos-input" value={expensePaymentMethod} onChange={(e) => setExpensePaymentMethod(e.target.value as any)} style={{ width: '100%', padding: '0.75rem' }}>
-                      <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
-                      <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
-                      <option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option>
-                      <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
-                      <option value="petty_cash">{language === 'ar' ? 'عهدة نقدية' : 'Petty Cash'}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'الموظف المسؤول' : 'Responsible Employee'}</label>
-                    <select className="pos-input" value={expenseEmployeeId} onChange={(e) => setExpenseEmployeeId(e.target.value)} style={{ width: '100%', padding: '0.75rem' }}>
-                      <option value="">{language === 'ar' ? 'اختر الموظف...' : 'Select Employee...'}</option>
-                      {employeesList.map(emp => (
-                        <option key={emp.id} value={emp.id}>{emp.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-gray)' }}>{language === 'ar' ? 'ملاحظات' : 'Notes'}</label>
-                    <textarea className="pos-input" value={expenseNotes} onChange={(e) => setExpenseNotes(e.target.value)} style={{ width: '100%', padding: '0.75rem', minHeight: '80px' }}></textarea>
-                  </div>
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                    <button type="submit" className="pos-btn" style={{ flex: 1, padding: '1rem' }}>
-                      {language === 'ar' ? 'تسجيل المصروف' : 'Record Expense'}
-                    </button>
-                    <button type="button" className="pos-btn-outline" style={{ flex: 1, padding: '1rem' }} onClick={() => setExpenseModalOpen(false)}>
-                      {language === 'ar' ? 'إلغاء' : 'Cancel'}
-                    </button>
-                  </div>
+                  <select className="pos-input" value={expenseCategory} onChange={e => setExpenseCategory(e.target.value as any)}>
+                    <option value="general">{language === 'ar' ? 'مصروفات عامة' : 'General expense'}</option>
+                    <option value="inventory_purchase">{language === 'ar' ? 'فاتورة شراء مخزون' : 'Inventory purchase invoice'}</option>
+                  </select>
+                  {expenseCategory === 'inventory_purchase' && (
+                    <div style={{ display: 'grid', gap: '0.75rem', padding: '1rem', border: '1px dashed var(--gold-primary)', borderRadius: '12px' }}>
+                      <input required className="pos-input" placeholder={language === 'ar' ? 'اسم المورد' : 'Supplier name'} value={expenseSupplierName} onChange={e => setExpenseSupplierName(e.target.value)} />
+                      <select required className="pos-input" value={expenseInventoryItemId} onChange={e => setExpenseInventoryItemId(e.target.value)}>
+                        <option value="">{language === 'ar' ? 'الصنف المشترى' : 'Purchased item'}</option>
+                        {inventoryItems.map(item => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}
+                      </select>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <input required type="number" min="0.01" step="0.01" className="pos-input" placeholder={language === 'ar' ? 'الكمية' : 'Quantity'} value={expenseInventoryQuantity} onChange={e => setExpenseInventoryQuantity(e.target.value)} />
+                        <input required type="number" min="0.01" step="0.01" className="pos-input" placeholder={language === 'ar' ? 'سعر الوحدة' : 'Unit price'} value={expenseInventoryUnitPrice} onChange={e => setExpenseInventoryUnitPrice(e.target.value)} />
+                      </div>
+                      <small style={{ color: 'var(--text-gray)' }}>{language === 'ar' ? 'سيتم تسجيل الفاتورة وربطها بالمصروف لتظهر في الإدارة.' : 'The invoice will be linked to the expense for admin review.'}</small>
+                    </div>
+                  )}
+                  <select required className="pos-input" value={expensePaymentMethod} onChange={e => setExpensePaymentMethod(e.target.value as any)}>
+                    <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option><option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option><option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option><option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option><option value="petty_cash">{language === 'ar' ? 'عهدة نقدية' : 'Petty cash'}</option>
+                  </select>
+                  <select className="pos-input" value={expenseEmployeeId} onChange={e => setExpenseEmployeeId(e.target.value)}><option value="">{language === 'ar' ? 'الموظف المسؤول...' : 'Responsible employee...'}</option>{employeesList.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}</select>
+                  <textarea className="pos-input" placeholder={language === 'ar' ? 'ملاحظات' : 'Notes'} value={expenseNotes} onChange={e => setExpenseNotes(e.target.value)} />
+                  <div style={{ display: 'flex', gap: '1rem' }}><button disabled={expenseSaving} type="submit" className="pos-btn" style={{ flex: 1 }}>{expenseSaving ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'تسجيل المصروف' : 'Record expense')}</button><button type="button" className="pos-btn-outline" style={{ flex: 1 }} onClick={() => setExpenseModalOpen(false)}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</button></div>
                 </form>
               </div>
             </motion.div>

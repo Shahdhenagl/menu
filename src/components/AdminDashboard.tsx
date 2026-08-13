@@ -5670,6 +5670,8 @@ export default function AdminDashboard({
                         <th>{language === 'ar' ? 'التصنيف' : 'Category'}</th>
                         <th>{language === 'ar' ? 'القيمة' : 'Amount'}</th>
                         <th>{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</th>
+                        <th>{language === 'ar' ? 'المسؤول / المورد' : 'Employee / Supplier'}</th>
+                        <th>{language === 'ar' ? 'التفاصيل' : 'Details'}</th>
                         <th>{language === 'ar' ? 'التاريخ' : 'Date'}</th>
                         <th style={{ width: '80px' }}>{language === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                       </tr>
@@ -5697,8 +5699,17 @@ export default function AdminDashboard({
                           <td>
                             <span style={{ fontWeight: '600' }}>
                               {exp.payment_method === 'cash' ? '💵 كاش' : exp.payment_method === 'visa' ? '💳 فيزا' : exp.payment_method === 'wallet_restaurant' ? '📱 محفظة المطعم' : exp.payment_method === 'petty_cash' ? '💼 عهدة' : '⚡ انستا باي'}
-
                             </span>
+                          </td>
+                          <td style={{ fontSize: '0.82rem' }}>
+                            {exp.employee_name ? <div>{language === 'ar' ? 'الموظف: ' : 'Employee: '}{exp.employee_name}</div> : null}
+                            {exp.supplier_name ? <div style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'المورد: ' : 'Supplier: '}{exp.supplier_name}</div> : null}
+                            {!exp.employee_name && !exp.supplier_name ? '—' : null}
+                          </td>
+                          <td style={{ fontSize: '0.8rem', maxWidth: '220px' }}>
+                            {exp.classification_status === 'inventory_purchase' || exp.type === 'بضائع وخامات' ? (
+                              <span>{exp.inventory_item_name || '—'}{exp.inventory_quantity ? ` × ${exp.inventory_quantity}` : ''}{exp.inventory_unit_price ? ` @ ${Number(exp.inventory_unit_price).toFixed(2)}` : ''}</span>
+                            ) : <span>{exp.notes || '—'}</span>}
                           </td>
                           <td className="font-en" style={{ fontSize: '0.85rem' }}>{exp.expense_date}</td>
                           <td style={{ display: 'flex', gap: '0.5rem' }}>
