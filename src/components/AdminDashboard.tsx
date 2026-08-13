@@ -218,6 +218,15 @@ export default function AdminDashboard({
 
   // --- DEBT CUSTOMERS STATE ---
   const [debtCustomers, setDebtCustomers] = useState<Customer[]>([]);
+  const [debtLoadError, setDebtLoadError] = useState<string | null>(null);
+
+  const normalizeDebtCustomer = (customer: any): Customer => ({
+    ...customer,
+    id: String(customer?.id || ''),
+    name: String(customer?.name || 'عميل غير مسمى'),
+    phone: String(customer?.phone || ''),
+    total_debt: Number(customer?.total_debt) || 0,
+  });
   
   const [showDebtSettleModal, setShowDebtSettleModal] = useState<string | null>(null);
   const [debtSettleMethods, setDebtSettleMethods] = useState({ cash: '', visa: '', wallet: '', instapay: '' });
@@ -226,10 +235,13 @@ export default function AdminDashboard({
 
   const fetchDebtCustomers = async () => {
     try {
+      setDebtLoadError(null);
       const custs = await db.getCustomers();
-      setDebtCustomers(custs);
+      setDebtCustomers((Array.isArray(custs) ? custs : []).map(normalizeDebtCustomer).filter(c => c.id));
     } catch (err) {
       console.error('Error loading debt customers:', err);
+      setDebtCustomers([]);
+      setDebtLoadError(language === 'ar' ? 'تعذر تحميل الحسابات الآجلة. تأكد من جدول customers وصلاحيات Supabase.' : 'Could not load debt accounts. Check the customers table and Supabase permissions.');
     }
   };
   
@@ -4564,6 +4576,12 @@ export default function AdminDashboard({
                 </div>
               </div>
 
+              {debtLoadError && (
+                <div style={{ padding: '1rem', marginBottom: '1rem', borderRadius: '10px', border: '1px solid #ef4444', color: '#fecaca', background: 'rgba(239,68,68,0.1)' }}>
+                  {debtLoadError}
+                </div>
+              )}
+
               {/* Debt Summary Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                 <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(239,68,68,0.2)', textAlign: 'center' }}>
@@ -4602,7 +4620,7 @@ export default function AdminDashboard({
                           </div>
                         </td>
                         <td className="font-en">
-                          <a href={`https://wa.me/${cust.phone.startsWith('+') ? cust.phone : '+2' + cust.phone}`} target="_blank" rel="noopener noreferrer" style={{ color: '#25D366', textDecoration: 'none', fontWeight: 'bold' }}>
+                          <a href={cust.phone ? `https://wa.me/${cust.phone.startsWith('+') ? cust.phone : '+2' + cust.phone}` : '#'} target={cust.phone ? '_blank' : undefined} rel={cust.phone ? 'noopener noreferrer' : undefined} style={{ color: cust.phone ? '#25D366' : 'var(--text-muted)', textDecoration: 'none', fontWeight: 'bold' }}>
                             {cust.phone} 💬
                           </a>
                         </td>
