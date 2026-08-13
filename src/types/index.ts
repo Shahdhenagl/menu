@@ -81,6 +81,8 @@ export interface Customer {
   name: string;
   phone: string;
   total_debt: number;
+  /** الرصيد الآجل عند إنشاء العميل، إن كان محفوظًا في قاعدة البيانات. */
+  opening_debt?: number;
   created_at?: string;
 }
 

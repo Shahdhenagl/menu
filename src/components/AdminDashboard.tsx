@@ -3081,16 +3081,44 @@ export default function AdminDashboard({
   const customerReport = Object.values(customerMap).sort((a, b) => b.totalSpent - a.totalSpent);
 
   // Unique Customers CRM Mapping
-  const uniqueCustomersMap: Record<string, { 
-    name: string; 
-    phone: string; 
-    orderCount: number; 
-    totalSpent: number; 
-    firstOrderDate: string; 
+  // نبدأ من جدول customers حتى يظهر العميل المضاف من Supabase حتى لو لم ينفذ أي طلب بعد.
+  const dbCustomersByPhone = new Map(
+    debtCustomers
+      .filter(customer => customer.phone?.trim())
+      .map(customer => [customer.phone.trim(), customer] as const)
+  );
+  const uniqueCustomersMap: Record<string, {
+    name: string;
+    phone: string;
+    orderCount: number;
+    totalSpent: number;
+    firstOrderDate: string;
     lastOrderDate: string;
     preferredTable: string;
     allOrders: Order[];
+    openingDebt: number;
+    currentDebt: number;
   }> = {};
+
+  debtCustomers.forEach(customer => {
+    const phone = customer.phone.trim();
+    if (!phone) return;
+    const createdAt = customer.created_at || new Date().toISOString();
+    uniqueCustomersMap[phone] = {
+      name: customer.name,
+      phone,
+      orderCount: 0,
+      totalSpent: 0,
+      firstOrderDate: createdAt,
+      lastOrderDate: createdAt,
+      preferredTable: '—',
+      allOrders: [],
+      openingDebt: Number(customer.opening_debt) >= 0
+        ? Number(customer.opening_debt)
+        : Number(customer.total_debt) || 0,
+      currentDebt: Number(customer.total_debt) || 0
+    };
+  });
 
   orders.forEach(order => {
     const phone = order.customer_phone.trim();
@@ -3103,10 +3131,12 @@ export default function AdminDashboard({
         firstOrderDate: order.created_at,
         lastOrderDate: order.created_at,
         preferredTable: order.table_number,
-        allOrders: []
+        allOrders: [],
+        openingDebt: 0,
+        currentDebt: 0
       };
     }
-    
+
     uniqueCustomersMap[phone].orderCount += 1;
     if (order.status.startsWith('completed')) {
       uniqueCustomersMap[phone].totalSpent += order.total_price;
@@ -3128,7 +3158,23 @@ export default function AdminDashboard({
     }
   });
 
-  const customersList = Object.values(uniqueCustomersMap).sort((a, b) => b.totalSpent - a.totalSpent);
+  // الرصيد الافتتاحي = الرصيد الحالي المسجل في customers ناقص مديونية الطلبات الآجلة.
+  // عند وجود opening_debt صريح في قاعدة البيانات نستخدمه مباشرة.
+  Object.values(uniqueCustomersMap).forEach(customer => {
+    const dbCustomer = dbCustomersByPhone.get(customer.phone);
+    if (!dbCustomer) return;
+    const currentDebt = Number(dbCustomer.total_debt) || 0;
+    const deferredOrdersDebt = customer.allOrders.reduce((sum, order) => sum + deferredFromOrder(order), 0);
+    customer.currentDebt = currentDebt;
+    customer.openingDebt = Number(dbCustomer.opening_debt) >= 0
+      ? Number(dbCustomer.opening_debt)
+      : Math.max(0, currentDebt - deferredOrdersDebt);
+  });
+
+  const customersList = Object.values(uniqueCustomersMap).sort((a, b) => {
+    if (b.currentDebt !== a.currentDebt) return b.currentDebt - a.currentDebt;
+    return b.totalSpent - a.totalSpent;
+  });
 
   // Autocomplete suggestions based on manual inputs
   const matchingCustomers = (manualCustName.trim() || manualCustPhone.trim())
@@ -4508,6 +4554,7 @@ export default function AdminDashboard({
                       <th>{language === 'ar' ? 'رقم الهاتف' : 'Phone Number'}</th>
                       <th>{language === 'ar' ? 'عدد الطلبات' : 'Orders Count'}</th>
                       <th>{language === 'ar' ? 'إجمالي الإنفاق' : 'Total Spent'}</th>
+                      <th>{language === 'ar' ? 'الرصيد الآجل' : 'Credit Balance'}</th>
                       <th>{language === 'ar' ? 'الطاولة المفضلة' : 'Preferred Table'}</th>
                       <th>{language === 'ar' ? 'آخر نشاط' : 'Last Active'}</th>
                       <th>{language === 'ar' ? 'الملف الشخصي والسجل' : 'Profile & Logs'}</th>
@@ -4555,6 +4602,9 @@ export default function AdminDashboard({
                           <td className="font-en" style={{ color: 'var(--gold-primary)', fontWeight: '800' }}>
                             {cust.totalSpent.toFixed(2)} EGP
                           </td>
+                          <td className="font-en" style={{ color: cust.currentDebt > 0 ? '#f87171' : 'var(--text-muted)', fontWeight: '800' }}>
+                            {cust.currentDebt.toFixed(2)} EGP
+                          </td>
                           <td className="font-en" style={{ fontWeight: 'bold' }}>
                             {language === 'ar' ? 'طاولة ' : 'Table '} {cust.preferredTable}
                           </td>
@@ -4575,7 +4625,7 @@ export default function AdminDashboard({
                       ))}
                     {customersList.length === 0 && (
                       <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem' }}>
+                        <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-gray)', padding: '3rem 1rem' }}>
                           {language === 'ar' ? 'لا يوجد عملاء مسجلين حالياً' : 'No registered customers found yet'}
                         </td>
                       </tr>
@@ -8515,6 +8565,16 @@ export default function AdminDashboard({
                   <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', textAlign: 'center' }}>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-gray)', marginBottom: '0.3rem' }}>{language === 'ar' ? 'إجمالي الإنفاق' : 'Total Spent'}</div>
                     <div className="font-en" style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--gold-primary)' }}>{cust.totalSpent.toFixed(2)} EGP</div>
+                  </div>
+
+                  <div style={{ background: 'rgba(245,158,11,0.06)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(245,158,11,0.35)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-gray)', marginBottom: '0.3rem' }}>{language === 'ar' ? 'الرصيد الآجل الافتتاحي' : 'Opening Credit Balance'}</div>
+                    <div className="font-en" style={{ fontSize: '1.1rem', fontWeight: '800', color: '#fbbf24' }}>{cust.openingDebt.toFixed(2)} EGP</div>
+                  </div>
+
+                  <div style={{ background: 'rgba(239,68,68,0.06)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.35)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-gray)', marginBottom: '0.3rem' }}>{language === 'ar' ? 'الرصيد الآجل الحالي' : 'Current Credit Balance'}</div>
+                    <div className="font-en" style={{ fontSize: '1.1rem', fontWeight: '800', color: '#f87171' }}>{cust.currentDebt.toFixed(2)} EGP</div>
                   </div>
 
                   <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--glass-border)', textAlign: 'center' }}>
