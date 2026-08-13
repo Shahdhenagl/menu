@@ -140,9 +140,10 @@ export default function DailyClosingView({ orders, expenses, language, userName 
         drawer_2_total_counted: drawer2Counted,
       });
       if ((saved as any).__localOnly) {
+        const remoteReason = (saved as any).__errorMessage;
         throw new Error(ar
-          ? 'تم الحفظ على هذا الجهاز فقط ولم يتم تأكيده في Supabase. شغّل ترحيل daily_closings وتحقق من صلاحيات الجدول.'
-          : 'The closing was saved locally only and was not confirmed in Supabase. Run the daily_closings migration and check table permissions.');
+          ? `تم الحفظ على هذا الجهاز فقط ولم يتم تأكيده في Supabase.${remoteReason ? `\n\nخطأ Supabase: ${remoteReason}` : '\n\nشغّل ترحيل daily_closings وتحقق من صلاحيات الجدول.'}`
+          : `The closing was saved locally only and was not confirmed in Supabase.${remoteReason ? `\n\nSupabase error: ${remoteReason}` : '\n\nRun the daily_closings migration and check table permissions.'}`);
       }
       const persisted = await db.getDailyClosing(selectedDate);
       if (!persisted || persisted.id !== saved.id || !persisted.drawer_1_closed && activeDrawer === 1 || !persisted.drawer_2_closed && activeDrawer === 2) {

@@ -2690,6 +2690,7 @@ export const db = {
       created_at: existing?.created_at || new Date().toISOString(),
     } as DailyClosing;
 
+    let remoteErrorMessage = '';
     if (supabase) {
       try {
         const { data, error } = await (supabase as any)
@@ -2706,8 +2707,10 @@ export const db = {
           );
           return data as DailyClosing;
         }
-        console.warn("Supabase save daily closing error, falling back to local storage:", error?.message);
+        remoteErrorMessage = error?.message || 'Unknown Supabase error while saving daily closing';
+        console.warn("Supabase save daily closing error, falling back to local storage:", remoteErrorMessage);
       } catch (err) {
+        remoteErrorMessage = err instanceof Error ? err.message : String(err);
         console.warn("Supabase save daily closing failed", err);
       }
     }
@@ -2715,7 +2718,7 @@ export const db = {
     const rest = all.filter(c => c.closing_date !== record.closing_date);
     rest.unshift(record);
     saveLocalData('meridien_daily_closings', rest);
-    return { ...record, __localOnly: true } as DailyClosing;
+    return { ...record, __localOnly: true, __errorMessage: remoteErrorMessage } as DailyClosing & { __errorMessage?: string };
   },
 
   /** بيفتح يوم مقفول تاني للتعديل. */
