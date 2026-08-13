@@ -19,6 +19,7 @@ import {
 import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe, PaymentMethodKey, Partner, Expense, CustomerPayment } from '../types';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
+import DailyClosingView from './DailyClosingView';
 import { taxPercentForOrder } from '../utils/tax';
 import { drawerOfHall, drawerName, collectedPaymentParts, collectedFromOrder, deferredFromOrder } from '../utils/shiftClosing';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
@@ -88,6 +89,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     const saved = localStorage.getItem('meridien_active_pos_waiter');
     return saved ? JSON.parse(saved) : null;
   });
+  const currentPosUserName = selectedWaiter?.name || (() => {
+    try {
+      const raw = localStorage.getItem('meridien_logged_in_user');
+      if (raw) return JSON.parse(raw)?.name || '-';
+    } catch {}
+    return '-';
+  })();
   const [waiterPasscode, setWaiterPasscode] = useState('');
   const [viewAllOrders, setViewAllOrders] = useState(false);
 
@@ -116,6 +124,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   });
   const [tableStatusFilter, setTableStatusFilter] = useState<'all' | 'empty' | 'occupied' | 'delivered' | 'check'>('all');
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [dailyClosingOpen, setDailyClosingOpen] = useState(false);
+  const [dailyClosingPasswordOpen, setDailyClosingPasswordOpen] = useState(false);
+  const [dailyClosingPassword, setDailyClosingPassword] = useState('');
+  const [dailyClosingPasswordError, setDailyClosingPasswordError] = useState('');
   const [summaryOrderTypeFilter, setSummaryOrderTypeFilter] = useState<'all' | 'dine_in' | 'takeaway' | 'delivery' | 'talabat' | 'website'>('all');
   const [summaryScopeFilter, setSummaryScopeFilter] = useState<string>(() => {
     try {
@@ -2959,6 +2971,18 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <option value="talabat">{language === 'ar' ? 'طلبات' : 'Talabat'}</option>
                       <option value="website">{language === 'ar' ? 'موقع' : 'Website'}</option>
                     </select>
+                    <button
+                      className="pos-btn"
+                      style={{ padding: '0.75rem 1rem', fontSize: '1rem', background: '#b8860b', color: '#fff' }}
+                      onClick={() => {
+                        setDailyClosingPassword('');
+                        setDailyClosingPasswordError('');
+                        setDailyClosingPasswordOpen(true);
+                      }}
+                    >
+                      <Wallet size={18} />
+                      {language === 'ar' ? 'تقفيل يومي' : 'Daily Closing'}
+                    </button>
                     <button className="pos-btn" style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} onClick={printShiftSummary}>
                       <PrinterIcon size={18} />
                       {language === 'ar' ? 'طباعة تقرير الشيفت' : 'Print Shift Report'}
@@ -3061,8 +3085,86 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               </motion.div>
             </motion.div>
           )}
+                </AnimatePresence>
+        <AnimatePresence>
+          {dailyClosingPasswordOpen && (
+            <motion.div
+              key="daily_closing_password"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(0,0,0,.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', direction: language === 'ar' ? 'rtl' : 'ltr' }}
+              onClick={() => setDailyClosingPasswordOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: .95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: .95, y: 20 }}
+                onClick={event => event.stopPropagation()}
+                style={{ width: '100%', maxWidth: 420, background: 'var(--bg-card)', border: '2px solid var(--gold-primary)', borderRadius: 16, padding: '1.5rem' }}
+              >
+                <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'تأكيد التقفيل اليومي' : 'Confirm Daily Closing'}</h3>
+                <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>{language === 'ar' ? 'أدخل كلمة المرور للسماح للمحاسب بتقفيل اليوم من الـ POS.' : 'Enter the password to close the operating day from POS.'}</p>
+                <input
+                  autoFocus
+                  className="pos-input"
+                  type="password"
+                  inputMode="numeric"
+                  value={dailyClosingPassword}
+                  onChange={event => { setDailyClosingPassword(event.target.value); setDailyClosingPasswordError(''); }}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') {
+                      if (dailyClosingPassword === '2026') {
+                        setDailyClosingPasswordOpen(false);
+                        setDailyClosingPassword('');
+                        setSummaryOpen(false);
+                        setDailyClosingOpen(true);
+                      } else setDailyClosingPasswordError(language === 'ar' ? 'كلمة المرور غير صحيحة.' : 'Incorrect password.');
+                    }
+                  }}
+                  placeholder={language === 'ar' ? 'كلمة المرور' : 'Password'}
+                  style={{ width: '100%', marginBottom: '.75rem', textAlign: 'center', letterSpacing: 4 }}
+                />
+                {dailyClosingPasswordError && <div style={{ color: '#ef4444', marginBottom: '.75rem' }}>{dailyClosingPasswordError}</div>}
+                <div style={{ display: 'flex', gap: '.75rem' }}>
+                  <button
+                    className="pos-btn"
+                    style={{ flex: 1 }}
+                    onClick={() => {
+                      if (dailyClosingPassword !== '2026') {
+                        setDailyClosingPasswordError(language === 'ar' ? 'كلمة المرور غير صحيحة.' : 'Incorrect password.');
+                        return;
+                      }
+                      setDailyClosingPasswordOpen(false);
+                      setDailyClosingPassword('');
+                      setSummaryOpen(false);
+                      setDailyClosingOpen(true);
+                    }}
+                  >{language === 'ar' ? 'متابعة' : 'Continue'}</button>
+                  <button className="pos-btn-outline" style={{ flex: 1 }} onClick={() => setDailyClosingPasswordOpen(false)}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
         </AnimatePresence>
-
+        <AnimatePresence>
+          {dailyClosingOpen && (
+            <motion.div
+              key="daily_closing_pos"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              style={{ position: 'fixed', inset: 0, zIndex: 10500, background: 'var(--bg-main, #050505)', overflowY: 'auto', padding: '1rem', direction: language === 'ar' ? 'rtl' : 'ltr' }}
+            >
+              <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '.75rem' }}>
+                  <button className="pos-btn-outline" onClick={() => setDailyClosingOpen(false)}><X size={18} /> {language === 'ar' ? 'رجوع إلى POS' : 'Back to POS'}</button>
+                </div>
+                <DailyClosingView
+                  orders={allOrders}
+                  expenses={expenses}
+                  settings={settings || undefined}
+                  language={language}
+                  userName={currentPosUserName}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <AnimatePresence>
           {/* Collect Payment Modal */}
           {collectPaymentOrder && (

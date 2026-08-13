@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Lock, Printer, Wallet } from 'lucide-react
 import type { Category, DailyClosing, DailyClosingMethod, Expense, Order, PaymentMethodKey, Product, RestaurantSettings, DrawerId } from '../types';
 import { db } from '../lib/supabase';
 import { collectedPaymentParts } from '../utils/shiftClosing';
+import { notifyAction } from '../utils/telegramUtils';
 
 interface Props {
   orders: Order[];
@@ -26,7 +27,7 @@ const localDate = (value: string | number | Date) => {
 };
 const today = () => localDate(new Date());
 
-export default function DailyClosingView({ orders, expenses, language, userName }: Props) {
+export default function DailyClosingView({ orders, expenses, language, userName, settings }: Props) {
   const ar = language === 'ar';
   // لا تستخدم تاريخ الجهاز كبداية افتراضية؛ يوم التشغيل قد يمتد بعد منتصف الليل.
   // نقرأ اليوم النشط الذي تم إنشاؤه بعد إغلاق الخزنتين حتى لا تعود الشاشة لليوم السابق بعد refresh.
@@ -177,6 +178,22 @@ export default function DailyClosingView({ orders, expenses, language, userName 
         // إغلاق الخزنتين يعني سحب الرصيد المرحّل؛ افتح شاشة التقرير على يوم التشغيل الجديد.
         setSelectedDate(nextDay.date);
         setClosing(null);
+        try {
+          const totalCollected = dayOrders.reduce((sum, order) => sum + n(order.total_price), 0);
+          const totalExpenses = dayExpenses.reduce((sum, expense) => sum + n(expense.amount), 0);
+          const details = [
+            `• <b>التاريخ:</b> ${selectedDate}`,
+            `• <b>إجمالي الطلبات:</b> ${fmt(totalCollected)}`,
+            `• <b>عدد الطلبات:</b> ${dayOrders.length}`,
+            `• <b>المصروفات:</b> ${fmt(totalExpenses)}`,
+            `• <b>الخزنة 1:</b> ${fmt(drawer1Expected)}`,
+            `• <b>الخزنة 2:</b> ${fmt(drawer2Expected)}`,
+            `• <b>تم التنفيذ بواسطة:</b> ${userName || '-'}`
+          ].join('\\n');
+          await notifyAction('تقفيل يومي مكتمل', 'Daily Closing Completed', details, settings, userName || '-');
+        } catch (telegramError) {
+          console.warn('Daily closing saved but Telegram notification failed', telegramError);
+        }
         setCounted({});
         setNotes('');
       }
