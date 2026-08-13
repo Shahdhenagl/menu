@@ -1568,7 +1568,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           
           .pos-products {
             flex: 1 1 auto !important;
-            min-height: 0 !important;
+            min-height: 300px !important;
             padding: 0.75rem !important;
             padding-bottom: 5.5rem !important;
             overflow-y: auto !important;
@@ -1638,7 +1638,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           }
           .pos-content > .pos-top-controls + * {
             flex: none !important;
-            min-height: 0 !important;
+            min-height: calc(100dvh - 4.5rem) !important;
             height: auto !important;
             max-height: none !important;
             overflow: visible !important;
