@@ -3,7 +3,7 @@ import { Printer, RefreshCw, ChevronDown, ChevronUp, FileText } from 'lucide-rea
 import type { DailyClosing, RestaurantSettings, ShiftClosing } from '../types';
 import { db } from '../lib/supabase';
 import { printShiftClosing } from '../utils/printUtils';
-import { drawerOfHall, collectedFromOrder } from '../utils/shiftClosing';
+import { drawerOfHall, collectedFromOrder, deferredFromOrder } from '../utils/shiftClosing';
 import { taxPercentForOrder } from '../utils/tax';
 
 interface ShiftRecordsViewProps {
@@ -67,6 +67,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
         const dayPayments = (allPayments || []).filter(p => localDay(p.payment_date || p.created_at) === d.closing_date);
         const daySubtotal = dayOrders.reduce((s, o) => s + orderSubtotal(o), 0);
         const dayCollected = dayOrders.reduce((s, o) => s + collectedFromOrder(o), 0);
+        const dayDeferred = dayOrders.reduce((s, o) => s + deferredFromOrder(o), 0);
         const dayTax = dayOrders.reduce((s, o) => {
           if (o.payment_method === 'partner' || o.partner_id) return s;
           return s + orderSubtotal(o) * taxPercentForOrder(settings, o.order_type, o.hall) / 100;
@@ -116,6 +117,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           const payments = (allPayments || []).filter(p => localDay(p.payment_date || p.created_at) === d.closing_date && (p.drawer || 1) === drawer);
           const subtotal = orders.reduce((s, o) => s + orderSubtotal(o), 0);
           const collected = orders.reduce((s, o) => s + collectedFromOrder(o), 0);
+          const deferred = orders.reduce((s, o) => s + deferredFromOrder(o), 0);
           const tax = orders.reduce((s, o) => s + (o.payment_method === 'partner' || o.partner_id ? 0 : orderSubtotal(o) * taxPercentForOrder(settings, o.order_type, o.hall) / 100), 0);
           const deposits = payments.reduce((s, p) => s + num(p.amount), 0);
           const expenseTotal = expenses.reduce((s, e) => s + num(e.amount), 0);
@@ -125,7 +127,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           const expensesByMethod = Object.entries(expenses.reduce((acc: Record<string, number>, e) => { const key = e.payment_method || 'cash'; acc[key] = (acc[key] || 0) + num(e.amount); return acc; }, {})).map(([method, amount]) => ({ method, label: methodLabel(method, ar), amount }));
           const taxMap: Record<string, { percent: number; base: number; tax: number; collected: number; orders: number }> = {};
           orders.forEach(o => { const percent = o.payment_method === 'partner' || o.partner_id ? 0 : taxPercentForOrder(settings, o.order_type, o.hall); const key = String(percent); const row = taxMap[key] || (taxMap[key] = { percent, base: 0, tax: 0, collected: 0, orders: 0 }); row.base += orderSubtotal(o); row.tax += percent ? orderSubtotal(o) * percent / 100 : 0; row.collected += collectedFromOrder(o); row.orders += 1; });
-          return { drawer, label: ar ? `خزنة ${drawer}` : `Drawer ${drawer}`, ordersCount: orders.length, subtotal, tax, discount: Math.max(0, subtotal + tax - orders.reduce((s, o) => s + num(o.total_price), 0)), collected, deposits, expenses: expenseTotal, expectedBalance: collected + deposits - expenseTotal, methods, expensesByMethod, taxGroups: Object.values(taxMap) };
+          return { drawer, label: ar ? `خزنة ${drawer}` : `Drawer ${drawer}`, ordersCount: orders.length, subtotal, tax, deferred, discount: Math.max(0, subtotal + tax - orders.reduce((s, o) => s + num(o.total_price), 0)), collected, deposits, expenses: expenseTotal, expectedBalance: collected + deposits - expenseTotal, methods, expensesByMethod, taxGroups: Object.values(taxMap) };
         });
         return {
           id: `daily-${d.id || d.closing_date}`,
@@ -139,6 +141,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
           tax: dayTax,
           discount: Math.max(0, daySubtotal + dayTax - dayOrders.reduce((s, o) => s + num(o.total_price), 0)),
           collected: dayCollected,
+          deferred: dayDeferred,
           methods,
           order_types: [],
           tax_groups: [...dayTaxMap.values()].sort((a, b) => b.percent - a.percent),
@@ -179,6 +182,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
 
   const totals = useMemo(() => ({
     collected: filtered.reduce((s, r) => s + num(r.collected), 0),
+    deferred: filtered.reduce((s, r) => s + num(r.deferred), 0),
     expenses: filtered.reduce((s, r) => s + num(r.expenses), 0),
     subtotal: filtered.reduce((s, r) => s + num(r.subtotal), 0),
     tax: filtered.reduce((s, r) => s + num(r.tax), 0),
@@ -203,6 +207,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
       tax: num(r.tax),
       discount: num(r.discount),
       collected: num(r.collected),
+      deferred: num(r.deferred),
       deposits: num(r.deposits),
       expenses: num(r.expenses),
       expectedBalance: r.expectedBalance !== undefined ? num(r.expectedBalance) : num(r.collected) + num(r.deposits) - num(r.expenses),
@@ -257,6 +262,7 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
         <Stat title={ar ? 'قبل الضريبة' : 'Before tax'} value={fmt(totals.subtotal)} c="#9ca3af" />
         <Stat title={ar ? 'الضريبة' : 'Tax'} value={fmt(totals.tax)} c="#f59e0b" />
         <Stat title={ar ? 'إجمالي المحصل' : 'Collected'} value={fmt(totals.collected)} c="#10b981" />
+        <Stat title={ar ? 'إجمالي الآجل' : 'Total Deferred'} value={fmt(totals.deferred)} c="#d97706" />
         <Stat title={ar ? 'إجمالي المصروف' : 'Total Expenses'} value={fmt(totals.expenses)} c="#ef4444" />
       </div>
 

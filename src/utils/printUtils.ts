@@ -503,6 +503,8 @@ export type ShiftClosingReport = {
   tax: number;
   discount: number;
   collected: number;    // إجمالي المحصل بالضريبة
+  /** إجمالي الآجل، مستبعد من التحصيل والرصيد النقدي */
+  deferred: number;
   deposits: number;
   expenses: number;
   expectedBalance: number;
@@ -527,6 +529,8 @@ export type ShiftClosingReport = {
     tax: number;
     discount: number;
     collected: number;
+    /** إجمالي الآجل لهذه الخزنة، مستبعد من الرصيد المتوقع */
+    deferred: number;
     deposits: number;
     expenses: number;
     expectedBalance: number;
@@ -595,6 +599,7 @@ export const printShiftClosing = async (
       ${d.discount > 0.001 ? `<div class="row"><span>${isAr ? 'الخصم' : 'Discount'}</span><span class="v">- ${money(d.discount)}</span></div>` : ''}
       <div class="row"><span>${isAr ? 'إجمالي الضريبة' : 'Total tax'}</span><span class="v">${money(d.tax)}</span></div>
       <div class="row b"><span>${isAr ? 'إجمالي المحصل' : 'Collected'}</span><span class="v">${money(d.collected)}</span></div>
+      <div class="row"><span>${isAr ? 'إجمالي الآجل (غير محصل)' : 'Deferred (not collected)'}</span><span class="v">${money(d.deferred)}</span></div>
       <div class="drawer-subtitle">${isAr ? 'وسائل التحصيل' : 'PAYMENT METHODS'}</div>${methods}
       <div class="drawer-subtitle">${isAr ? 'المصروفات الخارجة من الخزنة' : 'EXPENSES PAID FROM DRAWER'}</div>${expenses}
       <div class="row b"><span>${isAr ? 'إجمالي المصروفات' : 'Total expenses'}</span><span class="v">- ${money(d.expenses)}</span></div>
@@ -667,6 +672,7 @@ export const printShiftClosing = async (
         <span class="lbl">${isAr ? 'إجمالي المحصل بالضريبة' : 'Collected incl. tax'}</span>
         <span class="val">${money(report.collected)} ${isAr ? 'ج.م' : 'EGP'}</span>
       </div>
+      <div class="row"><span>${isAr ? 'إجمالي الآجل (غير محصل)' : 'Total deferred (not collected)'}</span><span class="v">${money(report.deferred)}</span></div>
 
       <div class="sec">${isAr ? 'تفاصيل حساب كل خزنة' : 'DETAILED DRAWER ACCOUNTS'}</div>
       ${drawerSections || `<div class="sec">${isAr ? 'التقسيم في الخزنة' : 'DRAWER SPLIT'}</div>${methodRows}<div class="row" style="border-top:1px solid #000; font-weight:900;"><span>${isAr ? 'إجمالي المحصل' : 'Total collected'}</span><span class="v">${money(report.collected)}</span></div>`}

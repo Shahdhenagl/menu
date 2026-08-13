@@ -264,6 +264,7 @@ export const buildShiftReport = ({
     });
 
   const itemsCount = categoriesSorted.reduce((s, c) => s + c.qty, 0);
+  const deferred = orders.reduce((sum, order) => sum + deferredFromOrder(order), 0);
   const sameDay = from.toDateString() === to.toDateString();
 
   return {
@@ -278,6 +279,7 @@ export const buildShiftReport = ({
     tax,
     discount,
     collected,
+    deferred,
     deposits,
     expenses: expensesTotal,
     expectedBalance,

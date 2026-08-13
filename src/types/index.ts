@@ -415,6 +415,8 @@ export interface ShiftClosing {
   tax: number;
   discount: number;
   collected: number;
+  /** إجمالي الآجل خلال الفترة؛ لا يدخل في التحصيل أو الرصيد النقدي */
+  deferred: number;
   methods: ShiftClosingMethod[];
   order_types: ShiftClosingTypeRow[];
   tax_groups: ShiftClosingTaxRow[];

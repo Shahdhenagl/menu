@@ -187,6 +187,7 @@ export default function ShiftClosingView({
         tax: report.tax,
         discount: report.discount,
         collected: report.collected,
+        deferred: report.deferred,
         deposits: report.deposits,
         expenses: report.expenses,
         expectedBalance: report.expectedBalance,
@@ -262,6 +263,7 @@ export default function ShiftClosingView({
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'قبل الضريبة' : 'Before tax'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'الضريبة' : 'Tax'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'المبيعات' : 'Sales'}</th>
+                <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'الآجل' : 'Deferred'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'المصروفات' : 'Expenses'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'التبس (عرض فقط)' : 'Tips (display only)'}</th>
                 <th style={{ textAlign: ar ? 'left' : 'right', padding: '0.6rem 0.5rem' }}>{ar ? 'صافي الخزنة' : 'Net drawer'}</th>
@@ -291,6 +293,10 @@ export default function ShiftClosingView({
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: 'var(--text-light)' }}>{fmt(report.subtotal)}</td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#f59e0b' }}>{fmt(report.tax)}</td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#10b981', fontWeight: 800 }}>{fmt(report.collected)}</td>
+                  <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#d97706', fontWeight: 800 }}>
+                    <div>{fmt(report.deferred)}</div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-gray)', fontWeight: 500 }}>{ar ? 'غير محصل' : 'Not collected'}</div>
+                  </td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: ar ? 'left' : 'right', color: '#ef4444', fontWeight: 800 }}>
                     <div>- {fmt(report.expenses)}</div>
                     {report.expensesByMethod?.filter(m => Math.abs(m.amount) > 0.001).map(m => (
