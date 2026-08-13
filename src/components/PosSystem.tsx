@@ -1023,7 +1023,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         partner_discount_percent: partnerForOrder({ ...editingOrder, table_number: tableNumber, order_type: orderType || editingOrder.order_type }) ? 30 : undefined,
         partner_subtotal: partnerForOrder({ ...editingOrder, table_number: tableNumber, order_type: orderType || editingOrder.order_type }) ? cartSubtotal : undefined,
         partner_amount_due: partnerForOrder({ ...editingOrder, table_number: tableNumber, order_type: orderType || editingOrder.order_type }) ? totalForItems(cart, orderType || editingOrder.order_type, (orderType || editingOrder.order_type) === 'dine_in' ? (selectedHall || editingOrder.hall) : undefined, false, true) : undefined,
-        customer_name: customerName,
+        customer_name: partnerForOrder({ ...editingOrder, table_number: tableNumber, order_type: orderType || editingOrder.order_type })?.name || customerName,
         customer_phone: customerPhone,
         table_number: tableNumber,
         order_type: orderType || editingOrder.order_type
@@ -1066,7 +1066,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     }
 
     const newOrder: Omit<Order, 'id'> = {
-      customer_name: customerName || 'Guest',
+      customer_name: selectedPartner?.name || customerName || 'Guest',
       customer_phone: customerPhone || 'N/A',
       table_number: tableNumber || '-',
       hall: orderType === 'dine_in' && selectedHall ? selectedHall : undefined,
