@@ -2665,7 +2665,13 @@ export const db = {
           .from('daily_closings')
           .select('*')
           .order('closing_date', { ascending: false });
-        if (!error) return (data || []) as DailyClosing[];
+        if (!error) {
+          return (data || []).map((row: DailyClosing) => ({
+            ...row,
+            // مصدر الحقيقة لإغلاق اليوم هو إغلاق الخزنتين، وليس status القديم وحده.
+            status: row.drawer_1_closed && row.drawer_2_closed ? 'closed' : row.status,
+          })) as DailyClosing[];
+        }
         console.warn("Supabase fetch daily closings error, falling back to local storage:", error.message);
       } catch (err) {
         console.warn("Supabase fetch daily closings failed", err);
@@ -2689,6 +2695,8 @@ export const db = {
       closed_at: new Date().toISOString(),
       created_at: existing?.created_at || new Date().toISOString(),
     } as DailyClosing;
+    // لا تسمح ببقاء status=reopened بعد إغلاق الخزنتين فعليًا.
+    record.status = record.drawer_1_closed && record.drawer_2_closed ? 'closed' : 'reopened';
 
     let remoteErrorMessage = '';
     if (supabase) {
