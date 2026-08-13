@@ -508,6 +508,22 @@ export type ShiftClosingReport = {
   /** تجميع الضرائب حسب النسبة */
   taxGroups: ShiftClosingTaxRow[];
   categories: ShiftClosingCategory[];
+  /** تفصيل مستقل لكل خزنة في تقرير تقفيل اليوم */
+  drawerBreakdown?: {
+    drawer: number;
+    label: string;
+    ordersCount: number;
+    subtotal: number;
+    tax: number;
+    discount: number;
+    collected: number;
+    deposits: number;
+    expenses: number;
+    expectedBalance: number;
+    methods: { label: string; amount: number }[];
+    expensesByMethod: { label: string; amount: number }[];
+    taxGroups: ShiftClosingTaxRow[];
+  }[];
 };
 
 export const printShiftClosing = async (
@@ -552,6 +568,25 @@ export const printShiftClosing = async (
     </div>`).join('')
     || `<div class="row empty">${isAr ? 'لا يوجد' : 'None'}</div>`;
 
+  const drawerSections = (report.drawerBreakdown || []).map(d => {
+    const methods = d.methods.filter(m => Math.abs(m.amount) > 0.001).map(m => `<div class="row"><span>${m.label}</span><span class="v">${money(m.amount)}</span></div>`).join('') || `<div class="row empty">${isAr ? 'لا يوجد تحصيل' : 'Nothing collected'}</div>`;
+    const expenses = d.expensesByMethod.filter(m => Math.abs(m.amount) > 0.001).map(m => `<div class="row"><span>${m.label}</span><span class="v">- ${money(m.amount)}</span></div>`).join('') || `<div class="row empty">${isAr ? 'لا توجد مصروفات' : 'No expenses'}</div>`;
+    const taxes = d.taxGroups.map(g => `<div class="row sm"><span>${g.percent > 0 ? (isAr ? `ضريبة ${g.percent}%` : `Tax ${g.percent}%`) : (isAr ? 'بدون ضريبة' : 'No tax')}</span><span class="v">${money(g.tax)}</span></div>`).join('') || `<div class="row empty">${isAr ? 'لا توجد ضرائب' : 'No tax'}</div>`;
+    return `<div class="drawer-box">
+      <div class="drawer-title">${d.label}</div>
+      <div class="row"><span>${isAr ? 'عدد الأوردرات' : 'Orders'}</span><span class="v">${d.ordersCount}</span></div>
+      <div class="row"><span>${isAr ? 'المبيعات قبل الضريبة' : 'Sales before tax'}</span><span class="v">${money(d.subtotal)}</span></div>
+      ${d.discount > 0.001 ? `<div class="row"><span>${isAr ? 'الخصم' : 'Discount'}</span><span class="v">- ${money(d.discount)}</span></div>` : ''}
+      <div class="row"><span>${isAr ? 'إجمالي الضريبة' : 'Total tax'}</span><span class="v">${money(d.tax)}</span></div>
+      <div class="row b"><span>${isAr ? 'إجمالي المحصل' : 'Collected'}</span><span class="v">${money(d.collected)}</span></div>
+      <div class="drawer-subtitle">${isAr ? 'وسائل التحصيل' : 'PAYMENT METHODS'}</div>${methods}
+      <div class="drawer-subtitle">${isAr ? 'المصروفات الخارجة من الخزنة' : 'EXPENSES PAID FROM DRAWER'}</div>${expenses}
+      <div class="row b"><span>${isAr ? 'إجمالي المصروفات' : 'Total expenses'}</span><span class="v">- ${money(d.expenses)}</span></div>
+      <div class="drawer-subtitle">${isAr ? 'تفصيل الضرائب' : 'TAX DETAILS'}</div>${taxes}
+      <div class="total"><span class="lbl">${isAr ? 'صافي المتوقع في الخزنة' : 'Expected drawer balance'}</span><span class="val">${money(d.expectedBalance)} ${isAr ? 'ج.م' : 'EGP'}</span></div>
+    </div>`;
+  }).join('');
+
   const categoryBlocks = report.categories.map(c => `
     <div class="cat">${c.name}</div>
     ${c.lines.map(l => `
@@ -577,6 +612,9 @@ export const printShiftClosing = async (
       .row.sm { font-size:12px; padding:2px 6px; }
       .row.b { font-weight:900; border-top:1px solid #999; }
       .grp { border:1px solid #000; border-radius:5px; margin:6px 0; overflow:hidden; }
+      .drawer-box { border:2px solid #000; border-radius:7px; margin:8px 0; padding:6px; page-break-inside:avoid; }
+      .drawer-title { background:#000; color:#fff; text-align:center; font-size:16px; font-weight:900; padding:7px; margin:-6px -6px 5px; }
+      .drawer-subtitle { border-top:1px dashed #000; margin-top:5px; padding-top:4px; font-size:12px; font-weight:900; }
       .grp-h { display:flex; justify-content:space-between; background:#000; color:#fff;
                font-size:12.5px; font-weight:900; padding:4px 6px; }
       .sec { text-align:center; font-size:13px; font-weight:900; margin:9px 0 3px;
@@ -612,13 +650,10 @@ export const printShiftClosing = async (
         <span class="val">${money(report.collected)} ${isAr ? 'ج.م' : 'EGP'}</span>
       </div>
 
-      <div class="sec">${isAr ? 'التقسيم في الخزنة' : 'DRAWER SPLIT'}</div>
-      ${methodRows}
-      <div class="row" style="border-top:1px solid #000; font-weight:900;">
-        <span>${isAr ? 'إجمالي المحصل' : 'Total collected'}</span><span class="v">${money(report.collected)}</span>
-      </div>
+      <div class="sec">${isAr ? 'تفاصيل حساب كل خزنة' : 'DETAILED DRAWER ACCOUNTS'}</div>
+      ${drawerSections || `<div class="sec">${isAr ? 'التقسيم في الخزنة' : 'DRAWER SPLIT'}</div>${methodRows}<div class="row" style="border-top:1px solid #000; font-weight:900;"><span>${isAr ? 'إجمالي المحصل' : 'Total collected'}</span><span class="v">${money(report.collected)}</span></div>`}
 
-      <div class="sec">${isAr ? 'الإيداعات والمصروفات' : 'DEPOSITS & EXPENSES'}</div>
+      <div class="sec">${isAr ? 'الإيداعات والمصروفات الإجمالية' : 'TOTAL DEPOSITS & EXPENSES'}</div>
       <div class="row"><span>${isAr ? 'إيداعات العملاء' : 'Customer deposits'}</span><span class="v">+ ${money(report.deposits)}</span></div>
       ${depositRows}
       <div class="row" style="border-top:1px solid #000; font-weight:900;"><span>${isAr ? 'المصروفات الخارجة' : 'Expenses paid out'}</span><span class="v">- ${money(report.expenses)}</span></div>
