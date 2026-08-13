@@ -1395,6 +1395,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         }
         .pos-content {
           flex: 1; min-height: 0; min-width: 0; display: flex; position: relative; overflow: hidden;
+          box-sizing: border-box; padding-top: 5rem;
           overscroll-behavior: contain;
         }
         .pos-top-controls {
