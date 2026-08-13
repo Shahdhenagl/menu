@@ -150,8 +150,15 @@ export default function DailyClosingView({ orders, expenses, language, userName 
         throw new Error('Daily closing was not confirmed after saving.');
       }
       setClosing(persisted);
-      if (persisted.drawer_1_closed && persisted.drawer_2_closed) await db.startNextOperatingDay(selectedDate);
-      alert(persisted.drawer_1_closed && persisted.drawer_2_closed ? (ar ? 'تم إغلاق الخزنتين وانتهى يوم التشغيل. بدأ يوم جديد تلقائيًا.' : 'Both drawers are closed. The operating day is complete and a new day has started.') : (ar ? `تم إغلاق الخزنة ${activeDrawer}. أغلق الخزنة الأخرى لطباعة التقرير.` : `Drawer ${activeDrawer} closed. Close the other drawer to print the report.`));
+      if (persisted.drawer_1_closed && persisted.drawer_2_closed) {
+        const nextDay = await db.startNextOperatingDay(selectedDate);
+        // إغلاق الخزنتين يعني سحب الرصيد المرحّل؛ افتح شاشة التقرير على يوم التشغيل الجديد.
+        setSelectedDate(nextDay.date);
+        setClosing(null);
+        setCounted({});
+        setNotes('');
+      }
+      alert(persisted.drawer_1_closed && persisted.drawer_2_closed ? (ar ? 'تم إغلاق الخزنتين وانتهى يوم التشغيل. بدأ يوم جديد تلقائيًا، والتقرير بدأ من الصفر.' : 'Both drawers are closed. The operating day is complete, a new day has started, and the report has been reset.') : (ar ? `تم إغلاق الخزنة ${activeDrawer}. أغلق الخزنة الأخرى لطباعة التقرير.` : `Drawer ${activeDrawer} closed. Close the other drawer to print the report.`));
     } catch (error) {
       console.error(error);
       const reason = error instanceof Error ? error.message : String(error || 'Unknown error');
