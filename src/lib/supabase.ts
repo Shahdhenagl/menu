@@ -2577,7 +2577,13 @@ export const db = {
           .from('shift_closings')
           .select('*')
           .order('to_at', { ascending: false });
-        if (!error) return (data || []) as ShiftClosing[];
+        if (!error) {
+          const remote = (data || []) as ShiftClosing[];
+          const local = getLocalData('meridien_shift_closings', [] as ShiftClosing[]);
+          const byId = new Map<string, ShiftClosing>();
+          [...remote, ...local].forEach(row => byId.set(row.id, row));
+          return [...byId.values()].sort((a, b) => new Date(b.to_at).getTime() - new Date(a.to_at).getTime());
+        }
         console.warn("Supabase fetch shift closings error, falling back to local storage:", error.message);
       } catch (err) {
         console.warn("Supabase fetch shift closings failed", err);
