@@ -682,14 +682,21 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     newOrder: language === 'ar' ? 'طلب جديد' : 'New Order',
   };
 
-  const [productSearchQuery, setProductSearchQuery] = useState('');
+    const [productSearchQuery, setProductSearchQuery] = useState('');
+
+  // منتجات البار القديمة قد لا تحتوي على department داخل products،
+  // بينما التصنيف المرتبط بها يحتوي على department الصحيح.
+  const getProductDepartment = (product: Product): 'restaurant' | 'bar' => {
+    return product.department || categories.find(c => c.id === product.category_id)?.department || 'restaurant';
+  };
 
   const getVisibleProducts = () => {
     const departmentCategories = categories.filter(c => (c.department || 'restaurant') === posDepartment);
     const activeCategoryForDepartment = departmentCategories.some(c => c.id === activeCategory) ? activeCategory : null;
     return products.filter(p => {
       if (!p.is_available) return false;
-      if ((p.department || 'restaurant') !== posDepartment) return false;
+      if (getProductDepartment(p) !== posDepartment) return false;
+
       if (productSearchQuery.trim()) {
         const query = productSearchQuery.toLowerCase();
         if (!p.name_ar.toLowerCase().includes(query) && !p.name_en.toLowerCase().includes(query)) return false;
@@ -708,7 +715,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
   // حالة المخزون للصنف: 'out' نفذ، 'low' قرب يخلص، 'ok' متاح
   const getStockStatus = (p: Product): 'out' | 'low' | 'ok' => {
-    const dept = p.department || 'restaurant';
+    const dept = getProductDepartment(p);
     const stockField = dept === 'bar' ? 'stock_bar' : 'stock_factory';
     const recipeItems = productRecipes.filter(r => r.product_id === p.id);
     if (recipeItems.length > 0) {
