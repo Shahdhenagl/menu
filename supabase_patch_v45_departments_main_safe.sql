@@ -63,8 +63,8 @@ alter table public.daily_closings
   add constraint daily_closings_department_check
   check (department in ('restaurant', 'bar'));
 
-create index if not exists idx_orders_department_operating_day
-  on public.orders (department, operating_day);
+create index if not exists idx_orders_department
+  on public.orders (department);
 create index if not exists idx_expenses_department_date
   on public.expenses (department, expense_date);
 create index if not exists idx_shift_closings_department_to_at
