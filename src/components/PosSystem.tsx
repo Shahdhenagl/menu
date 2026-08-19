@@ -3197,6 +3197,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   settings={settings || undefined}
                   language={language}
                   userName={currentPosUserName}
+                  allowedDrawer={allowedDrawer}
                 />
               </div>
             </motion.div>

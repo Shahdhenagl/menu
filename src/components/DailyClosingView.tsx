@@ -15,6 +15,7 @@ interface Props {
   language: 'ar' | 'en';
   userName?: string;
   userRole?: string;
+  allowedDrawer?: DrawerId | null;
 }
 
 const METHODS: PaymentMethodKey[] = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred', 'petty_cash', 'partner'];
@@ -27,12 +28,13 @@ const localDate = (value: string | number | Date) => {
 };
 const today = () => localDate(new Date());
 
-export default function DailyClosingView({ orders, expenses, language, userName, settings }: Props) {
+export default function DailyClosingView({ orders, expenses, language, userName, settings, allowedDrawer = null }: Props) {
   const ar = language === 'ar';
+  const visibleDrawers: DrawerId[] = allowedDrawer ? [allowedDrawer] : [1, 2];
   // لا تستخدم تاريخ الجهاز كبداية افتراضية؛ يوم التشغيل قد يمتد بعد منتصف الليل.
   // نقرأ اليوم النشط الذي تم إنشاؤه بعد إغلاق الخزنتين حتى لا تعود الشاشة لليوم السابق بعد refresh.
   const [selectedDate, setSelectedDate] = useState('');
-  const [activeDrawer, setActiveDrawer] = useState<DrawerId>(1);
+  const [activeDrawer, setActiveDrawer] = useState<DrawerId>(allowedDrawer || 1);
   const [closing, setClosing] = useState<DailyClosing | null>(null);
   const [counted, setCounted] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
@@ -94,6 +96,10 @@ export default function DailyClosingView({ orders, expenses, language, userName,
   const difference = totalCounted - totalExpected;
   const drawerClosed = activeDrawer === 1 ? Boolean(closing?.drawer_1_closed) : Boolean(closing?.drawer_2_closed);
   const bothClosed = Boolean(closing?.drawer_1_closed && closing?.drawer_2_closed);
+
+  useEffect(() => {
+    if (allowedDrawer && activeDrawer !== allowedDrawer) setActiveDrawer(allowedDrawer);
+  }, [allowedDrawer, activeDrawer]);
 
   const methodLabel = (method: PaymentMethodKey) => ({
     cash: ar ? 'كاش' : 'Cash', visa: ar ? 'فيزا' : 'Visa', wallet_restaurant: ar ? 'محفظة المطعم' : 'Restaurant Wallet',
@@ -237,13 +243,14 @@ export default function DailyClosingView({ orders, expenses, language, userName,
     </div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '1rem', margin: '1.2rem 0' }}>
       <Summary title={ar ? 'إجمالي المحصل من أول اليوم' : 'Total collected today'} value={fmt(dayOrders.reduce((sum, order) => sum + n(order.total_price), 0))} /><Summary title={ar ? 'إجمالي التبس — للعرض فقط' : 'Total tips — display only'} value={fmt(totalTips)} />
-      <Summary title={ar ? 'الخزنة 1' : 'Drawer 1'} value={closing?.drawer_1_closed ? (ar ? 'مقفولة' : 'Closed') : (ar ? 'مفتوحة' : 'Open')} />
-      <Summary title={ar ? 'الخزنة 2' : 'Drawer 2'} value={closing?.drawer_2_closed ? (ar ? 'مقفولة' : 'Closed') : (ar ? 'مفتوحة' : 'Open')} />
+      {visibleDrawers.map(drawer => (
+        <Summary key={drawer} title={ar ? `الخزنة ${drawer}` : `Drawer ${drawer}`} value={(drawer === 1 ? closing?.drawer_1_closed : closing?.drawer_2_closed) ? (ar ? 'مقفولة' : 'Closed') : (ar ? 'مفتوحة' : 'Open')} />
+      ))}
       <Summary title={ar ? 'الطلبات' : 'Orders'} value={String(dayOrders.length)} />
     </div>
     {openTableOrders.length > 0 && <div style={{ padding: '1rem', border: '1px solid #ef4444', color: '#fecaca', background: 'rgba(239,68,68,.1)', borderRadius: 10, marginBottom: '1rem' }}><AlertTriangle size={18} /> {ar ? `لا يمكن إغلاق اليوم حاليًا: ${openTableOrders.length} طاولة عليها طلبات مفتوحة (${openTableOrders.map(order => order.table_number).join('، ')}).` : `Cannot close: ${openTableOrders.length} tables have open orders.`}</div>}
     <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
-      {[1, 2].map(drawer => <button key={drawer} className={activeDrawer === drawer ? 'btn-gold' : 'btn-gold outline'} onClick={() => setActiveDrawer(drawer as DrawerId)}><Wallet size={17} /> {ar ? `تقفيل خزنة ${drawer}` : `Drawer ${drawer}`} {(drawer === 1 ? closing?.drawer_1_closed : closing?.drawer_2_closed) && <CheckCircle2 size={16} />}</button>)}
+      {visibleDrawers.map(drawer => <button key={drawer} className={activeDrawer === drawer ? 'btn-gold' : 'btn-gold outline'} onClick={() => setActiveDrawer(drawer)}><Wallet size={17} /> {ar ? `تقفيل خزنة ${drawer}` : `Drawer ${drawer}`} {(drawer === 1 ? closing?.drawer_1_closed : closing?.drawer_2_closed) && <CheckCircle2 size={16} />}</button>)}
     </div>
     <div style={{ background: 'var(--bg-darker)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '1.2rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}><h3 style={{ margin: 0 }}>{ar ? `ملخص خزنة ${activeDrawer}` : `Drawer ${activeDrawer} Summary`}</h3><span style={{ color: drawerClosed ? '#10b981' : 'var(--gold-primary)', fontWeight: 700 }}>{drawerClosed ? <><Lock size={16} /> {ar ? 'مقفولة' : 'Closed'}</> : (ar ? 'مفتوحة' : 'Open')}</span></div>
