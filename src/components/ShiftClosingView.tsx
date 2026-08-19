@@ -17,12 +17,14 @@ interface ShiftClosingViewProps {
   settings?: RestaurantSettings | null;
   language: 'ar' | 'en';
   userName?: string;
+  /** عند فتحه من POS نعرض بوكت الخزنة/القسم الحالي فقط. */
+  allowedBucket?: string;
 }
 
 const num = (v: any): number => Number(v) || 0;
 
 export default function ShiftClosingView({
-  orders, categories, products, settings, language, userName,
+  orders, categories, products, settings, language, userName, allowedBucket,
 }: ShiftClosingViewProps) {
   const ar = language === 'ar';
   const [lastByBucket, setLastByBucket] = useState<Record<string, ShiftClosing>>({});
@@ -70,7 +72,7 @@ export default function ShiftClosingView({
   );
 
   // المطعم يظل مقسمًا على خزنتين، بينما البار له دورة تقفيل مستقلة.
-  const bucketKeys = useMemo(() => [...DRAWERS.map(bucketOfDrawer), BAR_BUCKET], []);
+  const bucketKeys = useMemo(() => allowedBucket ? [allowedBucket] : [...DRAWERS.map(bucketOfDrawer), BAR_BUCKET], [allowedBucket]);
   const labelOf = useCallback(
     (bucket: string) => bucket === BAR_BUCKET
       ? (ar ? 'تقفيل البار' : 'Bar Closing')

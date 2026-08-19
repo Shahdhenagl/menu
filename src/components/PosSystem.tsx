@@ -20,6 +20,7 @@ import { db } from '../lib/supabase';
 import type { Category, Product, Order, OrderItem, SystemUser, Printer, RestaurantSettings, Customer, Employee, AttendanceLog, InventoryItem, ProductRecipe, PaymentMethodKey, Partner, Expense, CustomerPayment } from '../types';
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import DailyClosingView from './DailyClosingView';
+import ShiftClosingView from './ShiftClosingView';
 import { taxPercentForOrder } from '../utils/tax';
 import { drawerOfHall, drawerName, collectedPaymentParts, collectedFromOrder, deferredFromOrder, departmentOfOrder } from '../utils/shiftClosing';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
@@ -197,6 +198,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [tableStatusFilter, setTableStatusFilter] = useState<'all' | 'empty' | 'occupied' | 'delivered' | 'check'>('all');
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [dailyClosingOpen, setDailyClosingOpen] = useState(false);
+  const [shiftClosingOpen, setShiftClosingOpen] = useState(false);
   const [dailyClosingPasswordOpen, setDailyClosingPasswordOpen] = useState(false);
   const [dailyClosingPassword, setDailyClosingPassword] = useState('');
   const [dailyClosingPasswordError, setDailyClosingPasswordError] = useState('');
@@ -3190,6 +3192,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <Wallet size={18} />
                       {language === 'ar' ? 'تقفيل يومي' : 'Daily Closing'}
                     </button>
+                    <button className="pos-btn" style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} onClick={() => setShiftClosingOpen(true)}>
+                      <Receipt size={18} />
+                      {language === 'ar' ? 'تقفيل الشيفت' : 'Close Shift'}
+                    </button>
                     <button className="pos-btn" style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} onClick={printShiftSummary}>
                       <PrinterIcon size={18} />
                       {language === 'ar' ? 'طباعة تقرير الشيفت' : 'Print Shift Report'}
@@ -3356,6 +3362,31 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                   <button className="pos-btn-outline" style={{ flex: 1 }} onClick={() => setDailyClosingPasswordOpen(false)}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
                 </div>
               </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {shiftClosingOpen && (
+            <motion.div
+              key="shift_closing_pos"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              style={{ position: 'fixed', inset: 0, zIndex: 10400, background: 'var(--bg-main, #050505)', overflowY: 'auto', padding: '1rem', direction: language === 'ar' ? 'rtl' : 'ltr' }}
+            >
+              <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '.75rem' }}>
+                  <div style={{ color: 'var(--gold-primary)', fontWeight: 800 }}>{language === 'ar' ? 'تقرير تقفيل الشيفت — بدون تصفير الخزنة' : 'Shift Closing Report — No Drawer Reset'}</div>
+                  <button className="pos-btn-outline" onClick={() => setShiftClosingOpen(false)}><X size={18} /> {language === 'ar' ? 'رجوع إلى POS' : 'Back to POS'}</button>
+                </div>
+                <ShiftClosingView
+                  orders={allOrders}
+                  categories={categories}
+                  products={products}
+                  settings={settings || undefined}
+                  language={language}
+                  userName={currentPosUserName}
+                  allowedBucket={posDepartment === 'bar' ? 'department:bar' : (allowedDrawer ? `drawer:${allowedDrawer}` : undefined)}
+                />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
