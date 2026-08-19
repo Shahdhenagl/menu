@@ -11,7 +11,7 @@ const getLocalDayStr = (d = new Date()) => {
 };
 
 import {
-  ShoppingBag, Utensils, CheckCircle, X,
+  ShoppingBag, Utensils, CheckCircle, X, Lock,
   Plus, Minus, Trash2, ArrowRight, Printer as PrinterIcon,
   Pizza, Coffee, ChefHat, Wine, Cake, MessageCircle, Camera, Search,
   Bell, Sun, Moon, BarChart3, Wallet, Receipt
@@ -27,6 +27,14 @@ import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, 
 // ألوان الصالات وأنواع الطلبات (نفس ألوان شاشة المطبخ للتناسق)
 // كلمة سر تسجيل فواتير الاستاف
 const STAFF_ORDER_PASSCODE = '2026';
+const POS_PASSWORDS: Record<1 | 2, string> = { 1: '202601', 2: '022026' };
+const defaultHallForPos = (pos: 1 | 2) => pos === 1 ? 'صالة 1' : 'صالة 2';
+const inferPosFromHall = (hall: string): 1 | 2 | null => {
+  const value = hall.trim().toLowerCase();
+  if (value.includes('hall 1') || value.includes('صالة 1') || value === '1') return 1;
+  if (value.includes('hall 2') || value.includes('صالة 2') || value === '2') return 2;
+  return null;
+};
 
 const bypassKitchenFor = (department: 'restaurant' | 'bar', hall?: string): boolean => {
   if (department === 'bar') return true;
@@ -49,7 +57,7 @@ interface PosSystemProps {
   setLanguage?: (lang: 'ar' | 'en') => void;
 }
 
-type PosView = 'device_hall_select' | 'role_select' | 'waiter_auth' | 'customer_info' | 'order_type' | 'table_status' | 'menu' | 'checkout' | 'success' | 'waiter_dashboard' | 'waiter_order_edit';
+type PosView = 'pos_lock' | 'device_hall_select' | 'role_select' | 'waiter_auth' | 'customer_info' | 'order_type' | 'table_status' | 'menu' | 'checkout' | 'success' | 'waiter_dashboard' | 'waiter_order_edit';
 
 export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLanguage }) => {
   // Global Data
@@ -78,8 +86,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
   const [view, setView] = useState<PosView>(() => {
-    try { 
-      if (!localStorage.getItem('meridien_pos_device_hall')) return 'device_hall_select';
+    try {
+      const savedHall = localStorage.getItem('meridien_pos_device_hall') || '';
+      const savedPos = inferPosFromHall(savedHall);
+      const unlockedPos = sessionStorage.getItem('meridien_pos_unlock');
+      if (savedPos && unlockedPos !== String(savedPos)) return 'pos_lock';
+      if (!savedHall) return 'pos_lock';
       if (localStorage.getItem('meridien_active_pos_waiter')) return 'waiter_dashboard';
       return 'role_select';
     } catch { return 'device_hall_select'; }
@@ -135,6 +147,37 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [deviceHall, setDeviceHall] = useState<string>(() => {
     try { return localStorage.getItem('meridien_pos_device_hall') || ''; } catch { return ''; }
   });
+  const [posLockTarget, setPosLockTarget] = useState<1 | 2>(() => {
+    try { return inferPosFromHall(localStorage.getItem('meridien_pos_device_hall') || '') || 1; } catch { return 1; }
+  });
+  const [posLockPassword, setPosLockPassword] = useState('');
+  const [posLockError, setPosLockError] = useState('');
+  const unlockPos = () => {
+    const configuredPos = inferPosFromHall(deviceHall);
+    if (configuredPos && configuredPos !== posLockTarget) {
+      setPosLockError(language === 'ar' ? `هذا الجهاز مخصص لـ POS ${configuredPos} فقط.` : `This device is assigned to POS ${configuredPos} only.`);
+      return;
+    }
+    if (posLockPassword !== POS_PASSWORDS[posLockTarget]) {
+      setPosLockError(language === 'ar' ? 'كلمة المرور غير صحيحة.' : 'Incorrect password.');
+      return;
+    }
+    const hall = deviceHall || settings?.halls?.[posLockTarget - 1]?.name || defaultHallForPos(posLockTarget);
+    localStorage.setItem('meridien_pos_device_hall', hall);
+    sessionStorage.setItem('meridien_pos_unlock', String(posLockTarget));
+    setDeviceHall(hall);
+    setPosDepartment('restaurant');
+    setSummaryScopeFilter(`hall:${hall}`);
+    setPosLockPassword('');
+    setPosLockError('');
+    setView(localStorage.getItem('meridien_active_pos_waiter') ? 'waiter_dashboard' : 'role_select');
+  };
+  const lockPos = () => {
+    sessionStorage.removeItem('meridien_pos_unlock');
+    setPosLockPassword('');
+    setPosLockError('');
+    setView('pos_lock');
+  };
   const [tableStatusFilter, setTableStatusFilter] = useState<'all' | 'empty' | 'occupied' | 'delivered' | 'check'>('all');
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [dailyClosingOpen, setDailyClosingOpen] = useState(false);
@@ -1841,7 +1884,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
             {deviceHall && (
               <button
-                onClick={() => setView('device_hall_select')}
+                onClick={lockPos}
                 style={{
                   background: 'rgba(0,0,0,0.5)',
                   border: '1px solid var(--gold-primary)',
@@ -1906,6 +1949,19 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
         <AnimatePresence mode="wait">
           
+          {view === 'pos_lock' && (
+            <motion.div key="pos_lock" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} style={{ width: '100%', maxWidth: 560, margin: 'auto', padding: '2rem', textAlign: 'center' }}>
+              <Lock size={54} color="var(--gold-primary)" />
+              <h2 style={{ color: 'var(--gold-primary)', margin: '1rem 0 0.5rem' }}>{language === 'ar' ? 'دخول نقطة البيع' : 'POS Login'}</h2>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>{language === 'ar' ? 'اختر نقطة البيع وأدخل كلمة المرور الخاصة بها.' : 'Choose the POS and enter its password.'}</p>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginBottom: '1rem' }}>
+                {([1, 2] as const).map(pos => <button key={pos} className={posLockTarget === pos ? 'btn-gold' : 'btn-gold outline'} onClick={() => { setPosLockTarget(pos); setPosLockError(''); }} disabled={Boolean(inferPosFromHall(deviceHall) && inferPosFromHall(deviceHall) !== pos)}>{language === 'ar' ? `POS ${pos} — خزنة ${pos}` : `POS ${pos} — Drawer ${pos}`}</button>)}
+              </div>
+              <input className="pos-input" type="password" inputMode="numeric" autoFocus value={posLockPassword} onChange={e => setPosLockPassword(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') unlockPos(); }} placeholder={language === 'ar' ? 'كلمة المرور' : 'Password'} style={{ width: '100%', marginBottom: '0.75rem', textAlign: 'center', fontSize: '1.2rem' }} />
+              {posLockError && <p style={{ color: '#ef4444', margin: '0.5rem 0 1rem' }}>{posLockError}</p>}
+              <button className="pos-btn" onClick={unlockPos} style={{ width: '100%' }}>{language === 'ar' ? 'دخول' : 'Login'}</button>
+            </motion.div>
+          )}
           {view === 'device_hall_select' && (
             <motion.div key="device_hall" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.04 }} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
               <h2 style={{ fontSize: '2.2rem', color: 'var(--gold-primary)', marginBottom: '0.75rem' }}>
