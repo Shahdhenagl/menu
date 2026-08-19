@@ -3150,29 +3150,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.96, y: 20 }}
                 onClick={e => e.stopPropagation()}
-                style={{ maxWidth: '1180px', margin: '2rem auto', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.25rem' }}
+                style={{ maxWidth: '1180px', margin: '1.5rem auto', background: 'linear-gradient(145deg, rgba(24,24,28,0.98), rgba(10,10,12,0.98))', border: '1px solid rgba(212,175,55,0.28)', boxShadow: '0 24px 80px rgba(0,0,0,0.45)', borderRadius: '20px', padding: 'clamp(1rem, 2vw, 1.5rem)' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(212,175,55,0.16)' }}>
                   <div>
-                    <h2 style={{ margin: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'ملخص الحالات وتقفيل الشيفت' : 'Status Summary & Shift Close'}</h2>
+                    <h2 style={{ margin: 0, color: '#f4d77b', fontSize: 'clamp(1.1rem, 2vw, 1.5rem)', letterSpacing: '-0.02em' }}>{language === 'ar' ? 'ملخص الحالات وتقفيل الشيفت' : 'Status Summary & Shift Close'}</h2>
                     <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)' }}>{new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}</p>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    <select className="pos-input" value={scopedSummaryFilter} onChange={e => { if (!deviceHall) setSummaryScopeFilter(e.target.value); }} style={{ width: '220px' }} disabled={!!deviceHall}>
-                      {!deviceHall && <option value="all">{language === 'ar' ? 'كل الصالات والخزن' : 'All halls and drawers'}</option>}
-                      {deviceHall ? (
-                        <option value={`hall:${deviceHall}`}>{deviceHall}</option>
-                      ) : (
-                        <>
-                          {(settings?.halls || []).map(h => (
-                            <option key={`hall:${h.name}`} value={`hall:${h.name}`}>{h.name}</option>
-                          ))}
-                          <option value="drawer:1">{drawerName(1, settings, language === 'ar')}</option>
-                          <option value="drawer:2">{drawerName(2, settings, language === 'ar')}</option>
-                        </>
-                      )}
-                    </select>
-                    <select className="pos-input" value={summaryOrderTypeFilter} onChange={e => setSummaryOrderTypeFilter(e.target.value as any)} style={{ width: '190px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap', width: '100%' }}>
+                    <select className="pos-input" value={summaryOrderTypeFilter} onChange={e => setSummaryOrderTypeFilter(e.target.value as any)} style={{ width: '170px', minHeight: '42px', borderRadius: '10px', background: 'rgba(0,0,0,0.45)' }}>
                       <option value="all">{language === 'ar' ? 'كل أنواع الطلب' : 'All order types'}</option>
                       <option value="dine_in">{language === 'ar' ? 'صالة' : 'Dine-in'}</option>
                       <option value="takeaway">{language === 'ar' ? 'تيك أواي' : 'Takeaway'}</option>
@@ -3182,7 +3168,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     </select>
                     <button
                       className="pos-btn"
-                      style={{ padding: '0.75rem 1rem', fontSize: '1rem', background: '#b8860b', color: '#fff' }}
+                      style={{ padding: '0.65rem 0.9rem', minHeight: '42px', fontSize: '0.9rem', borderRadius: '10px', background: 'linear-gradient(135deg, #d4af37, #9b7410)', color: '#111', fontWeight: 800 }}
                       onClick={() => {
                         setDailyClosingPassword('');
                         setDailyClosingPasswordError('');
@@ -3192,15 +3178,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                       <Wallet size={18} />
                       {language === 'ar' ? 'تقفيل يومي' : 'Daily Closing'}
                     </button>
-                    <button className="pos-btn" style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} onClick={() => setShiftClosingOpen(true)}>
+                    <button className="pos-btn" style={{ padding: '0.65rem 0.9rem', minHeight: '42px', fontSize: '0.9rem', borderRadius: '10px' }} onClick={() => setShiftClosingOpen(true)}>
                       <Receipt size={18} />
                       {language === 'ar' ? 'تقفيل الشيفت' : 'Close Shift'}
                     </button>
-                    <button className="pos-btn" style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} onClick={printShiftSummary}>
+                    <button className="pos-btn" style={{ padding: '0.65rem 0.9rem', minHeight: '42px', fontSize: '0.9rem', borderRadius: '10px' }} onClick={printShiftSummary}>
                       <PrinterIcon size={18} />
                       {language === 'ar' ? 'طباعة تقرير الشيفت' : 'Print Shift Report'}
                     </button>
-                    <button className="pos-btn-outline" style={{ padding: '0.75rem 1rem', fontSize: '1rem' }} onClick={() => setSummaryOpen(false)}>
+                    <button className="pos-btn-outline" style={{ padding: '0.65rem', minHeight: '42px', minWidth: '42px', borderRadius: '10px' }} onClick={() => setSummaryOpen(false)}>
                       <X size={18} />
                     </button>
                   </div>
