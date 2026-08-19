@@ -1955,7 +1955,22 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               <h2 style={{ color: 'var(--gold-primary)', margin: '1rem 0 0.5rem' }}>{language === 'ar' ? 'دخول نقطة البيع' : 'POS Login'}</h2>
               <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>{language === 'ar' ? 'اختر نقطة البيع وأدخل كلمة المرور الخاصة بها.' : 'Choose the POS and enter its password.'}</p>
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginBottom: '1rem' }}>
-                {([1, 2] as const).map(pos => <button key={pos} className={posLockTarget === pos ? 'btn-gold' : 'btn-gold outline'} onClick={() => { setPosLockTarget(pos); setPosLockError(''); }} disabled={Boolean(inferPosFromHall(deviceHall) && inferPosFromHall(deviceHall) !== pos)}>{language === 'ar' ? `POS ${pos} — خزنة ${pos}` : `POS ${pos} — Drawer ${pos}`}</button>)}
+                {([1, 2] as const).map(pos => {
+                  const selected = posLockTarget === pos;
+                  const labelAr = pos === 1 ? 'مطعم' : 'كافي';
+                  const labelEn = pos === 1 ? 'Restaurant' : 'Cafe';
+                  return <button key={pos} className="pos-btn" onClick={() => { setPosLockTarget(pos); setPosLockError(''); }} disabled={Boolean(inferPosFromHall(deviceHall) && inferPosFromHall(deviceHall) !== pos)} style={{
+                    flex: 1,
+                    minWidth: '150px',
+                    border: selected ? '2px solid #fff' : '1px solid var(--gold-primary)',
+                    background: selected ? 'linear-gradient(135deg, #f7d774, #c89516)' : 'rgba(20, 16, 8, 0.9)',
+                    color: selected ? '#15110a' : 'var(--gold-primary)',
+                    boxShadow: selected ? '0 0 0 3px rgba(212, 167, 52, 0.28), 0 8px 24px rgba(212, 167, 52, 0.25)' : 'none',
+                    opacity: inferPosFromHall(deviceHall) && inferPosFromHall(deviceHall) !== pos ? 0.45 : 1,
+                    transition: 'all 160ms ease',
+                    fontWeight: 800,
+                  }}>{language === 'ar' ? labelAr : labelEn}</button>;
+                })}
               </div>
               <input className="pos-input" type="password" inputMode="numeric" autoFocus value={posLockPassword} onChange={e => setPosLockPassword(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') unlockPos(); }} placeholder={language === 'ar' ? 'كلمة المرور' : 'Password'} style={{ width: '100%', marginBottom: '0.75rem', textAlign: 'center', fontSize: '1.2rem' }} />
               {posLockError && <p style={{ color: '#ef4444', margin: '0.5rem 0 1rem' }}>{posLockError}</p>}
