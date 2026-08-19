@@ -172,8 +172,22 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     setPosLockError('');
     setView(localStorage.getItem('meridien_active_pos_waiter') ? 'waiter_dashboard' : 'role_select');
   };
+  useEffect(() => {
+    if (view !== 'pos_lock') return;
+    // انتهاء جلسة الدخول يعيد اختيار النقطة من شاشة القفل؛ لا نسمح بتعيين قديم
+    // من localStorage بتعطيل اختيار POS الآخر بعد تسجيل الخروج.
+    try {
+      if (sessionStorage.getItem('meridien_pos_unlock') !== '1' && sessionStorage.getItem('meridien_pos_unlock') !== '2') {
+        localStorage.removeItem('meridien_pos_device_hall');
+        setDeviceHall('');
+      }
+    } catch {}
+  }, [view]);
+
   const lockPos = () => {
     sessionStorage.removeItem('meridien_pos_unlock');
+    localStorage.removeItem('meridien_pos_device_hall');
+    setDeviceHall('');
     setPosLockPassword('');
     setPosLockError('');
     setView('pos_lock');
