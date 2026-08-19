@@ -5563,6 +5563,7 @@ export default function AdminDashboard({
                       : 'The names above are shared by every device. If this machine has printers with different names, enable this and enter them here — it is stored on this device only and saves instantly.'}
                   </p>
                   {devicePrinters.enabled && (
+                    <>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
                       {([
                         ['qz_printer_cashier', language === 'ar' ? 'طابعة الكاشير' : 'Cashier Printer'],
@@ -5570,6 +5571,7 @@ export default function AdminDashboard({
                         ['qz_printer_kitchen_2', language === 'ar' ? 'طابعة المطبخ 2' : 'Kitchen Printer 2'],
                         ['qz_printer_bar', language === 'ar' ? 'طابعة البار 1' : 'Bar Printer 1'],
                         ['qz_printer_bar_2', language === 'ar' ? 'طابعة البار 2' : 'Bar Printer 2'],
+                        ['qz_printer_shift_closing', language === 'ar' ? 'طابعة تقرير الشيفت' : 'Shift Report Printer'],
                       ] as [keyof DevicePrinters, string][]).map(([key, lbl]) => (
                         <div className="form-group" key={key}>
                           <label>{lbl}</label>
@@ -5584,6 +5586,37 @@ export default function AdminDashboard({
                         </div>
                       ))}
                     </div>
+                    <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border-color)', marginTop: '0.5rem', paddingTop: '1rem' }}>
+                      <h4 style={{ margin: '0 0 0.75rem', color: 'var(--gold-secondary)' }}>
+                        {language === 'ar' ? 'إعدادات تقرير تقفيل الشيفت' : 'Shift Closing Report Settings'}
+                      </h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                        <div className="form-group">
+                          <label>{language === 'ar' ? 'نوع التقرير المطبوع' : 'Report paper format'}</label>
+                          <select
+                            className="input-gold"
+                            value={devicePrinters.shift_closing_print_format || 'thermal'}
+                            onChange={(e) => handleDevicePrintersChange({ ...devicePrinters, shift_closing_print_format: e.target.value as 'thermal' | 'a4' })}
+                          >
+                            <option value="thermal">{language === 'ar' ? 'فاتورة حرارية 80mm' : 'Thermal receipt 80mm'}</option>
+                            <option value="a4">A4</option>
+                          </select>
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: 'var(--text-color)', alignSelf: 'end', paddingBottom: '0.65rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={devicePrinters.shift_closing_auto_print !== false}
+                            onChange={(e) => handleDevicePrintersChange({ ...devicePrinters, shift_closing_auto_print: e.target.checked })}
+                            style={{ width: '18px', height: '18px' }}
+                          />
+                          {language === 'ar' ? 'اطبع تقرير الشيفت تلقائيًا بعد الإغلاق' : 'Auto-print after shift closing'}
+                        </label>
+                      </div>
+                      <p style={{ fontSize: '0.82rem', color: 'var(--text-gray)', margin: '0.75rem 0 0' }}>
+                        {language === 'ar' ? 'الطباعة المباشرة تحتاج QZ Tray شغالًا والطابعة متوصلة. لو QZ Tray غير متاح سيظهر حوار طباعة المتصفح كحل احتياطي.' : 'Direct printing requires QZ Tray and a connected printer. If unavailable, the browser print dialog is used as a fallback.'}
+                      </p>
+                    </div>
+                    </>
                   )}
                 </div>
               )}

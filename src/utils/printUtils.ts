@@ -32,11 +32,14 @@ export type DevicePrinters = {
   qz_printer_kitchen_2?: string;
   qz_printer_bar?: string;
   qz_printer_bar_2?: string;
+  qz_printer_shift_closing?: string;
+  shift_closing_print_format?: 'thermal' | 'a4';
+  shift_closing_auto_print?: boolean;
 };
 
 const PRINTER_KEYS = [
   'qz_printer_cashier', 'qz_printer_kitchen', 'qz_printer_kitchen_2',
-  'qz_printer_bar', 'qz_printer_bar_2',
+  'qz_printer_bar', 'qz_printer_bar_2', 'qz_printer_shift_closing',
 ] as const;
 
 export const getDevicePrinters = (): DevicePrinters => {
@@ -145,7 +148,7 @@ export const listQzPrinters = async (): Promise<string[]> => {
 };
 
 // يطبع HTML على قائمة طابعات محددة بالاسم عبر QZ Tray (كل طابعة على حدة)
-const printWithQZ = async (htmlContent: string, targetPrinters: (string | undefined)[]): Promise<boolean> => {
+const printWithQZ = async (htmlContent: string, targetPrinters: (string | undefined)[], paper: 'thermal' | 'a4' = 'thermal'): Promise<boolean> => {
   const printers = targetPrinters.filter((p): p is string => !!p && p.trim() !== '');
   if (printers.length === 0) {
     console.warn('QZ: مفيش طابعة معرّفة للقسم ده.');
@@ -163,8 +166,8 @@ const printWithQZ = async (htmlContent: string, targetPrinters: (string | undefi
       try {
         const config = qz.configs.create(printerName, {
           units: 'mm',
-          size: { width: 80, height: null },
-          margins: { top: 0, right: 0, bottom: 0, left: 0 },
+          size: paper === 'a4' ? { width: 210, height: 297 } : { width: 80, height: null },
+          margins: paper === 'a4' ? { top: 8, right: 8, bottom: 8, left: 8 } : { top: 0, right: 0, bottom: 0, left: 0 },
           colorType: 'grayscale',
           rasterize: true,
           scaleContent: true,
@@ -550,6 +553,8 @@ export const printShiftClosing = async (
   const isAr = language === 'ar';
   const settings = await freshSettings(settingsArg);
   const restaurantName = settings?.restaurant_name_en || 'MERIDIEN';
+  const device = getDevicePrinters();
+  const paper = device.shift_closing_print_format === 'a4' ? 'a4' : 'thermal';
   const money = (v: number) => (Number(v) || 0).toFixed(2);
 
   const methodRows = report.methods.filter(m => Math.abs(m.amount) > 0.001).map(m => `
@@ -623,7 +628,13 @@ export const printShiftClosing = async (
 
   const html = `
     <html dir="${isAr ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>Shift ${report.title}</title>
-    <style>${THERMAL_BASE}
+    <style>${paper === 'a4' ? `
+      @page { size: A4; margin: 10mm; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background:#fff; }
+      body { font-family: 'Tahoma','Arial',sans-serif; color:#000; line-height:1.45; }
+      table { width:100%; border-collapse:collapse; }
+    ` : THERMAL_BASE}
       .rname { text-align:center; font-size:20px; font-weight:900; letter-spacing:2px; direction:ltr; }
       .doctype { text-align:center; font-size:15px; font-weight:900; padding:5px 0; margin:6px 0 3px;
                  border-top:2px solid #000; border-bottom:2px solid #000; }
@@ -715,9 +726,9 @@ export const printShiftClosing = async (
     </body></html>`;
 
   let printed = false;
-  if (settings?.enable_qz_printing) {
-    printed = await printWithQZ(html, [settings?.qz_printer_cashier]);
+  if (device.shift_closing_auto_print !== false && settings?.enable_qz_printing) {
+    printed = await printWithQZ(html, [device.qz_printer_shift_closing || settings?.qz_printer_cashier], paper);
   }
-  if (!printed) printViaIframe(html);
+  if (!printed && device.shift_closing_auto_print !== false) printViaIframe(html);
 };
 
