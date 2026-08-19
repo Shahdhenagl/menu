@@ -84,6 +84,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [productRecipes, setProductRecipes] = useState<ProductRecipe[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [notifications, setNotifications] = useState<import('../types').SystemNotification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const [view, setView] = useState<PosView>(() => {
     try {
@@ -419,6 +421,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
           }
           loadData();
         })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'system_notifications' }, () => {
+          refreshNotifications();
+        })
         .subscribe();
       return () => {
         document.removeEventListener('click', handleGlobalClick);
@@ -454,7 +459,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   }, [posDepartment, categories, activeCategory]);
 
   const loadData = async () => {
-    const [cats, prods, users, ords, prnts, sets, custs, emps, atts, invItems, prodRecipes, pts, exps] = await Promise.all([
+    const [cats, prods, users, ords, prnts, sets, custs, emps, atts, invItems, prodRecipes, pts, exps, notifs] = await Promise.all([
       db.getCategories(),
       db.getProducts(),
       db.getSystemUsers(),
@@ -467,7 +472,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       db.getInventoryItems(),
       db.getProductRecipes(),
       db.getPartners(),
-      db.getExpenses()
+      db.getExpenses(),
+      // إشعارات POS تشمل إشعارات الإدارة والكاشير/الويتر حتى تظهر فعليًا في الجرس.
+      db.getNotifications('admin,waiter')
     ]);
     setCategories(cats.sort((a, b) => {
       const aBar = a.department === 'bar';
@@ -501,7 +508,35 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     setInventoryItems(invItems || []);
     setProductRecipes(prodRecipes || []);
     setExpenses(exps || []);
+    setNotifications(notifs || []);
     if (cats.length > 0) setActiveCategory(cats[0].id);
+  };
+
+  const refreshNotifications = async () => {
+    try {
+      const notifs = await db.getNotifications('admin,waiter');
+      setNotifications(notifs || []);
+    } catch (error) {
+      console.warn('Failed to refresh POS notifications', error);
+    }
+  };
+
+  const markNotificationAsRead = async (id: string) => {
+    try {
+      await db.markNotificationRead(id);
+      setNotifications(prev => prev.map(notification => notification.id === id ? { ...notification, is_read: true } : notification));
+    } catch (error) {
+      console.warn('Failed to mark POS notification as read', error);
+    }
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    try {
+      await db.markAllNotificationsRead('admin,waiter');
+      setNotifications(prev => prev.map(notification => ({ ...notification, is_read: true })));
+    } catch (error) {
+      console.warn('Failed to mark all POS notifications as read', error);
+    }
   };
 
   const startCamera = async () => {
@@ -1966,19 +2001,45 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
               >
                 <Bell size={24} color="var(--gold-primary)" />
                 {activeOrders.filter(o => o.order_type === 'website' && !o.waiter_id && o.status === 'pending').length > 0 && (
-                  <span style={{
-                    position: 'absolute',
-                    top: -5,
-                    right: -5,
-                    width: '12px',
-                    height: '12px',
-                    background: '#ef4444',
-                    borderRadius: '50%',
-                    boxShadow: '0 0 5px #ef4444'
-                  }} />
+                  <span style={{ position: 'absolute', top: -5, right: -5, width: '12px', height: '12px', background: '#ef4444', borderRadius: '50%', boxShadow: '0 0 5px #ef4444' }} />
                 )}
               </div>
             )}
+
+            {/* جرس إشعارات النظام الفعلية */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => { setShowNotifications(prev => !prev); refreshNotifications(); }}
+                title={language === 'ar' ? 'الإشعارات' : 'Notifications'}
+                aria-label={language === 'ar' ? 'فتح الإشعارات' : 'Open notifications'}
+                style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', color: 'var(--gold-primary)', padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--gold-primary)', cursor: 'pointer' }}
+              >
+                <Bell size={24} />
+                {notifications.filter(n => !n.is_read).length > 0 && (
+                  <span style={{ position: 'absolute', top: -7, right: -7, minWidth: '18px', height: '18px', padding: '0 4px', background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '11px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {notifications.filter(n => !n.is_read).length > 99 ? '99+' : notifications.filter(n => !n.is_read).length}
+                  </span>
+                )}
+              </button>
+              {showNotifications && (
+                <div dir={language === 'ar' ? 'rtl' : 'ltr'} style={{ position: 'absolute', top: 'calc(100% + 0.6rem)', right: language === 'ar' ? 'auto' : 0, left: language === 'ar' ? 0 : 'auto', width: 'min(360px, 88vw)', maxHeight: '420px', overflowY: 'auto', background: 'var(--surface-color, #171717)', border: '1px solid var(--gold-primary)', borderRadius: '12px', boxShadow: '0 14px 35px rgba(0,0,0,0.45)', zIndex: 3000 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.85rem 1rem', borderBottom: '1px solid rgba(212,175,55,0.25)' }}>
+                    <strong style={{ color: 'var(--gold-primary)' }}>{language === 'ar' ? 'الإشعارات' : 'Notifications'}</strong>
+                    {notifications.some(n => !n.is_read) && <button type="button" onClick={markAllNotificationsAsRead} style={{ border: 0, background: 'transparent', color: 'var(--gold-primary)', cursor: 'pointer', fontSize: '0.75rem' }}>{language === 'ar' ? 'تحديد الكل كمقروء' : 'Mark all read'}</button>}
+                  </div>
+                  {notifications.length === 0 ? (
+                    <p style={{ margin: 0, padding: '1.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>{language === 'ar' ? 'لا توجد إشعارات حالياً' : 'No notifications yet'}</p>
+                  ) : notifications.map(notification => (
+                    <button key={notification.id} type="button" onClick={() => !notification.is_read && markNotificationAsRead(notification.id)} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '0.25rem', padding: '0.85rem 1rem', textAlign: language === 'ar' ? 'right' : 'left', background: notification.is_read ? 'transparent' : 'rgba(212,175,55,0.12)', color: 'var(--text-white, #fff)', border: 0, borderBottom: '1px solid rgba(255,255,255,0.08)', cursor: notification.is_read ? 'default' : 'pointer' }}>
+                      <span style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontWeight: 800, fontSize: '0.86rem' }}><span>{notification.title}</span>{!notification.is_read && <span style={{ width: 8, height: 8, flex: '0 0 auto', marginTop: 5, borderRadius: '50%', background: '#ef4444' }} />}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', lineHeight: 1.5 }}>{notification.message}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>{new Date(notification.created_at).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <button className="pos-top-close" onClick={handleClose} style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', color: 'var(--text-white)', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px' }}>
             <X size={24} />
