@@ -1031,6 +1031,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     return sum + (base * (percent / 100));
   }, 0);
   const summaryDiscount = Math.max(0, summarySubtotal + summaryTax - summaryRevenue);
+  const summaryCurrentBalance = summaryRevenue - summaryExpensesTotal;
 
   const printShiftSummary = () => {
     const ar = language === 'ar';
@@ -1078,6 +1079,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         <div class="total">${ar ? 'إجمالي المحصل الفعلي' : 'Actual Collected'}: ${money(summaryRevenue)}</div>
         <div class="total sub">${ar ? 'إجمالي الآجل' : 'Deferred Total'}: ${money(summaryDeferred)}</div>
         <div class="total sub" style="color:#b71c1c">${ar ? 'إجمالي المصروفات' : 'Total Expenses'}: ${money(summaryExpensesTotal)}</div>
+        <div class="total" style="color:${summaryCurrentBalance >= 0 ? '#087f5b' : '#b71c1c'}">${ar ? 'الحالي في الخزنة (المحصل - المصروف)' : 'Current Balance (Collected - Expenses)'}: ${money(summaryCurrentBalance)}</div>
+        <h2>${ar ? 'حركة المصروفات التفصيلية' : 'Detailed Expense Movement'}</h2>
+        <table><thead><tr><th>${ar ? 'التاريخ' : 'Date'}</th><th>${ar ? 'المصروف' : 'Expense'}</th><th>${ar ? 'الخزنة' : 'Drawer'}</th><th>${ar ? 'وسيلة الدفع' : 'Payment method'}</th><th>${ar ? 'المبلغ' : 'Amount'}</th><th>${ar ? 'الموظف' : 'Employee'}</th><th>${ar ? 'الملاحظة' : 'Notes'}</th></tr></thead><tbody>${summaryExpenses.map(e => `<tr><td>${e.expense_date || e.created_at || '-'}</td><td>${e.name || '-'}</td><td>${drawerName((Number(e.drawer || 1) === 2 ? 2 : 1) as 1 | 2, settings, ar)}</td><td>${payMethodLabel(e.payment_method as PayMethod)}</td><td>${money(Number(e.amount) || 0)}</td><td>${e.employee_name || e.employee_id || '-'}</td><td>${e.notes || '-'}</td></tr>`).join('') || `<tr><td colspan="7">${ar ? 'لا توجد مصروفات' : 'No expenses'}</td></tr>`}</tbody></table>
         <hr style="margin:16px 0; border:1px solid #eee;" />
         <div class="total sub">${ar ? 'لسه متحصلش من الطاولات' : 'Unpaid table total'}: ${money(unpaidTablesTotal)}</div>
         <h2>${ar ? 'تقسيمة وسائل الدفع' : 'Payment Breakdown'}</h2>
@@ -1137,7 +1141,12 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         customer_name: partnerForOrder({ ...editingOrder, table_number: tableNumber, order_type: orderType || editingOrder.order_type })?.name || customerName,
         customer_phone: customerPhone,
         table_number: tableNumber,
-        order_type: orderType || editingOrder.order_type
+        order_type: orderType || editingOrder.order_type,
+        // الطلبات التي تنتمي للبار أو صالة 1 لا تمر بالمطبخ حتى بعد تعديلها.
+        ...(bypassKitchenFor(
+          editingOrder.department || posDepartment,
+          (orderType || editingOrder.order_type) === 'dine_in' ? (selectedHall || editingOrder.hall) : editingOrder.hall
+        ) ? { status: 'delivered' as const } : {})
       }, selectedWaiter?.name);
 
       // احسب الأصناف الجديدة فقط (صنف جديد أو زيادة كمية) واطبعها للمطبخ/البار — من غير إعادة طباعة الأوردر كله
@@ -1149,7 +1158,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
 
       if (addedItems.length > 0) {
         const bypassKitchen = bypassKitchenFor(editingOrder.department || 'restaurant', editingOrder.hall);
-        if (!bypassKitchen && !['pending', 'preparing'].includes(editingOrder.status)) {
+        if (bypassKitchen) {
+          // إصلاح الطلبات القديمة/المعدلة: لا تظل pending إذا كانت للبار أو صالة 1.
+          await db.updateOrder(editOrderId, { status: 'delivered' }, selectedWaiter?.name);
+        } else if (!['pending', 'preparing'].includes(editingOrder.status)) {
           await db.updateOrder(editOrderId, { status: 'pending' }, selectedWaiter?.name);
         }
         const additionOrder = { ...(updatedOrder || editingOrder), id: editOrderId, items: addedItems } as Order;
@@ -3136,6 +3148,15 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'لسه متحصلش من الطاولات' : 'Unpaid tables'}</span>
                     <div style={{ fontSize: '1.7rem', fontWeight: 900, color: '#ef4444' }}>{money(unpaidTablesTotal)}</div>
                   </div>
+                  <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(59,130,246,0.3)' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{language === 'ar' ? 'الحالي في الخزنة' : 'Current Balance'}</span>
+                    <div style={{ fontSize: '1.7rem', fontWeight: 900, color: summaryCurrentBalance >= 0 ? '#3b82f6' : '#ef4444' }}>{money(summaryCurrentBalance)}</div>
+                  </div>
+                </div>
+
+                <div style={{ background: 'var(--bg-darker)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
+                  <h3 style={{ marginTop: 0, color: 'var(--gold-primary)' }}>{language === 'ar' ? 'حركة المصروفات التفصيلية' : 'Detailed Expense Movement'}</h3>
+                  <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}><thead><tr><th>{language === 'ar' ? 'التاريخ' : 'Date'}</th><th>{language === 'ar' ? 'المصروف' : 'Expense'}</th><th>{language === 'ar' ? 'الخزنة' : 'Drawer'}</th><th>{language === 'ar' ? 'وسيلة الدفع' : 'Payment method'}</th><th>{language === 'ar' ? 'المبلغ' : 'Amount'}</th><th>{language === 'ar' ? 'الموظف' : 'Employee'}</th><th>{language === 'ar' ? 'الملاحظة' : 'Notes'}</th></tr></thead><tbody>{summaryExpenses.map(e => <tr key={e.id}><td>{e.expense_date || e.created_at || '-'}</td><td>{e.name || '-'}</td><td>{drawerName((Number(e.drawer || 1) === 2 ? 2 : 1) as 1 | 2, settings, language === 'ar')}</td><td>{payMethodLabel(e.payment_method as PayMethod)}</td><td className="font-en">{money(Number(e.amount) || 0)}</td><td>{e.employee_name || e.employee_id || '-'}</td><td>{e.notes || '-'}</td></tr>)}{summaryExpenses.length === 0 && <tr><td colSpan={7}>{language === 'ar' ? 'لا توجد مصروفات في النطاق الحالي' : 'No expenses in the current scope'}</td></tr>}<tr><td colSpan={4}><b>{language === 'ar' ? 'إجمالي المصروفات' : 'Total Expenses'}</b></td><td className="font-en"><b>{money(summaryExpensesTotal)}</b></td><td colSpan={2}></td></tr></tbody></table></div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
