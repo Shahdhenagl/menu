@@ -180,6 +180,24 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
     return true;
   }), [records, bucketFilter, fromDate, toDate]);
 
+  const mainSafe = useMemo(() => {
+    const byMethod: Record<string, number> = {};
+    filtered.forEach(record => {
+      (record.methods || []).forEach(method => {
+        const key = String((method as any).method || method.label || 'other');
+        byMethod[key] = (byMethod[key] || 0) + num((method as any).amount ?? (method as any).expected ?? (method as any).incoming);
+      });
+    });
+    return {
+      closings: filtered.length,
+      collected: filtered.reduce((sum, record) => sum + num(record.collected), 0),
+      expenses: filtered.reduce((sum, record) => sum + num(record.expenses), 0),
+      deposits: filtered.reduce((sum, record) => sum + num(record.deposits), 0),
+      net: filtered.reduce((sum, record) => sum + (num(record.collected) + num(record.deposits) - num(record.expenses)), 0),
+      methods: Object.entries(byMethod).sort(([, a], [, b]) => b - a),
+    };
+  }, [filtered]);
+
   const totals = useMemo(() => ({
     collected: filtered.reduce((s, r) => s + num(r.collected), 0),
     deferred: filtered.reduce((s, r) => s + num(r.deferred), 0),
@@ -253,6 +271,31 @@ export default function ShiftRecordsView({ settings, language }: ShiftRecordsVie
             {ar ? 'مسح الفلاتر' : 'Clear filters'}
           </button>
         )}
+      </div>
+
+      {/* الخزنة الرئيسية: تجميع كل تقفيلات البار والصالات والخزائن */}
+      <div style={{ border: '1px solid rgba(212,175,55,0.45)', borderRadius: '12px', padding: '1rem', marginBottom: '1.5rem', background: 'rgba(212,175,55,0.06)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.9rem' }}>
+          <div>
+            <h3 style={{ margin: 0, color: 'var(--gold-primary)' }}>{ar ? 'الخزنة الرئيسية' : 'Main Safe'}</h3>
+            <small style={{ color: 'var(--text-gray)' }}>{ar ? 'تجميع كل التقفيلات حسب الفلاتر الحالية مع تفصيل وسائل الدفع' : 'All closings aggregated using the active filters with payment details'}</small>
+          </div>
+          <strong style={{ color: '#10b981' }}>{fmt(mainSafe.net)}</strong>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.65rem' }}>
+          <div className="stat-card"><small>{ar ? 'عدد التقفيلات' : 'Closings'}</small><b>{mainSafe.closings}</b></div>
+          <div className="stat-card"><small>{ar ? 'إجمالي المحصل' : 'Collected'}</small><b style={{ color: '#10b981' }}>{fmt(mainSafe.collected)}</b></div>
+          <div className="stat-card"><small>{ar ? 'الإيداعات' : 'Deposits'}</small><b>{fmt(mainSafe.deposits)}</b></div>
+          <div className="stat-card"><small>{ar ? 'المصروفات' : 'Expenses'}</small><b style={{ color: '#ef4444' }}>{fmt(mainSafe.expenses)}</b></div>
+          <div className="stat-card"><small>{ar ? 'صافي الخزنة' : 'Safe net'}</small><b style={{ color: 'var(--gold-primary)' }}>{fmt(mainSafe.net)}</b></div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.55rem', flexWrap: 'wrap', marginTop: '0.8rem' }}>
+          {mainSafe.methods.length === 0 ? <span style={{ color: 'var(--text-gray)' }}>{ar ? 'لا توجد وسائل دفع في النطاق المحدد' : 'No payment methods in the selected scope'}</span> : mainSafe.methods.map(([method, amount]) => (
+            <span key={method} style={{ border: '1px solid var(--border-color)', borderRadius: '999px', padding: '0.35rem 0.65rem', color: 'var(--text-light)', fontSize: '0.85rem' }}>
+              {methodLabel(method, ar)}: <b>{fmt(amount)}</b>
+            </span>
+          ))}
+        </div>
       </div>
 
       {/* ملخص */}

@@ -3,9 +3,10 @@ import { Printer, Lock, RefreshCw } from 'lucide-react';
 import type { Order, Category, Product, RestaurantSettings, ShiftClosing, Expense, CustomerPayment } from '../types';
 import { db } from '../lib/supabase';
 import { printShiftClosing } from '../utils/printUtils';
-import { buildShiftReport, drawerOf, drawerName, DRAWERS } from '../utils/shiftClosing';
+import { buildShiftReport, drawerOf, drawerName, DRAWERS, departmentOfOrder } from '../utils/shiftClosing';
 
-// مفتاح البوكيت بقى الخزنة: drawer:1 / drawer:2
+// مفاتيح البوكيت: خزنتا المطعم + شفت مستقل للبار.
+const BAR_BUCKET = 'department:bar';
 const bucketOfDrawer = (id: 1 | 2) => `drawer:${id}`;
 
 interface ShiftClosingViewProps {
@@ -68,10 +69,12 @@ export default function ShiftClosingView({
     [orders]
   );
 
-  // خزنتين بس: خزنة 1 وخزنة 2
-  const bucketKeys = useMemo(() => DRAWERS.map(bucketOfDrawer), []);
+  // المطعم يظل مقسمًا على خزنتين، بينما البار له دورة تقفيل مستقلة.
+  const bucketKeys = useMemo(() => [...DRAWERS.map(bucketOfDrawer), BAR_BUCKET], []);
   const labelOf = useCallback(
-    (bucket: string) => drawerName(bucket === 'drawer:2' ? 2 : 1, settings, ar),
+    (bucket: string) => bucket === BAR_BUCKET
+      ? (ar ? 'تقفيل البار' : 'Bar Closing')
+      : drawerName(bucket === 'drawer:2' ? 2 : 1, settings, ar),
     [settings, ar]
   );
 
@@ -80,7 +83,9 @@ export default function ShiftClosingView({
     const last = lastByBucket[bucket];
     if (last) return new Date(last.to_at);
     const first = completed
-      .filter(o => bucketOfDrawer(drawerOf(o, settings)) === bucket)
+      .filter(o => bucket === BAR_BUCKET
+        ? departmentOfOrder(o) === 'bar'
+        : bucketOfDrawer(drawerOf(o, settings)) === bucket)
       .map(o => new Date(o.created_at).getTime())
       .sort((a, b) => a - b)[0];
     if (first) return new Date(first);
@@ -96,7 +101,7 @@ export default function ShiftClosingView({
     return parsed.getTime();
   }, []);
 
-  const openTransactionsOf = useCallback(<T extends { drawer?: 1 | 2; created_at?: string }>(
+  const openTransactionsOf = useCallback(<T extends { drawer?: 1 | 2; department?: 'restaurant' | 'bar'; created_at?: string }>(
     bucket: string,
     items: T[],
     fallbackDate: (item: T) => string | undefined,
@@ -107,7 +112,7 @@ export default function ShiftClosingView({
     const last = lastByBucket[bucket];
     return items.filter(item => {
       const itemDrawer = item.drawer === 2 ? 2 : 1;
-      if (bucketOfDrawer(itemDrawer) !== bucket) return false;
+      if (bucket === BAR_BUCKET ? item.department !== 'bar' : bucketOfDrawer(itemDrawer) !== bucket) return false;
       const t = transactionTime(item.created_at, fallbackDate(item));
       return last ? t > start && t <= end : t >= start && t <= end;
     });
@@ -120,7 +125,7 @@ export default function ShiftClosingView({
     // الأوردرات اللي دخلت آخر تقفيل — حماية إضافية لو أوردر اتقفل واتعدّل وقته
     const closedIds = new Set<string>(last?.order_ids || []);
     return completed.filter(o => {
-      if (bucketOfDrawer(drawerOf(o, settings)) !== bucket) return false;
+      if (bucket === BAR_BUCKET ? departmentOfOrder(o) !== 'bar' : bucketOfDrawer(drawerOf(o, settings)) !== bucket) return false;
       if (closedIds.has(o.id)) return false;
       const t = new Date(o.created_at).getTime();
       // بعد آخر تقفيل تمامًا (أو من أول أوردر لو مفيش تقفيل سابق)
@@ -130,7 +135,9 @@ export default function ShiftClosingView({
 
   const openOrdersOfBucket = useCallback((bucket: string): Order[] => {
     const openStatuses = new Set(['pending', 'preparing', 'prepared', 'delivered']);
-    return orders.filter(o => openStatuses.has(o.status) && bucketOfDrawer(drawerOf(o, settings)) === bucket);
+    return orders.filter(o => openStatuses.has(o.status) && (bucket === BAR_BUCKET
+      ? departmentOfOrder(o) === 'bar'
+      : bucketOfDrawer(drawerOf(o, settings)) === bucket));
   }, [orders, settings]);
 
   const buildReport = useCallback((bucket: string, bucketOrders: Order[], from: Date, to: Date) =>

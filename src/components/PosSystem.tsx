@@ -21,12 +21,18 @@ import type { Category, Product, Order, OrderItem, SystemUser, Printer, Restaura
 import { printOrderTickets, printCustomerReceipt } from '../utils/printUtils';
 import DailyClosingView from './DailyClosingView';
 import { taxPercentForOrder } from '../utils/tax';
-import { drawerOfHall, drawerName, collectedPaymentParts, collectedFromOrder, deferredFromOrder } from '../utils/shiftClosing';
+import { drawerOfHall, drawerName, collectedPaymentParts, collectedFromOrder, deferredFromOrder, departmentOfOrder } from '../utils/shiftClosing';
 import { playClickSound, playSuccessSound, playNewOrderSound, playCheckInSound, playCheckOutSound } from '../utils/audioUtils';
 
 // ألوان الصالات وأنواع الطلبات (نفس ألوان شاشة المطبخ للتناسق)
 // كلمة سر تسجيل فواتير الاستاف
 const STAFF_ORDER_PASSCODE = '2026';
+
+const bypassKitchenFor = (department: 'restaurant' | 'bar', hall?: string): boolean => {
+  if (department === 'bar') return true;
+  const normalizedHall = String(hall || '').trim().toLowerCase();
+  return normalizedHall === '1' || normalizedHall.includes('hall 1') || normalizedHall.includes('صالة 1');
+};
 
 const HALL_COLORS = ['#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#3b82f6', '#14b8a6'];
 const TYPE_COLORS: Record<string, string> = {
@@ -82,7 +88,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     return localStorage.getItem('meridien_active_pos_waiter') ? 'waiter' : null;
   });
   const [mobileShowCart, setMobileShowCart] = useState(false);
-  const [posDepartment, setPosDepartment] = useState<'restaurant'|'bar'>('restaurant');
+  const [posDepartment, setPosDepartment] = useState<'restaurant'|'bar'>(() => {
+    try {
+      const configuredDevice = (localStorage.getItem('meridien_pos_device_hall') || '').trim().toLowerCase();
+      return configuredDevice === 'bar' || configuredDevice.includes('bar') || configuredDevice.includes('بار') || configuredDevice.includes('كافيه') ? 'bar' : 'restaurant';
+    } catch {
+      return 'restaurant';
+    }
+  });
   
   // Waiter Auth & Dashboard
   const [selectedWaiter, setSelectedWaiter] = useState<SystemUser | null>(() => {
@@ -824,9 +837,19 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     if (dashFilter.startsWith('type:')) return (o.order_type || '') === dashFilter.slice(5);
     return true;
   };
+  // عزل جهاز POS: جهاز البار يرى طلبات البار فقط، وجهاز الصالة يرى صالته فقط.
+  // لا نعتمد على اسم الصالة وحده للبار لأن طلبات البار قد لا تكون dine_in.
+  const matchesDeviceScope = (order: Order): boolean => {
+    if (!deviceHall) return true;
+    const deviceKey = deviceHall.trim().toLowerCase();
+    const isBarDevice = deviceKey === 'bar' || deviceKey.includes('bar') || deviceKey.includes('كافيه') || deviceKey.includes('بار');
+    if (isBarDevice) return departmentOfOrder(order) === 'bar';
+    return order.hall === deviceHall;
+  };
+
   // الطلبات النشطة قبل فلتر الصالة/النوع (حسب طلباتي/الكل) + بعده
   const dashBaseOrders = activeOrders.filter(o =>
-    viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending')
+    matchesDeviceScope(o) && (viewAllOrders || o.waiter_id === selectedWaiter?.id || (o.order_type === 'website' && !o.waiter_id && o.status === 'pending'))
   );
   const dashShownOrders = dashBaseOrders.filter(matchesDashFilter);
   const chipCount = (key: string): number =>
@@ -1068,11 +1091,14 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       }).filter((i): i is OrderItem => i !== null);
 
       if (addedItems.length > 0) {
-        if (!['pending', 'preparing'].includes(editingOrder.status)) {
+        const bypassKitchen = bypassKitchenFor(editingOrder.department || 'restaurant', editingOrder.hall);
+        if (!bypassKitchen && !['pending', 'preparing'].includes(editingOrder.status)) {
           await db.updateOrder(editOrderId, { status: 'pending' }, selectedWaiter?.name);
         }
         const additionOrder = { ...(updatedOrder || editingOrder), id: editOrderId, items: addedItems } as Order;
-        printOrderTickets(additionOrder, categories, products, printers, language, settings, { isAddition: true });
+        if (!bypassKitchen) {
+          printOrderTickets(additionOrder, categories, products, printers, language, settings, { isAddition: true });
+        }
       }
 
       setLastPlacedOrder(updatedOrder);
@@ -1101,12 +1127,13 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       customer_phone: customerPhone || 'N/A',
       table_number: tableNumber || '-',
       hall: orderType === 'dine_in' && selectedHall ? selectedHall : undefined,
+      department: posDepartment,
       // طلبات الصالة بتاخد خزنة الصالة أوتوماتيك — غير كده الكاشير بيختار وقت التحصيل
       drawer: orderType === 'dine_in' && selectedHall ? drawerForHall(selectedHall) : undefined,
       items: cart,
       // طلب الاستاف مجاني: الإجمالي صفر، والقيمة الحقيقية بتتحفظ في payment_details للتقارير
       total_price: staffOrderFor ? 0 : cartTotal,
-      status: 'pending',
+      status: bypassKitchenFor(posDepartment, orderType === 'dine_in' ? selectedHall : undefined) ? 'delivered' : 'pending',
       order_type: orderType || 'takeaway',
       waiter_id: assignedWaiterId,
       waiter_name: assignedWaiterName,
@@ -1155,8 +1182,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       });
     }
 
-    // طباعة بونات المطبخ/البار تلقائي عند تأكيد الأوردر (فاتورة العميل تطبع وقت الدفع)
-    printOrderTickets(placedOrder, categories, products, printers, language, settings);
+    // طلبات البار والصالة 1 تم تسليمها مباشرة ولا تظهر في شاشة المطبخ.
+    if (!bypassKitchenFor(posDepartment, placedOrder.hall)) {
+      printOrderTickets(placedOrder, categories, products, printers, language, settings);
+    }
   };
 
   const handleTransferSubmit = async () => {
@@ -1394,6 +1423,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         employee_name: selectedEmp.name,
         source: 'pos',
         classification_status: 'pending',
+        department: posDepartment,
         drawer: effectiveDrawer(expenseDrawer)
       });
       alert(language === 'ar' ? 'تم تسجيل سحب المصروف وسيظهر في تسوية المصروفات بالإدارة' : 'Expense withdrawal recorded for admin classification');
@@ -4153,8 +4183,11 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
                     <select required className="pos-input" value={expensePaymentMethod} onChange={e => setExpensePaymentMethod(e.target.value as any)}>
                       <option value="cash">{language === 'ar' ? 'كاش' : 'Cash'}</option>
                       <option value="visa">{language === 'ar' ? 'فيزا' : 'Visa'}</option>
-                      <option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option>
-                      <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
+                      {posDepartment === 'restaurant' ? (
+                        <option value="wallet_restaurant">{language === 'ar' ? 'محفظة المطعم' : 'Restaurant Wallet'}</option>
+                      ) : (
+                        <option value="wallet_cafe">{language === 'ar' ? 'محفظة الكافيه' : 'Cafe Wallet'}</option>
+                      )}
                       <option value="instapay">{language === 'ar' ? 'إنستا باي' : 'Instapay'}</option>
                     </select>
                   </div>

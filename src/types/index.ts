@@ -1,12 +1,14 @@
 // TypeScript interfaces for Meridien Restaurant App
 
+export type Department = 'restaurant' | 'bar';
+
 export interface Category {
   id: string;
   name_ar: string;
   name_en: string;
   sort_order: number;
   printer_id?: string | null;
-  department?: 'restaurant' | 'bar';
+  department?: Department;
   show_on_menu?: boolean;
   created_at?: string;
 }
@@ -15,7 +17,7 @@ export interface Printer {
   id: string;
   name_ar: string;
   name_en: string;
-  department?: 'restaurant' | 'bar';
+  department?: Department;
   created_at?: string;
 }
 
@@ -32,7 +34,7 @@ export interface Product {
   recipe_ar?: string;
   recipe_en?: string;
   talabat_price?: number;
-  department?: 'restaurant' | 'bar';
+  department?: Department;
   created_at?: string;
 }
 
@@ -55,6 +57,8 @@ export interface Order {
   customer_id?: string; // For deferred payment tracking
   table_number: string;
   hall?: string;            // اسم الصالة (لطلبات الصالة)
+  /** القسم التشغيلي الذي أنشأ الطلب (مطعم/بار). محفوظ لتثبيت العزل حتى لو تغيرت الإعدادات لاحقًا. */
+  department?: Department;
   drawer?: DrawerId;        // الخزنة اللي اتحصّل فيها (من الصالة أو باختيار الكاشير)
   partner_id?: string;       // أوردر على طاولة شريك/أونر
   partner_discount_percent?: number;
@@ -146,6 +150,8 @@ export interface Expense {
   partner_id?: string;
   expense_date: string;
   drawer?: DrawerId;
+  /** القسم الذي تحمّل المصروف؛ يمنع خلط مصروفات المطعم والبار. */
+  department?: Department;
   created_at?: string;
   notes?: string;
   employee_id?: string;
@@ -369,6 +375,8 @@ export interface DailyClosingMethod {
 export interface DailyClosing {
   id: string;
   closing_date: string;              // YYYY-MM-DD
+  /** القسم التشغيلي؛ السجلات القديمة بدون هذا الحقل تعتبر مطعمًا. */
+  department?: Department;
   status: 'closed' | 'reopened';
   methods: DailyClosingMethod[];
   total_expected: number;
@@ -406,6 +414,8 @@ export interface ShiftClosingTaxRow {
 export interface ShiftClosing {
   id: string;
   bucket: string;           // 'drawer:1' أو 'drawer:2'
+  /** القسم التشغيلي للشفت؛ السجلات القديمة بدون هذا الحقل تعتبر مطعمًا. */
+  department?: Department;
   bucket_label: string;
   from_at: string;          // بداية الفترة = آخر تقفيل
   to_at: string;            // لحظة التقفيل

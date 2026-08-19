@@ -3,12 +3,30 @@ import type {
   ShiftClosingCategory, ShiftClosingMethod, ShiftClosingTypeRow, ShiftClosingTaxRow,
 } from '../types';
 import type { ShiftClosingReport } from './printUtils';
+import type { Department } from '../types';
 import { taxPercentForOrder } from './tax';
 
 // وسائل الدفع اللي بتظهر في تقفيل الشفت
 export const METHOD_KEYS = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred', 'petty_cash', 'partner'] as const;
 
 const num = (v: any): number => Number(v) || 0;
+
+/** القسم التشغيلي للطلب. الحقول القديمة التي لا تحتوي department تعامل كمطعم. */
+export const departmentOfOrder = (order: Pick<Order, 'department' | 'hall'>): Department => {
+  if (order.department === 'bar') return 'bar';
+  const hall = String(order.hall || '').trim().toLowerCase();
+  return hall === 'bar' || hall.includes('bar') ? 'bar' : 'restaurant';
+};
+
+export const orderBelongsToDepartment = (
+  order: Pick<Order, 'department' | 'hall'>,
+  department: Department,
+): boolean => departmentOfOrder(order) === department;
+
+export const expenseBelongsToDepartment = (
+  expense: Pick<Expense, 'department'>,
+  department: Department,
+): boolean => (expense.department || 'restaurant') === department;
 
 /** المبالغ التي دخلت الخزنة فعليًا من الأوردر، بدون الآجل وبدون التبس. */
 export const collectedPaymentParts = (order: Order): Record<string, number> => {
