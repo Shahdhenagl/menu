@@ -39,6 +39,8 @@ export const collectedPaymentParts = (order: Order): Record<string, number> => {
   };
 
   if (order.payment_method === 'partner' || order.payment_method === 'deferred') return result;
+  // الطلب المسلّم الذي لم يُحصّل بعد لا يدخل في المحصل ولا يُفترض تلقائيًا كاش.
+  if (!order.payment_method) return result;
   if (order.payment_method === 'split') {
     add('cash', details.cash);
     add('visa', details.visa);

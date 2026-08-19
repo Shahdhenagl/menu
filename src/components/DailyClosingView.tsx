@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Lock, Printer, Wallet } from 'lucide-react';
 import type { Category, DailyClosing, DailyClosingMethod, Expense, Order, PaymentMethodKey, Product, RestaurantSettings, DrawerId } from '../types';
 import { db } from '../lib/supabase';
-import { collectedPaymentParts } from '../utils/shiftClosing';
+import { collectedPaymentParts, drawerOf } from '../utils/shiftClosing';
 import { notifyAction } from '../utils/telegramUtils';
 
 interface Props {
@@ -42,8 +42,12 @@ export default function DailyClosingView({ orders, expenses, language, userName,
   const [saving, setSaving] = useState(false);
 
   const dayOrders = useMemo(() => orders.filter(order =>
-    order.status === 'completed' && order.payment_method !== 'hospitality' && order.payment_method !== 'staff' && (order.operating_day || localDate(order.created_at)) === selectedDate
-  ), [orders, selectedDate]);
+    ['completed', 'delivered'].includes(order.status) &&
+    order.payment_method !== 'hospitality' &&
+    order.payment_method !== 'staff' &&
+    (order.operating_day || localDate(order.created_at)) === selectedDate &&
+    (!allowedDrawer || drawerOf(order, settings) === allowedDrawer)
+  ), [orders, selectedDate, allowedDrawer, settings]);
   const dayExpenses = useMemo(() => expenses.filter(expense => localDate(expense.expense_date || expense.created_at || '') === selectedDate), [expenses, selectedDate]);
   const openTableOrders = useMemo(() => orders.filter(order =>
     (order.operating_day || localDate(order.created_at)) === selectedDate &&
@@ -79,6 +83,9 @@ export default function DailyClosingView({ orders, expenses, language, userName,
     return result;
   }, [drawerOrders]);
   const totalTips = Object.values(tipsByMethod).reduce((sum, value) => sum + value, 0);
+  const grossSales = dayOrders.reduce((sum, order) => sum + n(order.total_price), 0);
+  const totalCollected = dayOrders.reduce((sum, order) => sum + Object.values(collectedPaymentParts(order)).reduce((inner, value) => inner + n(value), 0), 0);
+  const uncollectedTotal = Math.max(0, grossSales - totalCollected);
   const outgoing = useMemo(() => {
     const result = Object.fromEntries(METHODS.map(method => [method, 0])) as Record<PaymentMethodKey, number>;
     drawerExpenses.forEach(expense => {
@@ -91,6 +98,7 @@ export default function DailyClosingView({ orders, expenses, language, userName,
   const activeMethods = useMemo(() => METHODS.filter(method => incoming[method] !== 0 || outgoing[method] !== 0 || (closing?.[`drawer_${activeDrawer}_methods` as 'drawer_1_methods'] || []).some(row => row.method === method)), [incoming, outgoing, closing, activeDrawer]);
   const totalIncoming = activeMethods.reduce((sum, method) => sum + incoming[method], 0);
   const totalOutgoing = activeMethods.reduce((sum, method) => sum + outgoing[method], 0);
+  const currentDrawerBalance = totalIncoming - totalOutgoing;
   const totalExpected = activeMethods.reduce((sum, method) => sum + expected[method], 0);
   const totalCounted = activeMethods.reduce((sum, method) => sum + (method === 'partner' ? 0 : n(counted[method])), 0);
   const difference = totalCounted - totalExpected;
@@ -232,7 +240,7 @@ export default function DailyClosingView({ orders, expenses, language, userName,
     };
     const win = window.open('', '_blank');
     if (!win) return;
-    win.document.write(`<html dir="${ar ? 'rtl' : 'ltr'}"><head><title>${ar ? 'تقرير تقفيل اليوم' : 'Daily Closing Report'}</title><style>body{font-family:Arial;padding:28px;color:#111}h1{text-align:center;border-bottom:2px solid #111;padding-bottom:12px}h2{margin-top:28px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #bbb;padding:8px;text-align:center}th{background:#eee}.summary{display:flex;gap:20px;margin:20px 0}.card{border:1px solid #bbb;padding:12px;flex:1;text-align:center}</style></head><body><h1>${ar ? 'تقرير تقفيل اليوم' : 'Daily Closing Report'} - ${selectedDate}</h1><div class="summary"><div class="card">${ar ? 'إجمالي المحصل' : 'Total Collected'}<br><b>${fmt(dayOrders.reduce((sum, order) => sum + n(order.total_price), 0))}</b></div><div class="card">${ar ? 'عدد الطلبات' : 'Orders'}<br><b>${dayOrders.length}</b></div></div>${section(1)}${section(2)}<script>window.print()</script></body></html>`);
+    win.document.write(`<html dir="${ar ? 'rtl' : 'ltr'}"><head><title>${ar ? 'تقرير تقفيل اليوم' : 'Daily Closing Report'}</title><style>body{font-family:Arial;padding:28px;color:#111}h1{text-align:center;border-bottom:2px solid #111;padding-bottom:12px}h2{margin-top:28px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #bbb;padding:8px;text-align:center}th{background:#eee}.summary{display:flex;gap:20px;margin:20px 0}.card{border:1px solid #bbb;padding:12px;flex:1;text-align:center}</style></head><body><h1>${ar ? 'تقرير تقفيل اليوم' : 'Daily Closing Report'} - ${selectedDate}</h1><div class="summary"><div class="card">${ar ? 'إجمالي المحصل' : 'Total Collected'}<br><b>${fmt(totalCollected)}</b></div><div class="card">${ar ? 'عدد الطلبات' : 'Orders'}<br><b>${dayOrders.length}</b></div></div>${section(1)}${section(2)}<script>window.print()</script></body></html>`);
     win.document.close();
   };
 
@@ -242,7 +250,12 @@ export default function DailyClosingView({ orders, expenses, language, userName,
       <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}><input type="date" className="input-gold" value={selectedDate} max={today()} onChange={e => setSelectedDate(e.target.value)} /><button className="btn-gold" disabled={!bothClosed} onClick={printReport}><Printer size={16} /> {ar ? 'طباعة التقرير' : 'Print Report'}</button></div>
     </div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '1rem', margin: '1.2rem 0' }}>
-      <Summary title={ar ? 'إجمالي المحصل من أول اليوم' : 'Total collected today'} value={fmt(dayOrders.reduce((sum, order) => sum + n(order.total_price), 0))} /><Summary title={ar ? 'إجمالي التبس — للعرض فقط' : 'Total tips — display only'} value={fmt(totalTips)} />
+      <Summary title={ar ? 'إجمالي المبيعات' : 'Gross sales'} value={fmt(grossSales)} />
+      <Summary title={ar ? 'إجمالي المحصل' : 'Total collected'} value={fmt(totalCollected)} />
+      <Summary title={ar ? 'إجمالي المصروف' : 'Total expenses'} value={fmt(totalOutgoing)} />
+      <Summary title={ar ? 'الحالي في الخزنة (المحصل − المصروف)' : 'Current drawer balance (collected − expenses)'} value={fmt(currentDrawerBalance)} />
+      <Summary title={ar ? 'غير المحصل' : 'Uncollected'} value={fmt(uncollectedTotal)} />
+      <Summary title={ar ? 'إجمالي التبس — للعرض فقط' : 'Total tips — display only'} value={fmt(totalTips)} />
       {visibleDrawers.map(drawer => (
         <Summary key={drawer} title={ar ? `الخزنة ${drawer}` : `Drawer ${drawer}`} value={(drawer === 1 ? closing?.drawer_1_closed : closing?.drawer_2_closed) ? (ar ? 'مقفولة' : 'Closed') : (ar ? 'مفتوحة' : 'Open')} />
       ))}
