@@ -478,8 +478,20 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     }));
     setProducts(prods);
     setWaiters(users.filter(u => u.role === 'waiter'));
-    setAllOrders(ords);
-    setActiveOrders(ords.filter(o => o.status === 'pending' || o.status === 'preparing' || o.status === 'prepared' || o.status === 'delivered'));
+    // توافق مع الطلبات التي أُنشئت قبل تثبيت bypass: أي طلب بار/صالة 1 لا يبقى في المطبخ.
+    const normalizedOrders = await Promise.all(ords.map(async order => {
+      const shouldBypass = ['pending', 'preparing', 'prepared'].includes(order.status) &&
+        bypassKitchenFor(order.department || 'restaurant', order.hall);
+      if (!shouldBypass) return order;
+      try {
+        await db.updateOrderStatus(order.id, 'delivered', selectedWaiter?.name || undefined);
+      } catch (error) {
+        console.warn('Failed to normalize bypass order status', order.id, error);
+      }
+      return { ...order, status: 'delivered' as const };
+    }));
+    setAllOrders(normalizedOrders);
+    setActiveOrders(normalizedOrders.filter(o => o.status === 'pending' || o.status === 'preparing' || o.status === 'prepared' || o.status === 'delivered'));
     setPrinters(prnts);
     setSettings(sets);
     setCustomers(custs);
