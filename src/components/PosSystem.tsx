@@ -979,10 +979,22 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     delivered: '#3b82f6',
     check: '#8b5cf6',
   };
+  // توحيد قيمة الصالة يحمي عزل الطاولات حتى لو كانت الطلبات القديمة محفوظة
+  // بصيغة مختلفة مثل "1" أو "Hall 1" بدل اسم الصالة المحفوظ في الإعدادات.
+  const hallIdentity = (hall?: string | null): string => {
+    const value = String(hall || '').trim().toLowerCase();
+    if (!value) return '';
+    const configuredHalls = settings?.halls || [];
+    const configuredIndex = configuredHalls.findIndex(h => String(h.name || '').trim().toLowerCase() === value);
+    if (configuredIndex >= 0) return `hall-${configuredIndex + 1}`;
+    if (value === '1' || value.includes('hall 1') || value.includes('صالة 1')) return 'hall-1';
+    if (value === '2' || value.includes('hall 2') || value.includes('صالة 2')) return 'hall-2';
+    return `name-${value}`;
+  };
   const dineInOrdersForHall = (hall: string) =>
     activeOrders.filter(o =>
       o.order_type === 'dine_in' &&
-      o.hall === hall &&
+      hallIdentity(o.hall) === hallIdentity(hall) &&
       o.table_number &&
       o.table_number !== '-' &&
       ['pending', 'preparing', 'prepared', 'delivered'].includes(o.status)
