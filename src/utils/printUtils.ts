@@ -4,7 +4,7 @@ import type {
 } from '../types';
 import { db } from '../lib/supabase';
 import { configureQzSecurity } from './qzSecurity';
-import { taxPercentForOrder } from './tax';
+import { isCafeHall, printedHallName, taxPercentForOrder } from './tax';
 import { collectedFromOrder, deferredFromOrder } from './shiftClosing';
 import qz from 'qz-tray';
 import QRCode from 'qrcode';
@@ -205,6 +205,27 @@ const printViaIframe = (htmlContent: string) => {
 const PAPER_WIDTH_MM = 80;
 const PRINT_WIDTH_MM = 72;
 
+const A4_BASE = `
+  @page { margin: 0; size: A4; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background:#fff; }
+  body {
+    font-family: 'Tahoma','Arial',sans-serif;
+    width: 194mm;
+    margin: 0 auto;
+    padding: 8mm;
+    color:#000; background:#fff;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    overflow-wrap:anywhere; word-wrap:break-word;
+  }
+  body * { max-width: 100%; }
+  table { table-layout: fixed; width: 100%; }
+  img { max-width: 100%; height: auto; }
+  .center { text-align:center; }
+  .divider { border:0; border-top:1px dashed #000; margin:8px 0; }
+  .divider.solid { border-top:2px solid #000; }
+`;
+
 const THERMAL_BASE = `
   @page { margin: 0; size: ${PAPER_WIDTH_MM}mm auto; }
   * { box-sizing: border-box; }
@@ -330,12 +351,14 @@ export const printCustomerReceipt = async (
   order: Order,
   language: 'ar' | 'en',
   settingsArg?: RestaurantSettings | null,
-  opts?: { preBill?: boolean }
+  opts?: { preBill?: boolean; paper?: 'thermal' | 'a4' }
 ) => {
   const isAr = language === 'ar';
   const settings = await freshSettings(settingsArg);
   // فاتورة مبدئية: بيشوفها العميل قبل الدفع — من غير طريقة دفع وعليها ختم "غير مدفوعة"
   const isPreBill = !!opts?.preBill;
+  const paper = opts?.paper === 'a4' ? 'a4' : 'thermal';
+  const pageBase = paper === 'a4' ? A4_BASE : THERMAL_BASE;
 
   const orderTypeStr = isAr
     ? (order.order_type === 'takeaway' ? 'تيك أواي' : order.order_type === 'delivery' ? 'توصيل' : order.order_type === 'talabat' ? 'طلبات' : 'صالة')
@@ -387,16 +410,18 @@ export const printCustomerReceipt = async (
   const grandTotal = n(order.total_price);
   const collectedNow = collectedFromOrder(order);
   const deferredBalance = deferredFromOrder(order);
-  // نسبة الضريبة (للعرض في العنوان) — حسب نوع الطلب: صالة / دليفري / تيك أواي
-  const taxPercent = taxPercentForOrder(settings, order.order_type, order.hall);
+  const cafeHall = isCafeHall(order.hall);
+  const hallLabel = order.hall ? printedHallName(order.hall, language) : '';
+  // نسبة الضريبة حسب نوع الطلب والصالة. صالة الكافية دائمًا غير ضريبية.
+  const taxPercent = cafeHall ? 0 : taxPercentForOrder(settings, order.order_type, order.hall);
   const diff = grandTotal - itemsSubtotal;            // موجب = ضريبة/خدمة ، سالب = خصم
-  const taxAmount = diff > 0.001 ? diff : 0;
+  const taxAmount = !cafeHall && diff > 0.001 ? diff : 0;
   const discountAmount = diff < -0.001 ? -diff : 0;
   const money = (v: number) => v.toFixed(2) + (isAr ? ' ج.م' : ' EGP');
   const taxLabel = isAr
     ? (taxPercent > 0 ? `ضريبة (${taxPercent}%)` : 'ضريبة / خدمة')
     : (taxPercent > 0 ? `Tax (${taxPercent}%)` : 'Tax / Service');
-  // كتلة التفاصيل تظهر فقط لو فيه ضريبة أو خصم
+  // صالة الكافية لا تعرض عنوان فاتورة ضريبية ولا أي سطر ضريبة.
   const breakdownHtml = (taxAmount > 0 || discountAmount > 0) ? `
       <div class="sums">
         <div><span>${isAr ? 'الإجمالي الفرعي' : 'Subtotal'}</span><span>${money(itemsSubtotal)}</span></div>
@@ -406,7 +431,7 @@ export const printCustomerReceipt = async (
 
   const html = `
     <html dir="${isAr ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>Receipt #${order.id.slice(-4)}</title>
-    <style>${THERMAL_BASE}
+    <style>${pageBase}
       .logo-box { text-align:center; margin-bottom:6px; }
       .logo { max-width:64px; max-height:64px; object-fit:contain; }
       .rname { text-align:center; font-size:22px; font-weight:900; letter-spacing:2px; margin:2px 0 4px; direction:ltr; }
@@ -449,8 +474,8 @@ export const printCustomerReceipt = async (
       <div class="rname">${restaurantName}</div>
       ${phoneHtml}
       ${locationHtml}
-      <div class="doctype">${isAr ? 'فاتورة ضريبية' : 'TAX INVOICE'}</div>
-      <div class="ticket-type"><span>${orderTypeStr}${order.hall ? ` · ${order.hall}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'طاولة' : 'Table'} ${order.table_number}` : ''}</span></div>
+      ${cafeHall ? '' : `<div class="doctype">${isAr ? 'فاتورة ضريبية' : 'TAX INVOICE'}</div>`}
+      <div class="ticket-type"><span>${orderTypeStr}${hallLabel ? ` · ${hallLabel}` : ''}${order.table_number && order.table_number !== '-' ? ` · ${isAr ? 'طاولة' : 'Table'} ${order.table_number}` : ''}</span></div>
       ${isPreBill ? `<div class="prebill">${isAr ? 'فاتورة مبدئية — غير مدفوعة' : 'PRE-BILL — NOT PAID'}</div>` : ''}
       ${order.payment_method === 'staff' ? `<div class="prebill">${isAr
         ? `فاتورة استاف (مجانية)<br/>${order.payment_details?.employee_name || ''}`
@@ -490,7 +515,7 @@ export const printCustomerReceipt = async (
 
   let printed = false;
   if (settings?.enable_qz_printing) {
-    printed = await printWithQZ(html, [settings?.qz_printer_cashier]);
+    printed = await printWithQZ(html, [settings?.qz_printer_cashier], paper);
   }
   if (!printed) printViaIframe(html);
 };
@@ -607,6 +632,7 @@ export const printShiftClosing = async (
       <div class="row"><span>${isAr ? 'المبيعات قبل الضريبة' : 'Sales before tax'}</span><span class="v">${money(d.subtotal)}</span></div>
       ${d.discount > 0.001 ? `<div class="row"><span>${isAr ? 'الخصم' : 'Discount'}</span><span class="v">- ${money(d.discount)}</span></div>` : ''}
       <div class="row"><span>${isAr ? 'إجمالي الضريبة' : 'Total tax'}</span><span class="v">${money(d.tax)}</span></div>
+      <div class="row"><span>${isAr ? 'إجمالي المبيعات بعد الضريبة' : 'Total sales incl. tax'}</span><span class="v">${money(d.subtotal + d.tax)}</span></div>
       <div class="row b"><span>${isAr ? 'إجمالي المحصل' : 'Collected'}</span><span class="v">${money(d.collected)}</span></div>
       <div class="row"><span>${isAr ? 'إجمالي الآجل (غير محصل)' : 'Deferred (not collected)'}</span><span class="v">${money(d.deferred)}</span></div>
       <div class="drawer-subtitle">${isAr ? 'وسائل التحصيل' : 'PAYMENT METHODS'}</div>${methods}
@@ -683,8 +709,9 @@ export const printShiftClosing = async (
       <div class="row"><span>${isAr ? 'المبيعات قبل الضريبة' : 'Sales before tax'}</span><span class="v">${money(report.subtotal)}</span></div>
       ${report.discount > 0.001 ? `<div class="row"><span>${isAr ? 'الخصم' : 'Discount'}</span><span class="v">- ${money(report.discount)}</span></div>` : ''}
       <div class="row"><span>${isAr ? 'الضريبة' : 'Tax'}</span><span class="v">${money(report.tax)}</span></div>
+      <div class="row"><span>${isAr ? 'إجمالي المبيعات بعد الضريبة' : 'Total sales incl. tax'}</span><span class="v">${money(report.subtotal + report.tax)}</span></div>
       <div class="total">
-        <span class="lbl">${isAr ? 'إجمالي المحصل بالضريبة' : 'Collected incl. tax'}</span>
+        <span class="lbl">${isAr ? 'إجمالي المحصل' : 'Collected'}</span>
         <span class="val">${money(report.collected)} ${isAr ? 'ج.م' : 'EGP'}</span>
       </div>
       <div class="row"><span>${isAr ? 'إجمالي الآجل (غير محصل)' : 'Total deferred (not collected)'}</span><span class="v">${money(report.deferred)}</span></div>
@@ -695,7 +722,7 @@ export const printShiftClosing = async (
       ${(report.openOrders || []).length > 0 ? `<div class="open-list">${(report.openOrders || []).map(o => `<div class="row sm"><span>#${o.id.slice(0, 6)}${o.table ? ` — ${isAr ? 'طاولة' : 'Table'} ${o.table}` : ''}${o.customer ? ` — ${o.customer}` : ''}</span><span class="v">${money(o.amount)}</span></div>`).join('')}</div>` : `<div class="row empty">${isAr ? 'لا توجد فواتير مفتوحة' : 'No open invoices'}</div>`}
 
       <div class="sec">${isAr ? 'تفاصيل حساب كل خزنة' : 'DETAILED DRAWER ACCOUNTS'}</div>
-      ${drawerSections || `<div class="sec">${isAr ? 'التقسيم في الخزنة' : 'DRAWER SPLIT'}</div>${methodRows}<div class="row" style="border-top:1px solid #000; font-weight:900;"><span>${isAr ? 'إجمالي المحصل' : 'Total collected'}</span><span class="v">${money(report.collected)}</span></div>`}
+      ${drawerSections || `<div class="sec">${isAr ? 'التقسيم في الخزنة' : 'DRAWER SPLIT'}</div>${methodRows}<div class="row"><span>${isAr ? 'إجمالي المبيعات بعد الضريبة' : 'Total sales incl. tax'}</span><span class="v">${money(report.subtotal + report.tax)}</span></div><div class="row" style="border-top:1px solid #000; font-weight:900;"><span>${isAr ? 'إجمالي المحصل' : 'Total collected'}</span><span class="v">${money(report.collected)}</span></div>`}
 
       <div class="sec">${isAr ? 'الإيداعات والمصروفات الإجمالية' : 'TOTAL DEPOSITS & EXPENSES'}</div>
       <div class="row"><span>${isAr ? 'إيداعات العملاء' : 'Customer deposits'}</span><span class="v">+ ${money(report.deposits)}</span></div>
