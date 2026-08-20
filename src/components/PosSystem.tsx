@@ -37,10 +37,9 @@ const inferPosFromHall = (hall: string): 1 | 2 | null => {
   return null;
 };
 
-const bypassKitchenFor = (department: 'restaurant' | 'bar', hall?: string): boolean => {
-  if (department === 'bar') return true;
-  const normalizedHall = String(hall || '').trim().toLowerCase();
-  return normalizedHall === '1' || normalizedHall.includes('hall 1') || normalizedHall.includes('صالة 1');
+const bypassKitchenFor = (department: 'restaurant' | 'bar', _hall?: string): boolean => {
+  // تجاوز المطبخ خاص بالبار فقط. طلبات الصالة 1 والصالة 2 تمر بالدورة الطبيعية في المطبخ.
+  return department === 'bar';
 };
 
 const HALL_COLORS = ['#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#3b82f6', '#14b8a6'];
@@ -491,7 +490,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     }));
     setProducts(prods);
     setWaiters(users.filter(u => u.role === 'waiter'));
-    // توافق مع الطلبات التي أُنشئت قبل تثبيت bypass: أي طلب بار/صالة 1 لا يبقى في المطبخ.
+    // توافق مع الطلبات القديمة: طلبات البار فقط لا تبقى في المطبخ.
     const normalizedOrders = await Promise.all(ords.map(async order => {
       const shouldBypass = ['pending', 'preparing', 'prepared'].includes(order.status) &&
         bypassKitchenFor(order.department || 'restaurant', order.hall);
@@ -1197,7 +1196,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
         customer_phone: customerPhone,
         table_number: tableNumber,
         order_type: orderType || editingOrder.order_type,
-        // الطلبات التي تنتمي للبار أو صالة 1 لا تمر بالمطبخ حتى بعد تعديلها.
+        // الطلبات التي تنتمي للبار فقط لا تمر بالمطبخ حتى بعد تعديلها.
         ...(bypassKitchenFor(
           editingOrder.department || posDepartment,
           (orderType || editingOrder.order_type) === 'dine_in' ? (selectedHall || editingOrder.hall) : editingOrder.hall
@@ -1306,7 +1305,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       });
     }
 
-    // طلبات البار والصالة 1 تم تسليمها مباشرة ولا تظهر في شاشة المطبخ.
+    // طلبات البار فقط تم تجهيزها مباشرة ولا تظهر في شاشة المطبخ.
     if (!bypassKitchenFor(posDepartment, placedOrder.hall)) {
       printOrderTickets(placedOrder, categories, products, printers, language, settings);
     }
