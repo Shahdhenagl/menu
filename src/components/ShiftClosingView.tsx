@@ -142,8 +142,8 @@ export default function ShiftClosingView({
       : bucketOfDrawer(drawerOf(o, settings)) === bucket));
   }, [orders, settings]);
 
-  const buildReport = useCallback((bucket: string, bucketOrders: Order[], from: Date, to: Date) =>
-    buildShiftReport({
+  const buildReport = useCallback((bucket: string, bucketOrders: Order[], from: Date, to: Date) => {
+    const base = buildShiftReport({
       title: labelOf(bucket),
       orders: bucketOrders,
       expenses: openTransactionsOf(bucket, expenses, e => e.expense_date, to),
@@ -154,15 +154,30 @@ export default function ShiftClosingView({
       from,
       to,
       ar,
-    }), [categories, products, settings, ar, labelOf, expenses, customerPayments, openTransactionsOf]);
+    });
+    const openOrders = openOrdersOfBucket(bucket);
+    return {
+      ...base,
+      openOrdersCount: openOrders.length,
+      openOrdersTotal: openOrders.reduce((sum, order) => sum + (Number(order.total_price) || 0), 0),
+      openOrders: openOrders.map(order => ({
+        id: order.id,
+        table: order.table_number || '',
+        customer: order.customer_name || '',
+        amount: Number(order.total_price) || 0,
+        status: order.status,
+      })),
+    };
+  }, [categories, products, settings, ar, labelOf, expenses, customerPayments, openTransactionsOf, openOrdersOfBucket]);
 
   const handleClose = async (bucket: string) => {
     const blockingOrders = openOrdersOfBucket(bucket);
     if (blockingOrders.length > 0) {
-      const details = blockingOrders.map(o => `#${o.id.slice(0, 6)}${o.table_number ? ` — ${ar ? 'طاولة' : 'Table'} ${o.table_number}` : ''}`).join('\n');
+      const openTotal = blockingOrders.reduce((sum, order) => sum + (Number(order.total_price) || 0), 0);
+      const details = blockingOrders.map(o => `#${o.id.slice(0, 6)}${o.table_number ? ` — ${ar ? 'طاولة' : 'Table'} ${o.table_number}` : ''} — ${(Number(o.total_price) || 0).toFixed(2)} EGP`).join('\n');
       alert(ar
-        ? `لا يمكن تقفيل ${labelOf(bucket)} لأن هناك ${blockingOrders.length} أوردر مفتوح/غير مكتمل:\n\n${details}\n\nأكمل الأوردرات أو أغلقها أولًا ثم حاول التقفيل.`
-        : `Cannot close ${labelOf(bucket)} because ${blockingOrders.length} order(s) are still open:\n\n${details}\n\nComplete or close them first.`);
+        ? `لا يمكن تقفيل ${labelOf(bucket)} لأن هناك ${blockingOrders.length} أوردر مفتوح/غير مكتمل بقيمة إجمالية ${openTotal.toFixed(2)} ج.م:\n\n${details}\n\nأكمل الأوردرات أو أغلقها أولًا ثم حاول التقفيل.`
+        : `Cannot close ${labelOf(bucket)} because ${blockingOrders.length} order(s) are still open, totaling ${openTotal.toFixed(2)} EGP:\n\n${details}\n\nComplete or close them first.`);
       return;
     }
     const bucketOrders = openOrdersOf(bucket);
@@ -293,9 +308,10 @@ export default function ShiftClosingView({
                   </td>
                   <td style={{ padding: '0.7rem 0.5rem', textAlign: 'center', color: 'var(--text-light)', fontWeight: 700 }}>
                     <div>{bucketOrders.length}</div>
-                    {openOrdersOfBucket(bucket).length > 0 && (
-                      <div style={{ color: '#ef4444', fontSize: '0.72rem', fontWeight: 700, marginTop: '0.25rem' }}>
-                        {ar ? `⚠ ${openOrdersOfBucket(bucket).length} مفتوح` : `⚠ ${openOrdersOfBucket(bucket).length} open`}
+                    {report.openOrdersCount > 0 && (
+                      <div style={{ color: '#ef4444', fontSize: '0.72rem', fontWeight: 700, marginTop: '0.25rem', lineHeight: 1.35 }}>
+                        <div>{ar ? `⚠ ${report.openOrdersCount} مفتوح` : `⚠ ${report.openOrdersCount} open`}</div>
+                        <div>{fmt(report.openOrdersTotal || 0)} {ar ? 'معلق' : 'pending'}</div>
                       </div>
                     )}
                   </td>

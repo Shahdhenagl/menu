@@ -508,6 +508,10 @@ export type ShiftClosingReport = {
   collected: number;    // إجمالي المحصل بالضريبة
   /** إجمالي الآجل، مستبعد من التحصيل والرصيد النقدي */
   deferred: number;
+  /** الفواتير المفتوحة وقت إعداد التقرير — لا تدخل في التحصيل */
+  openOrdersCount?: number;
+  openOrdersTotal?: number;
+  openOrders?: { id: string; table?: string; customer?: string; amount: number; status: string }[];
   deposits: number;
   expenses: number;
   expectedBalance: number;
@@ -684,6 +688,11 @@ export const printShiftClosing = async (
         <span class="val">${money(report.collected)} ${isAr ? 'ج.م' : 'EGP'}</span>
       </div>
       <div class="row"><span>${isAr ? 'إجمالي الآجل (غير محصل)' : 'Total deferred (not collected)'}</span><span class="v">${money(report.deferred)}</span></div>
+
+      <div class="sec">${isAr ? 'الفواتير المفتوحة والمبالغ المعلقة' : 'OPEN INVOICES & PENDING AMOUNTS'}</div>
+      <div class="row b"><span>${isAr ? 'عدد الفواتير المفتوحة' : 'Open invoices'}</span><span class="v">${report.openOrdersCount || 0}</span></div>
+      <div class="row b"><span>${isAr ? 'إجمالي قيمة الفواتير المفتوحة' : 'Total open invoice value'}</span><span class="v">${money(report.openOrdersTotal || 0)}</span></div>
+      ${(report.openOrders || []).length > 0 ? `<div class="open-list">${(report.openOrders || []).map(o => `<div class="row sm"><span>#${o.id.slice(0, 6)}${o.table ? ` — ${isAr ? 'طاولة' : 'Table'} ${o.table}` : ''}${o.customer ? ` — ${o.customer}` : ''}</span><span class="v">${money(o.amount)}</span></div>`).join('')}</div>` : `<div class="row empty">${isAr ? 'لا توجد فواتير مفتوحة' : 'No open invoices'}</div>`}
 
       <div class="sec">${isAr ? 'تفاصيل حساب كل خزنة' : 'DETAILED DRAWER ACCOUNTS'}</div>
       ${drawerSections || `<div class="sec">${isAr ? 'التقسيم في الخزنة' : 'DRAWER SPLIT'}</div>${methodRows}<div class="row" style="border-top:1px solid #000; font-weight:900;"><span>${isAr ? 'إجمالي المحصل' : 'Total collected'}</span><span class="v">${money(report.collected)}</span></div>`}
