@@ -203,6 +203,8 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const [dailyClosingPassword, setDailyClosingPassword] = useState('');
   const [dailyClosingPasswordError, setDailyClosingPasswordError] = useState('');
   const [summaryOrderTypeFilter, setSummaryOrderTypeFilter] = useState<'all' | 'dine_in' | 'takeaway' | 'delivery' | 'talabat' | 'website'>('all');
+  // اليوم المحاسبي قد يمتد بعد منتصف الليل حتى يتم تقفيل الخزنة، لذلك لا نعتمد على تاريخ الجهاز فقط.
+  const [operatingDayDate, setOperatingDayDate] = useState<string>(() => getLocalDayStr());
   const [summaryScopeFilter, setSummaryScopeFilter] = useState<string>(() => {
     try {
       const hall = localStorage.getItem('meridien_pos_device_hall') || '';
@@ -461,7 +463,7 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   }, [posDepartment, categories, activeCategory]);
 
   const loadData = async () => {
-    const [cats, prods, users, ords, prnts, sets, custs, emps, atts, invItems, prodRecipes, pts, exps, notifs] = await Promise.all([
+    const [cats, prods, users, ords, prnts, sets, custs, emps, atts, invItems, prodRecipes, pts, exps, notifs, operatingDay] = await Promise.all([
       db.getCategories(),
       db.getProducts(),
       db.getSystemUsers(),
@@ -476,8 +478,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       db.getPartners(),
       db.getExpenses(),
       // إشعارات POS تشمل إشعارات الإدارة والكاشير/الويتر حتى تظهر فعليًا في الجرس.
-      db.getNotifications('admin,waiter')
+      db.getNotifications('admin,waiter'),
+      db.getCurrentOperatingDay()
     ]);
+    setOperatingDayDate(operatingDay?.date || getLocalDayStr());
     setCategories(cats.sort((a, b) => {
       const aBar = a.department === 'bar';
       const bBar = b.department === 'bar';
@@ -1013,7 +1017,6 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
       .length;
   };
   const money = (value: number) => `${(Number(value) || 0).toFixed(2)} EGP`;
-  const isToday = (date?: string) => !!date && getLocalDayStr(new Date(date)) === getLocalDayStr();
   type PayMethod = 'cash' | 'visa' | 'wallet_restaurant' | 'wallet_cafe' | 'instapay' | 'deferred';
   const payMethods: PayMethod[] = ['cash', 'visa', 'wallet_restaurant', 'wallet_cafe', 'instapay', 'deferred'];
   const payMethodLabel = (method: string) => {
@@ -1029,7 +1032,10 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
   const paymentParts = (order: Order): Partial<Record<PayMethod, number>> => {
     return collectedPaymentParts(order) as Partial<Record<PayMethod, number>>;
   };
-  const todayOrders = allOrders.filter(o => isToday(o.created_at));
+  const todayOrders = allOrders.filter(o => {
+    const orderOperatingDay = o.operating_day || (o.created_at ? getLocalDayStr(new Date(o.created_at)) : '');
+    return orderOperatingDay === operatingDayDate;
+  });
   const matchesSummaryScope = (order: Order) => {
     if (scopedSummaryFilter === 'all') return true;
     if (scopedSummaryFilter.startsWith('hall:')) return order.hall === scopedSummaryFilter.slice(5);
@@ -1047,9 +1053,9 @@ export const PosSystem: React.FC<PosSystemProps> = ({ onClose, language, setLang
     matchesSummaryScope(o) &&
     (summaryOrderTypeFilter === 'all' || o.order_type === summaryOrderTypeFilter)
   );
-  const todayCompletedOrders = summaryOrders.filter(o => o.status === 'completed' && o.payment_method !== 'hospitality' && o.payment_method !== 'staff');
+  const todayCompletedOrders = summaryOrders.filter(o => ['completed', 'delivered'].includes(o.status) && o.payment_method !== 'hospitality' && o.payment_method !== 'staff');
   const summaryExpenses = expenses.filter(e => {
-    if (getLocalDayStr(new Date(e.expense_date || e.created_at || '')) !== getLocalDayStr()) return false;
+    if (getLocalDayStr(new Date(e.expense_date || e.created_at || '')) !== operatingDayDate) return false;
     if (scopedSummaryFilter.startsWith('drawer:')) return Number(e.drawer || 1) === Number(scopedSummaryFilter.slice(7));
     if (scopedSummaryFilter.startsWith('hall:')) return drawerOfHall(scopedSummaryFilter.slice(5), settings) === Number(e.drawer || 1);
     return true;
